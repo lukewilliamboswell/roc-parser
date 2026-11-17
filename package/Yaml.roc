@@ -1,8 +1,7 @@
+import Diagnostic
 import YamlSource
 import YamlScalar
 import Parser
-import Utf8
-import Literal as Quotation
 
 ## A practical YAML configuration parser.
 ##
@@ -60,10 +59,10 @@ Yaml := [
 
 	## Syntax, supported-subset, limit, or decoding failure. Payloads retain
 	## authored values, offending bytes, and configured numeric limits.
-	Problem : [TypeMismatch({ expected : Expected, actual : Actual }), ExpectedNull, TagPayloadUnsupported, UnknownTag(Str), UnknownKey(Str), WrongSequenceLength({ expected : U64, actual : U64 }), UndecodableValue, LegacyBoolean(Str), ExpectedValue, TabIndentation, IndentedRoot, TrailingContent, UnexpectedEnd, InvalidCharacter(List(U8)), NestingTooDeep(U64), UnexpectedIndentation, DuplicateKey(Str), MultilinePlainScalarUnsupported, UnexpectedSequenceIndentation, InvalidBlockHeader, DuplicateChompingIndicator, DuplicateIndentIndicator, UnsupportedBlockHeader, OverindentedLeadingEmptyLines, BlockScalarPlacement, ReferencesUnsupported, DirectivesUnsupported, ComplexKeysUnsupported, InvalidScalarStart(U8), IndicatorBeforeWhitespace, UnexpectedMappingValue, IntegerOutOfRange({ value : Str, target : NumericType }), NumberOutOfRange({ value : Str, target : NumericType }), ExpectedFlowEntry, EmptyKey, InvalidKeyStart(U8), UnclosedQuote(U8), TrailingQuotedContent(U8), UndoubledQuote, InvalidEscape(Str), UnclosedEscape, InvalidHexEscape(U64), SurrogateEscape(U32), InvalidUnicodeEscape(U32), CollectionOnDocumentStart, MultipleDocumentsUnsupported, EmptyFlowItem, UnexpectedClosingBracket, UnexpectedClosingBrace, UnclosedFlowQuote, UnclosedNestedFlowCollection, UnclosedFlowCollection]
+	Problem : [TypeMismatch({ expected : Expected, actual : Actual }), ExpectedNull, TagPayloadUnsupported, UnknownTag(Str), UnknownKey(Str), WrongSequenceLength({ expected : U64, actual : U64 }), UndecodableValue, MissingRequiredField(Str), LegacyBoolean(Str), ExpectedValue, TabIndentation, IndentedRoot, TrailingContent, UnexpectedEnd, InvalidCharacter(List(U8)), NestingTooDeep(U64), UnexpectedIndentation, DuplicateKey(Str), MultilinePlainScalarUnsupported, UnexpectedSequenceIndentation, InvalidBlockHeader, DuplicateChompingIndicator, DuplicateIndentIndicator, UnsupportedBlockHeader, OverindentedLeadingEmptyLines, BlockScalarPlacement, ReferencesUnsupported, DirectivesUnsupported, ComplexKeysUnsupported, InvalidScalarStart(U8), IndicatorBeforeWhitespace, UnexpectedMappingValue, IntegerOutOfRange({ value : Str, target : NumericType }), NumberOutOfRange({ value : Str, target : NumericType }), ExpectedFlowEntry, EmptyKey, InvalidKeyStart(U8), UnclosedQuote(U8), TrailingQuotedContent(U8), UndoubledQuote, InvalidEscape(Str), UnclosedEscape, InvalidHexEscape(U64), SurrogateEscape(U32), InvalidUnicodeEscape(U32), CollectionOnDocumentStart, MultipleDocumentsUnsupported, EmptyFlowItem, UnexpectedClosingBracket, UnexpectedClosingBrace, UnclosedFlowQuote, UnclosedNestedFlowCollection, UnclosedFlowCollection]
 
 	## One-based location; columns count UTF-8 bytes from the line start.
-	Error : { line : U64, column : U64, problem : Parser.Problem(Problem) }
+	Error : Diagnostic(Parser.Problem(Problem))
 
 	## Half-open byte interval in the original source. Offsets count UTF-8 bytes,
 	## not characters, and preserve CRLF without normalization.
@@ -149,33 +148,25 @@ Yaml := [
 	## Read a quoted YAML tree during compilation, rejecting invalid input and
 	## unquoted legacy boolean values such as `yes` and `off`.
 	from_quote : Str -> Try(Yaml, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| yaml_quote_validate({ source: source })
 
 	## Validate one complete document, reporting its source name and position.
 	## Unlike [Yaml.parse_str], this also rejects enabled lint checks. Legacy
 	## boolean checks inspect unquoted values, never mapping keys or quoted text.
-	validate : ValidationProps -> Try(Yaml, [BadQuotedBytes(Str)])
+	validate : ValidationProps -> Try(Yaml, [InvalidYaml(Error)])
 	validate = |props| {
 		node = validation_tree(props.source, props.name, props.lints)?
-		resolve(node).map_err(|InvalidYaml(problem)| checked_error(props.name, problem))
+		resolve(node)
 	}
 
-	## Validate and decode one document into the inferred Roc type. All existing
-	## decoder types, including U128 and strings such as `1.10`, are preserved.
-	## Use `unknown_keys: Reject` to reject fields the result type does not have.
-	validate_as : DecodeValidationProps -> Try(a, [BadQuotedBytes(Str)])
+	## Validate then decode without rendering domain failures as compiler text.
+	validate_as : DecodeValidationProps -> Try(a, [InvalidYaml(Error), ..errs])
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
 	validate_as = |props| {
 		node = validation_tree(props.source, props.name, props.lints)?
 		A : a
-		# TODO: Restore Yaml.Format in these derivation calls and the Parseable
-		# requirement after https://github.com/roc-lang/roc/issues/13022 is fixed.
 		parse_value = A.parser_for(YamlFormat.{ keys: props.keys, unknown_keys: props.unknown_keys })
-		match decode_node(parse_value, node) {
-			Ok(value) => Ok(value)
-			Err(InvalidYaml(problem)) => Err(checked_error(props.name, problem))
-			Err(other) => Err(Quotation.error({ name: props.name, format: "YAML", message: "decoding failed: ${Str.inspect(other)}" }))
-		}
+		decode_node(parse_value, node)
 	}
 
 	## A typed YAML quotation. Access the decoded application value with `.value`.
@@ -187,11 +178,16 @@ Yaml := [
 	## one-based line and column. See the module description for the supported subset.
 	##
 	## ```roc
-	## expect Yaml.parse_str("draft: false") == Ok(Mapping([{ key: "draft", value: Bool(False) }]))
+	## expect Yaml.parse_str("draft: false", {}) == Ok(Mapping([{ key: "draft", value: Bool(False) }]))
 	## ```
-	parse_str : Str -> Try(Yaml, [InvalidYaml(Error)])
-	parse_str = |input| {
-		node = parse_tree(input.to_utf8())?
+	Props := { validation : [SyntaxOnly, Checked(Lints)] ?? SyntaxOnly }
+
+	parse_str : Str, Props -> Try(Yaml, [InvalidYaml(Error)])
+	parse_str = |input, props| {
+		node = match props.validation {
+			SyntaxOnly => parse_tree(input.to_utf8())
+			Checked(lints) => validation_tree(input, "<input>", lints)
+		}?
 		resolve(node)
 	}
 
@@ -202,10 +198,10 @@ Yaml := [
 	## `offset` is the byte offset of the reported line and column.
 	##
 	## ```roc
-	## expect Utf8.parse_str(Yaml.parser, "a: 1") == Ok(Mapping([{ key: "a", value: Int(1) }]))
+	## expect (Yaml.parser({})).parse_str("a: 1") == Ok(Mapping([{ key: "a", value: Int(1) }]))
 	## ```
-	parser : Parser(Utf8.Bytes, Yaml, Problem)
-	parser = Parser.custom(
+	parser : Props -> Parser(Parser.Utf8.Bytes, Yaml, Parser.Problem(Problem))
+	parser = |_props| Parser.custom(
 		|bytes| {
 			parsed = match parse_tree(bytes) {
 				Ok(node) => resolve(node)
@@ -214,7 +210,7 @@ Yaml := [
 
 			match parsed {
 				Ok(value) => Ok({ value, rest: [] })
-				Err(InvalidYaml(problem)) => Err(ParseError({ problem: problem.problem, offset: offset_of(bytes, problem.line, problem.column) }))
+				Err(InvalidYaml(problem)) => Err(ParseError({ problem: problem.problem, location: InputOffset(offset_of(bytes, yaml_position(problem).line, yaml_position(problem).column)), path: problem.path }))
 			}
 		},
 	)
@@ -223,7 +219,7 @@ Yaml := [
 	## without that key, is `Err(Missing)`.
 	##
 	## ```roc
-	## expect Yaml.parse_str("title: Post").map_ok(|doc| doc.get("title")) == Ok(Ok(Text("Post")))
+	## expect Yaml.parse_str("title: Post", {}).map_ok(|doc| doc.get("title")) == Ok(Ok(Text("Post")))
 	## ```
 	get : Yaml, Str -> Try(Yaml, [Missing])
 	get = |value, key| {
@@ -246,7 +242,7 @@ Yaml := [
 	## index past the end, is `Err(Missing)`.
 	##
 	## ```roc
-	## expect Yaml.parse_str("[a, b]").map_ok(|doc| doc.at(1)) == Ok(Ok(Text("b")))
+	## expect Yaml.parse_str("[a, b]", {}).map_ok(|doc| doc.at(1)) == Ok(Ok(Text("b")))
 	## ```
 	at : Yaml, U64 -> Try(Yaml, [Missing])
 	at = |value, index| {
@@ -261,7 +257,7 @@ Yaml := [
 	##
 	## ```roc
 	## expect {
-	##     doc = Yaml.parse_str("jobs:\n  build:\n    steps: [checkout, test]\n")?
+	##     doc = Yaml.parse_str("jobs:\n  build:\n    steps: [checkout, test]\n", {})?
 	##     doc.get_path(["jobs", "build", "steps", "1"]) == Ok(Text("test"))
 	## }
 	## ```
@@ -316,7 +312,7 @@ Yaml := [
 	## The items of a `Sequence` value, or `Err(WrongType)`.
 	##
 	## ```roc
-	## expect Yaml.parse_str("[1, 2]").map_ok(|doc| doc.as_list()) == Ok(Ok([Int(1), Int(2)]))
+	## expect Yaml.parse_str("[1, 2]", {}).map_ok(|doc| doc.as_list()) == Ok(Ok([Int(1), Int(2)]))
 	## ```
 	as_list : Yaml -> Try(List(Yaml), [WrongType])
 	as_list = |value| {
@@ -364,49 +360,54 @@ Yaml := [
 	## Config : { name : Str, version : Str, port : U16, debug : Try(Bool, [Missing]) }
 	##
 	## expect {
-	##     config : Try(Config, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	##     config = Yaml.decode("name: app\nversion: 1.10\nport: 8080\n")
+	##     config : Try(Config, [InvalidYaml(Yaml.Error)])
+	##     config = Yaml.decode_str("name: app\nversion: 1.10\nport: 8080\n", {})
 	##     config == Ok({ name: "app", version: "1.10", port: 8080, debug: Err(Missing) })
 	## }
 	## ```
-	decode : Str -> Try(a, [InvalidYaml(Error), ..errs])
+	## Decode a complete source using explicit defaulted key conventions.
+	decode_str : Str, DecodeProps -> Try(a, [InvalidYaml(Error), ..errs])
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
-	decode = |input| {
+	decode_str = |input, props| {
 		A : a
-		parse_value = A.parser_for(YamlFormat.{ keys: SnakeCase, unknown_keys: Skip })
+		parse_value = A.parser_for(YamlFormat.{ keys: props.keys, unknown_keys: props.unknown_keys })
 		decode_with(parse_value, input)
 	}
 
-	## Build a decoder like [Yaml.decode] with other conventions.
-	##
-	## - `keys` says how YAML keys spell Roc's `snake_case` field names:
-	##   `SnakeCase` as written, `KebabCase` with dashes (`user-id`) or
-	##   `CamelCase` (`userId`).
-	## - `unknown_keys` is `Skip` to ignore keys the record does not have, or
-	##   `Reject` to fail with `InvalidYaml` at the first one.
-	##
-	## Build the decoder once, for example as a top-level constant, and call it
-	## for each document.
-	##
-	## ```roc
-	## decode_strict = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })
-	##
-	## expect {
-	##     result : Try({ user_id : U64 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	##     result = decode_strict("user-id: 7\n")
-	##     result == Ok({ user_id: 7 })
-	## }
-	## ```
-	decoder : DecodeOptions -> (Str -> Try(a, [InvalidYaml(Error), ..errs]))
+	## Build a reusable typed parser; its receiver runners consume source input.
+	value_parser : DecodeProps -> Parser(Parser.Utf8.Bytes, a, [InvalidYaml(Error), ..errs])
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
-	decoder = |options| {
+	value_parser = |props| {
 		A : a
-		parse_value = A.parser_for(YamlFormat.{ keys: options.keys, unknown_keys: options.unknown_keys })
-		|input| decode_with(parse_value, input)
+		parse_value = A.parser_for(YamlFormat.{ keys: props.keys, unknown_keys: props.unknown_keys })
+		Parser.custom(
+			|bytes| {
+				parsed = match parse_tree(bytes) {
+					Ok(node) => decode_node(parse_value, node)
+					Err(error) => Err(error)
+				}
+				match parsed {
+					Ok(value) => Ok({ value, rest: [] })
+					Err(failure) => {
+						location = match failure {
+							InvalidYaml(error) => match error.location {
+								LineColumn(position) => InputOffset(offset_of(bytes, position.line, position.column))
+								other => other
+							}
+							_ => Unavailable(NotRetained)
+						}
+						path = match failure {
+							InvalidYaml(error) => error.path
+							_ => []
+						}
+						Err(ParseError({ problem: failure, location, path }))
+					}
+				}
+			},
+		)
 	}
 
-	## Options for [Yaml.decoder].
-	DecodeOptions : { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, Reject] }
+	DecodeProps := { keys : [SnakeCase, KebabCase, CamelCase] ?? SnakeCase, unknown_keys : [Skip, Reject] ?? Skip }
 
 	## Names the requirement that a type can be decoded from YAML, so a
 	## generic function can say "YAML-decodable" without naming the format and
@@ -414,7 +415,7 @@ Yaml := [
 	##
 	## ```roc
 	## load : Str -> Try(a, [InvalidYaml(Yaml.Error), ..errs]) where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]
-	## load = |text| Yaml.decode(text)
+	## load = |text| Yaml.decode_str(text, {})
 	## ```
 	a.Parseable(errs) :
 		where [
@@ -444,7 +445,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Read a string: any quoted or block scalar, or a plain scalar other than null.
-	parse_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_str = |_, cursor| {
 		scalar = take_scalar(cursor, StringValue)?
 		if scalar.plain and is_null_text(scalar.text) {
@@ -455,7 +456,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Read a core-schema boolean such as `true` or `FALSE`.
-	parse_bool : Yaml.Format, Yaml.Cursor -> Try({ value : Bool, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_bool : Yaml.Format, Yaml.Cursor -> Try({ value : Bool, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_bool = |_, cursor| {
 		scalar = take_scalar(cursor, BooleanValue)?
 		value =
@@ -472,60 +473,60 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_u8 = |_, cursor| decode_integer(cursor, U8, U8.from_str, U128.to_u8_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_i8 = |_, cursor| decode_integer(cursor, I8, I8.from_str, U128.to_i8_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_u16 = |_, cursor| decode_integer(cursor, U16, U16.from_str, U128.to_u16_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_i16 = |_, cursor| decode_integer(cursor, I16, I16.from_str, U128.to_i16_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_u32 = |_, cursor| decode_integer(cursor, U32, U32.from_str, U128.to_u32_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_i32 = |_, cursor| decode_integer(cursor, I32, I32.from_str, U128.to_i32_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_u64 = |_, cursor| decode_integer(cursor, U64, U64.from_str, U128.to_u64_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_i64 = |_, cursor| decode_integer(cursor, I64, I64.from_str, U128.to_i64_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_u128 : Yaml.Format, Yaml.Cursor -> Try({ value : U128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u128 : Yaml.Format, Yaml.Cursor -> Try({ value : U128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_u128 = |_, cursor| decode_integer(cursor, U128, U128.from_str, |n| Ok(n))
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-	parse_i128 : Yaml.Format, Yaml.Cursor -> Try({ value : I128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i128 : Yaml.Format, Yaml.Cursor -> Try({ value : I128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_i128 = |_, cursor| decode_integer(cursor, I128, I128.from_str, U128.to_i128_try)
 
 	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
-	parse_dec : Yaml.Format, Yaml.Cursor -> Try({ value : Dec, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dec : Yaml.Format, Yaml.Cursor -> Try({ value : Dec, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_dec = |_, cursor| decode_float(cursor, Dec, Dec.from_str, |_| Err(NotFinite))
 
 	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
-	parse_f32 : Yaml.Format, Yaml.Cursor -> Try({ value : F32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_f32 : Yaml.Format, Yaml.Cursor -> Try({ value : F32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_f32 = |_, cursor| decode_float(cursor, F32, F32.from_str, special_f32)
 
 	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
-	parse_f64 : Yaml.Format, Yaml.Cursor -> Try({ value : F64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_f64 : Yaml.Format, Yaml.Cursor -> Try({ value : F64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_f64 = |_, cursor| decode_float(cursor, F64, F64.from_str, special_f64)
 
 	## Succeeds only on a null, so a `Try(_, [Null])` field falls back to
 	## its value parser otherwise.
-	parse_null : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_null : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error)])
 	parse_null = |_, cursor| {
 		event = current_event(cursor)?
 		match event.kind {
@@ -535,11 +536,11 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Report a required field absent from the input.
-	missing_field : Yaml.Format, Str -> [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]
-	missing_field = |_, name| MissingRequiredField(name)
+	missing_field : Yaml.Format, Str -> [InvalidYaml(Yaml.Error)]
+	missing_field = |_, name| InvalidYaml({ problem: MissingRequiredField(name), location: Unavailable(NotRetained), path: [Key(name)] })
 
 	## Read a tag without payloads from a scalar holding its name.
-	parse_tag_union : Yaml.Format, Encoding.ParseTagUnionSpec(a, Yaml.Format, Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]), Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tag_union : Yaml.Format, Encoding.ParseTagUnionSpec(a, Yaml.Format, Yaml.Cursor, [InvalidYaml(Yaml.Error)]), Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_tag_union = |format, spec, cursor| {
 		scalar = take_scalar(cursor, TagName)?
 		Encoding.ParseTagUnionSpec.parse(
@@ -556,13 +557,13 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 					},
 				next_payload: |state, _, _| Ok(state),
 				finish_payloads: |state, _| Ok(state),
-				missing: InvalidYaml({ line: scalar.line, column: scalar.column, problem: UnknownTag(scalar.text) }),
+				missing: InvalidYaml({ problem: UnknownTag(scalar.text), location: LineColumn({ line: scalar.line, column: scalar.column }), path: [] }),
 			},
 		)
 	}
 
 	## Start a list at a sequence (or a null, as an empty list); sequences are always counted.
-	parse_list_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_list_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_list_start = |_, cursor| {
 		event = current_event(cursor)?
 		match event.kind {
@@ -573,15 +574,15 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Sequences are always counted, so the driver never asks for the next item.
-	parse_list_next : Yaml.Format, Yaml.Cursor -> Try([Item(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_list_next : Yaml.Format, Yaml.Cursor -> Try([Item(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_list_next = |_, cursor| Ok(Done(cursor))
 
 	## Protocol step that counted YAML collections never need; it does nothing.
-	parse_list_after_item : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_list_after_item : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_list_after_item = |_, cursor| Ok(Done(cursor))
 
 	## Tuple protocol step; a tuple needs a sequence of exactly its length.
-	parse_tuple_start : Yaml.Format, Yaml.Cursor, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tuple_start : Yaml.Format, Yaml.Cursor, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error)])
 	parse_tuple_start = |_, cursor, expected| {
 		event = current_event(cursor)?
 		match event.kind {
@@ -592,15 +593,15 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Tuple protocol step; a tuple needs a sequence of exactly its length.
-	parse_tuple_next : Yaml.Format, Yaml.Cursor, U64, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tuple_next : Yaml.Format, Yaml.Cursor, U64, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error)])
 	parse_tuple_next = |_, cursor, _, _| Ok(cursor)
 
 	## Tuple protocol step; a tuple needs a sequence of exactly its length.
-	parse_tuple_end : Yaml.Format, Yaml.Cursor, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tuple_end : Yaml.Format, Yaml.Cursor, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error)])
 	parse_tuple_end = |_, cursor, _| Ok(cursor)
 
 	## Start a record or dict at a mapping (or a null, as an empty one); mappings are always counted.
-	parse_record_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_record_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_record_start = |_, cursor| mapping_start(cursor)
 
 	## Read the next mapping key for the generated record parser to match.
@@ -614,7 +615,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 			Continue(Yaml.Cursor),
 			Done(Yaml.Cursor),
 		],
-		[InvalidYaml(Yaml.Error), MissingRequiredField(Str)],
+		[InvalidYaml(Yaml.Error)],
 	)
 	parse_record_field = |_, _, cursor| {
 		event = current_event(cursor)?
@@ -626,11 +627,11 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 
 	## Mappings are always counted, so the driver never asks whether another
 	## field follows.
-	parse_record_after_field : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_record_after_field : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_record_after_field = |_, cursor| Ok(Done(cursor))
 
 	## Skip the value of a key the record lacks, or reject it when `unknown_keys` is `Reject`.
-	skip_record_field : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	skip_record_field : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error)])
 	skip_record_field = |format, cursor| {
 		match format.unknown_keys {
 			Skip => Ok(skip_value(cursor))
@@ -647,65 +648,65 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	}
 
 	## Start a record or dict at a mapping (or a null, as an empty one); mappings are always counted.
-	parse_dict_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_dict_start = |_, cursor| mapping_start(cursor)
 
 	## Protocol step that counted YAML collections never need; it does nothing.
-	parse_dict_next : Yaml.Format, Yaml.Cursor -> Try([Entry(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_next : Yaml.Format, Yaml.Cursor -> Try([Entry(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_dict_next = |_, cursor| Ok(Done(cursor))
 
 	## Protocol step that counted YAML collections never need; it does nothing.
-	parse_dict_after_key : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_after_key : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error)])
 	parse_dict_after_key = |_, cursor| Ok(cursor)
 
 	## Protocol step that counted YAML collections never need; it does nothing.
-	parse_dict_after_entry : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_after_entry : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error)])
 	parse_dict_after_entry = |_, cursor| Ok(Done(cursor))
 
 	## The error for a value the generated parser cannot use.
-	invalid_value : Yaml.Format, Yaml.Cursor -> [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]
+	invalid_value : Yaml.Format, Yaml.Cursor -> [InvalidYaml(Yaml.Error)]
 	invalid_value = |_, cursor| {
 		event = cursor.events.get(cursor.pos) ?? { line: 1, column: 1, kind: Plain("") }
-		InvalidYaml({ line: event.line, column: event.column, problem: UndecodableValue })
+		InvalidYaml({ problem: UndecodableValue, location: LineColumn({ line: event.line, column: event.column }), path: [] })
 	}
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_str = |_, cursor| {
 		key = take_key(cursor)?
 		Ok({ value: key.text, rest: advance_cursor(cursor, 1) })
 	}
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_u8 = |_, cursor| decode_integer(cursor, U8, U8.from_str, U128.to_u8_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_i8 = |_, cursor| decode_integer(cursor, I8, I8.from_str, U128.to_i8_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_u16 = |_, cursor| decode_integer(cursor, U16, U16.from_str, U128.to_u16_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_i16 = |_, cursor| decode_integer(cursor, I16, I16.from_str, U128.to_i16_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_u32 = |_, cursor| decode_integer(cursor, U32, U32.from_str, U128.to_u32_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_i32 = |_, cursor| decode_integer(cursor, I32, I32.from_str, U128.to_i32_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_u64 = |_, cursor| decode_integer(cursor, U64, U64.from_str, U128.to_u64_try)
 
 	## Read a mapping key as a `Dict` key.
-	parse_key_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 	parse_key_i64 = |_, cursor| decode_integer(cursor, I64, I64.from_str, U128.to_i64_try)
 }
 
@@ -714,7 +715,7 @@ YamlDecoded(a) := { value : a }.{
 	## Decode quoted source with the defaults of [Yaml.validate_as].
 	from_quote : Str -> Try(Yaml.Decoded(a), [BadQuotedBytes(Str)])
 		where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]
-	from_quote = |source| Yaml.validate_as({ source: source }).map_ok(|value| Yaml.Decoded.{ value })
+	from_quote = |source| yaml_quote_validate_as({ source: source }).map_ok(|value| Yaml.Decoded.{ value })
 }
 
 ## One step of a flattened document. A collection start records its item
@@ -731,7 +732,7 @@ null_node : U64, U64 -> Node
 null_node = |line, column| Node.{ line, column, kind: Plain("") }
 
 ## Parse a document into a tree of unresolved nodes.
-parse_tree : Utf8.Bytes -> Try(Node, [InvalidYaml(Yaml.Error)])
+parse_tree : Parser.Utf8.Bytes -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_tree = |input| {
 	bytes = check_printable(drop_byte_order_mark(input))?
 	raw_lines = split_lines(bytes, 1)
@@ -828,24 +829,27 @@ decode_node = |parse_value, node| {
 }
 
 checked_error : Str, Yaml.Error -> [BadQuotedBytes(Str)]
-checked_error = |name, problem| Quotation.error({ name, format: "YAML", message: Str.inspect(problem.problem), line: problem.line, column: problem.column })
+checked_error = |name, problem| match Diagnostic.line_column(problem.location) {
+	Ok(position) => Parser.Quotation.error({ name, format: "YAML", message: Str.inspect(problem.problem), line: position.line, column: position.column })
+	Err(NoTextPosition) => Parser.Quotation.error({ name, format: "YAML", message: Str.inspect(problem.problem) })
+}
 
-validation_tree : Str, Str, Yaml.Lints -> Try(Node, [BadQuotedBytes(Str)])
+validation_tree : Str, Str, Yaml.Lints -> Try(Node, [InvalidYaml(Yaml.Error)])
 validation_tree = |source, name, lints| {
-	node = parse_tree(source.to_utf8()).map_err(|InvalidYaml(problem)| checked_error(name, problem))?
+	node = parse_tree(source.to_utf8())?
 	if lints.legacy_booleans {
 		check_legacy_booleans(node, name)?
 	}
 	Ok(node)
 }
 
-check_legacy_booleans : Node, Str -> Try({}, [BadQuotedBytes(Str)])
+check_legacy_booleans : Node, Str -> Try({}, [InvalidYaml(Yaml.Error)])
 check_legacy_booleans = |node, name| {
 	match node.kind {
 		Plain(text) => {
 			lower = text.with_ascii_lowercased()
 			if lower == "yes" or lower == "no" or lower == "on" or lower == "off" {
-				return Err(checked_error(name, { line: node.line, column: node.column, problem: LegacyBoolean(text) }))
+				return Err(InvalidYaml({ problem: LegacyBoolean(text), location: LineColumn({ line: node.line, column: node.column }), path: [Source(name)] }))
 			}
 		}
 		Quoted(_) => {}
@@ -1000,7 +1004,7 @@ decode_integer = |cursor, type_name, from_str, from_u128| {
 	}
 }
 
-radix_u128 : Utf8.Bytes, U128 -> Try(U128, [OutOfRange])
+radix_u128 : Parser.Utf8.Bytes, U128 -> Try(U128, [OutOfRange])
 radix_u128 = |digits, radix| {
 	var $total = 0
 	for byte in digits {
@@ -1090,7 +1094,7 @@ camel_case = |name| {
 
 ## The byte offset of a one-based line and (byte) column in `bytes`. A byte
 ## order mark comes before the first line.
-offset_of : Utf8.Bytes, U64, U64 -> U64
+offset_of : Parser.Utf8.Bytes, U64, U64 -> U64
 offset_of = |bytes, line, column| {
 	var $index =
 		match bytes {
@@ -1114,7 +1118,7 @@ offset_of = |bytes, line, column| {
 	if (offset > bytes.len()) bytes.len() else offset
 }
 
-drop_byte_order_mark : Utf8.Bytes -> Utf8.Bytes
+drop_byte_order_mark : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 drop_byte_order_mark = |bytes| {
 	match bytes {
 		[0xEF, 0xBB, 0xBF, .. as rest] => rest
@@ -1124,10 +1128,10 @@ drop_byte_order_mark = |bytes| {
 
 ## Bytes that may start an unprintable character: C0 controls other than
 ## tab and line breaks, DEL, and the lead bytes of C1 controls and U+FFFE/F.
-maybe_unprintable : Utf8.ByteClass
-maybe_unprintable = Utf8.ByteClass.from_predicate(|b| (b < 0x20 and b != '\t' and b != '\n' and b != '\r') or b == 0x7F or b == 0xC2 or b == 0xEF)
+maybe_unprintable : Parser.Utf8.ByteClass
+maybe_unprintable = Parser.Utf8.ByteClass.from_predicate(|b| (b < 0x20 and b != '\t' and b != '\n' and b != '\r') or b == 0x7F or b == 0xC2 or b == 0xEF)
 
-is_unprintable_at : Utf8.Bytes, U64 -> Bool
+is_unprintable_at : Parser.Utf8.Bytes, U64 -> Bool
 is_unprintable_at = |bytes, index| {
 	byte = bytes.get(index) ?? 0
 	next = bytes.get(index + 1) ?? 0
@@ -1140,14 +1144,14 @@ is_unprintable_at = |bytes, index| {
 
 ## Reject characters outside YAML 1.2's printable set (5.1): C0 controls other
 ## than tab and line breaks, DEL, C1 controls other than NEL, and U+FFFE/U+FFFF.
-check_printable : Utf8.Bytes -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
+check_printable : Parser.Utf8.Bytes -> Try(Parser.Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 check_printable = |bytes| {
 	# Skip to the bytes that can start a problem; the line and column are
 	# only counted when there is one.
 	len = bytes.len()
-	var $at = Utf8.find_any(bytes, 0, maybe_unprintable)
+	var $at = Parser.Utf8.find_any(bytes, 0, maybe_unprintable)
 	while $at < len and !is_unprintable_at(bytes, $at) {
-		$at = Utf8.find_any(bytes, $at + 1, maybe_unprintable)
+		$at = Parser.Utf8.find_any(bytes, $at + 1, maybe_unprintable)
 	}
 	if $at >= len {
 		return Ok(bytes)
@@ -1188,7 +1192,7 @@ check_printable = |bytes| {
 ## `terminated` is false only for a final line without a line break. `tab`
 ## marks a tab right after the indentation, which is an error only where the
 ## line is block structure rather than block scalar content.
-Line : { content : Utf8.Bytes, indent : U64, number : U64, terminated : Bool, tab : Bool }
+Line : { content : Parser.Utf8.Bytes, indent : U64, number : U64, terminated : Bool, tab : Bool }
 
 ## The structural lines still to parse: an index into the prepared lines,
 ## plus an optional `head` line that stands in front of them. A compact
@@ -1337,7 +1341,7 @@ parse_mapping = |start, indent, depth, raw_lines| {
 small_mapping_size : U64
 small_mapping_size = 16
 
-MappingParts : { key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }
+MappingParts : { key : Parser.Utf8.Bytes, value : Parser.Utf8.Bytes, value_column : U64 }
 
 ## The next entry of a block mapping at `indent`, or `Stop` where the mapping ends.
 mapping_line : Input, U64 -> Try([Stop, Entry({ line : Line, parts : MappingParts })], [InvalidYaml(Yaml.Error)])
@@ -1429,7 +1433,7 @@ sequence_line = |input, indent| {
 	}
 }
 
-starts_block_scalar : Utf8.Bytes -> Bool
+starts_block_scalar : Parser.Utf8.Bytes -> Bool
 starts_block_scalar = |bytes| {
 	match trim_spaces(bytes) {
 		['|', ..] | ['>', ..] => True
@@ -1440,7 +1444,7 @@ starts_block_scalar = |bytes| {
 ## Parse a block scalar whose header is on line `line`. Its content comes
 ## from the raw lines, which are numbered from one, so the line after the
 ## header is at index `line`.
-parse_block_scalar : Input, List(Line), Utf8.Bytes, U64, U64, U64 -> Try(NodeResult, [InvalidYaml(Yaml.Error)])
+parse_block_scalar : Input, List(Line), Parser.Utf8.Bytes, U64, U64, U64 -> Try(NodeResult, [InvalidYaml(Yaml.Error)])
 parse_block_scalar = |rest, raw_lines, header_bytes, line, column, min_indent| {
 	header = parse_block_header(header_bytes, line, column)?
 	collected = collect_block_lines(raw_lines, line, min_indent, header.indent, line)?
@@ -1454,7 +1458,7 @@ parse_block_scalar = |rest, raw_lines, header_bytes, line, column, min_indent| {
 	Ok({ node: Node.{ line, column, kind: Quoted(bytes_to_str(body)) }, input: $input })
 }
 
-parse_block_header : Utf8.Bytes, U64, U64 -> Try(BlockHeader, [InvalidYaml(Yaml.Error)])
+parse_block_header : Parser.Utf8.Bytes, U64, U64 -> Try(BlockHeader, [InvalidYaml(Yaml.Error)])
 parse_block_header = |raw, line, column| {
 	bytes = trim_spaces(raw)
 
@@ -1469,7 +1473,7 @@ parse_block_header = |raw, line, column| {
 	}
 }
 
-parse_block_header_options : Utf8.Bytes, BlockHeader, U64, U64 -> Try(BlockHeader, [InvalidYaml(Yaml.Error)])
+parse_block_header_options : Parser.Utf8.Bytes, BlockHeader, U64, U64 -> Try(BlockHeader, [InvalidYaml(Yaml.Error)])
 parse_block_header_options = |bytes, header, line, column| {
 	match bytes {
 		[] => Ok(header)
@@ -1540,7 +1544,7 @@ block_indent_from_digit = |digit| {
 ## the parent node, or zero for a scalar at the document root. Lines are read
 ## from index `start` of `raw_lines` on. `terminated`
 ## says whether the last content line ended with a line break.
-collect_block_lines : List(Line), U64, U64, BlockIndent, U64 -> Try({ lines : List(Utf8.Bytes), consumed_through : U64, terminated : Bool }, [InvalidYaml(Yaml.Error)])
+collect_block_lines : List(Line), U64, U64, BlockIndent, U64 -> Try({ lines : List(Parser.Utf8.Bytes), consumed_through : U64, terminated : Bool }, [InvalidYaml(Yaml.Error)])
 collect_block_lines = |raw_lines, start, min_indent, block_indent, header_line| {
 	var $content_indent =
 		match block_indent {
@@ -1628,7 +1632,7 @@ collect_block_lines = |raw_lines, start, min_indent, block_indent, header_line| 
 }
 
 ## "---" or "..." at the start of a line, alone or followed by white space.
-is_document_marker : Utf8.Bytes -> Bool
+is_document_marker : Parser.Utf8.Bytes -> Bool
 is_document_marker = |bytes| {
 	match bytes {
 		['-', '-', '-'] | ['.', '.', '.'] => True
@@ -1637,7 +1641,7 @@ is_document_marker = |bytes| {
 	}
 }
 
-count_spaces : Utf8.Bytes, U64 -> U64
+count_spaces : Parser.Utf8.Bytes, U64 -> U64
 count_spaces = |bytes, count| {
 	match bytes {
 		[' ', .. as rest] => count_spaces(rest, count + 1)
@@ -1647,7 +1651,7 @@ count_spaces = |bytes, count| {
 
 ## Apply the block style and chomping indicator (YAML 1.2 8.1.1.2). Content
 ## runs through the last non-empty line; later empty lines are trailing.
-render_block_scalar : List(Utf8.Bytes), Bool, BlockStyle, BlockChomp -> Utf8.Bytes
+render_block_scalar : List(Parser.Utf8.Bytes), Bool, BlockStyle, BlockChomp -> Parser.Utf8.Bytes
 render_block_scalar = |lines, terminated, style, chomp| {
 	content_len = last_content_index(lines, 0, 0)
 	content = lines.sublist({ start: 0, len: content_len })
@@ -1676,7 +1680,7 @@ render_block_scalar = |lines, terminated, style, chomp| {
 	}
 }
 
-last_content_index : List(Utf8.Bytes), U64, U64 -> U64
+last_content_index : List(Parser.Utf8.Bytes), U64, U64 -> U64
 last_content_index = |lines, index, last| {
 	match lines.get(index) {
 		Err(_) => last
@@ -1685,7 +1689,7 @@ last_content_index = |lines, index, last| {
 	}
 }
 
-join_block_lines : List(Utf8.Bytes) -> Utf8.Bytes
+join_block_lines : List(Parser.Utf8.Bytes) -> Parser.Utf8.Bytes
 join_block_lines = |lines| {
 	match lines {
 		[] => []
@@ -1693,7 +1697,7 @@ join_block_lines = |lines| {
 	}
 }
 
-join_block_lines_help : List(Utf8.Bytes), Utf8.Bytes -> Utf8.Bytes
+join_block_lines_help : List(Parser.Utf8.Bytes), Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 join_block_lines_help = |lines, out| {
 	match lines {
 		[] => out
@@ -1704,7 +1708,7 @@ join_block_lines_help = |lines, out| {
 ## Fold lines (YAML 1.2 8.1.3, 6.5): a break between two text lines that do not
 ## start with white space becomes a space, or is dropped when empty lines
 ## follow it; breaks next to more-indented lines are kept.
-fold_block_lines : List(Utf8.Bytes) -> Utf8.Bytes
+fold_block_lines : List(Parser.Utf8.Bytes) -> Parser.Utf8.Bytes
 fold_block_lines = |lines| {
 	var $out = []
 	var $previous = Err(NoLine)
@@ -1737,7 +1741,7 @@ fold_block_lines = |lines| {
 	$out
 }
 
-parse_inline_value : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
+parse_inline_value : Parser.Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_inline_value = |raw, line, column, depth| {
 	bytes = trim_spaces(raw)
 
@@ -1782,24 +1786,24 @@ parse_inline_value = |raw, line, column, depth| {
 }
 
 ## ": " or a final ":" inside a plain scalar would start a mapping value.
-contains_mapping_indicator : Utf8.Bytes -> Bool
+contains_mapping_indicator : Parser.Utf8.Bytes -> Bool
 contains_mapping_indicator = |bytes| {
 	len = bytes.len()
-	var $index = Utf8.find_any(bytes, 0, colon)
+	var $index = Parser.Utf8.find_any(bytes, 0, colon)
 	var $found = False
 	while !$found and $index < len {
 		next = bytes.get($index + 1) ?? ' '
 		if next == ' ' or next == '\t' {
 			$found = True
 		} else {
-			$index = Utf8.find_any(bytes, $index + 1, colon)
+			$index = Parser.Utf8.find_any(bytes, $index + 1, colon)
 		}
 	}
 	$found
 }
 
-colon : Utf8.ByteClass
-colon = Utf8.ByteClass.from_bytes([':'])
+colon : Parser.Utf8.ByteClass
+colon = Parser.Utf8.ByteClass.from_bytes([':'])
 
 ## Resolve a plain scalar with the YAML 1.2 core schema (10.3.2). Anything
 ## that matches none of its forms is a string.
@@ -1863,7 +1867,7 @@ special_float = |text| {
 is_hex_digit : U8 -> Bool
 is_hex_digit = |byte| is_digit(byte) or (byte >= 'a' and byte <= 'f') or (byte >= 'A' and byte <= 'F')
 
-radix_integer : Utf8.Bytes, U64, Str, U64, U64 -> Try(Yaml, [InvalidYaml(Yaml.Error)])
+radix_integer : Parser.Utf8.Bytes, U64, Str, U64, U64 -> Try(Yaml, [InvalidYaml(Yaml.Error)])
 radix_integer = |digits, radix, text, line, column| {
 	value = digits.fold(
 		Ok(0),
@@ -1892,10 +1896,10 @@ radix_integer = |digits, radix, text, line, column| {
 
 ## Match the core schema float form [-+]? ( \. [0-9]+ | [0-9]+ ( \. [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
 ## and spell it as sign, digits, ".", digits, exponent for F64.from_str.
-core_float_text : Utf8.Bytes -> Try(Str, [NotFloat])
+core_float_text : Parser.Utf8.Bytes -> Try(Str, [NotFloat])
 core_float_text = YamlScalar.core_float_text
 
-parse_flow_sequence : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
+parse_flow_sequence : Parser.Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_flow_sequence = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '[', ']', line, column)?
 	parts = if (trim_spaces(inner).is_empty()) [] else split_flow_items(inner, line, column)?
@@ -1908,7 +1912,7 @@ parse_flow_sequence = |bytes, line, column, depth| {
 	Ok(Node.{ line, column, kind: Seq($items) })
 }
 
-parse_flow_mapping : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
+parse_flow_mapping : Parser.Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_flow_mapping = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '{', '}', line, column)?
 	parts = if (trim_spaces(inner).is_empty()) [] else split_flow_items(inner, line, column)?
@@ -1948,7 +1952,7 @@ parse_flow_mapping = |bytes, line, column, depth| {
 	Ok(Node.{ line, column, kind: Map($entries) })
 }
 
-parse_key : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
+parse_key : Parser.Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_key = |raw, line, column| {
 	bytes = trim_spaces(raw)
 
@@ -1966,17 +1970,17 @@ parse_key = |raw, line, column| {
 	}
 }
 
-single_quote : Utf8.ByteClass
-single_quote = Utf8.ByteClass.from_predicate(|b| b == '\'')
+single_quote : Parser.Utf8.ByteClass
+single_quote = Parser.Utf8.ByteClass.from_predicate(|b| b == '\'')
 
-backslash : Utf8.ByteClass
-backslash = Utf8.ByteClass.from_predicate(|b| b == '\\')
+backslash : Parser.Utf8.ByteClass
+backslash = Parser.Utf8.ByteClass.from_predicate(|b| b == '\\')
 
-parse_single_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
+parse_single_quoted : Parser.Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_single_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '\'', line, column)?
 	# Without a quote inside there is nothing to unescape: keep the slice.
-	if Utf8.find_any(inner, 0, single_quote) >= inner.len() {
+	if Parser.Utf8.find_any(inner, 0, single_quote) >= inner.len() {
 		Ok(bytes_to_str(inner))
 	} else {
 		unescape_single(inner, [], line, column).map_ok(bytes_to_str)
@@ -1986,7 +1990,7 @@ parse_single_quoted = |bytes, line, column| {
 ## The text between a scalar's opening quote and its real closing quote, which
 ## must end the scalar. In single quotes '' is an escaped quote; in double
 ## quotes a backslash escapes the next byte.
-quoted_inner : Utf8.Bytes, U8, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
+quoted_inner : Parser.Utf8.Bytes, U8, U64, U64 -> Try(Parser.Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 quoted_inner = |bytes, quote, line, column| {
 	var $index = 1
 	var $close = Err(Unterminated)
@@ -2013,7 +2017,7 @@ quoted_inner = |bytes, quote, line, column| {
 	}
 }
 
-unescape_single : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
+unescape_single : Parser.Utf8.Bytes, Parser.Utf8.Bytes, U64, U64 -> Try(Parser.Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 unescape_single = |bytes, out, line, column| {
 	match bytes {
 		[] => Ok(out)
@@ -2023,18 +2027,18 @@ unescape_single = |bytes, out, line, column| {
 	}
 }
 
-parse_double_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
+parse_double_quoted : Parser.Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_double_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '"', line, column)?
 	# Without a backslash there is nothing to unescape: keep the slice.
-	if Utf8.find_any(inner, 0, backslash) >= inner.len() {
+	if Parser.Utf8.find_any(inner, 0, backslash) >= inner.len() {
 		Ok(bytes_to_str(inner))
 	} else {
 		unescape_double(inner, [], line, column).map_ok(bytes_to_str)
 	}
 }
 
-unescape_double : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
+unescape_double : Parser.Utf8.Bytes, Parser.Utf8.Bytes, U64, U64 -> Try(Parser.Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 unescape_double = |bytes, out, line, column| {
 	match bytes {
 		[] => Ok(out)
@@ -2066,7 +2070,7 @@ unescape_double = |bytes, out, line, column| {
 }
 
 ## YAML 1.2 single-character escapes (5.7), as UTF-8.
-simple_escape : U8 -> Try(Utf8.Bytes, [NotSimple])
+simple_escape : U8 -> Try(Parser.Utf8.Bytes, [NotSimple])
 simple_escape = |escaped| {
 	match escaped {
 		'0' => Ok([0])
@@ -2091,7 +2095,7 @@ simple_escape = |escaped| {
 }
 
 ## The whole (possibly multi-byte) character at the start of `bytes`.
-escaped_character : Utf8.Bytes -> Str
+escaped_character : Parser.Utf8.Bytes -> Str
 escaped_character = |bytes| {
 	width =
 		match bytes {
@@ -2104,7 +2108,7 @@ escaped_character = |bytes| {
 	Str.from_utf8(bytes.sublist({ start: 0, len: width })) ?? "?"
 }
 
-encode_code_point : Utf8.Bytes, U64, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
+encode_code_point : Parser.Utf8.Bytes, U64, U64, U64 -> Try(Parser.Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 encode_code_point = |hex, digits, line, column| {
 	if hex.len() != digits {
 		fail(line, column, InvalidHexEscape(digits))
@@ -2118,7 +2122,7 @@ encode_code_point = |hex, digits, line, column| {
 	}
 }
 
-parse_hex : Utf8.Bytes, U32 -> Try(U32, [InvalidHex])
+parse_hex : Parser.Utf8.Bytes, U32 -> Try(U32, [InvalidHex])
 parse_hex = |bytes, value| {
 	match bytes {
 		[] => Ok(value)
@@ -2139,7 +2143,7 @@ parse_hex = |bytes, value| {
 	}
 }
 
-utf8_encode : U32 -> Utf8.Bytes
+utf8_encode : U32 -> Parser.Utf8.Bytes
 utf8_encode = |code| {
 	if code < 0x80 {
 		[U32.to_u8_wrap(code)]
@@ -2227,7 +2231,7 @@ remove_document_end = |lines, out| {
 }
 
 ## The lines of `input`, each a slice of it rather than a copy.
-split_lines : Utf8.Bytes, U64 -> List(Line)
+split_lines : Parser.Utf8.Bytes, U64 -> List(Line)
 split_lines = |input, first_number| {
 	var $lines = []
 	var $number = first_number
@@ -2241,7 +2245,7 @@ split_lines = |input, first_number| {
 			$index = if (byte == '\r' and input.get($index + 1) == Ok('\n')) $index + 2 else $index + 1
 			$start = $index
 		} else {
-			$index = Utf8.find_line_end(input, $index + 1)
+			$index = Parser.Utf8.find_line_end(input, $index + 1)
 		}
 	}
 	# A line break ends a line; it does not start an empty final one.
@@ -2255,7 +2259,7 @@ split_lines = |input, first_number| {
 ## `bytes` up to the comment that ends it, if any, as a slice of `bytes`.
 ## Quotes and flow brackets are tracked so a `#` inside them is kept, and a
 ## `#` only starts a comment at the start or after white space.
-strip_comment : Utf8.Bytes -> Utf8.Bytes
+strip_comment : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 strip_comment = |bytes| {
 	var $quote = NoQuote
 	var $escaped = False
@@ -2306,7 +2310,7 @@ strip_comment = |bytes| {
 ## space and standalone "-" or "?" indicators may separate it from the start of
 ## the line, a ": " value indicator, or (in a flow collection) "[", "{" or ",".
 ## Anywhere else, quotes and brackets are ordinary plain scalar text.
-scalar_can_start : Utf8.Bytes, Bool -> Bool
+scalar_can_start : Parser.Utf8.Bytes, Bool -> Bool
 scalar_can_start = |prefix, in_flow| {
 	var $index = prefix.len()
 	var $answer = Err(Undecided)
@@ -2342,13 +2346,13 @@ scalar_can_start = |prefix, in_flow| {
 ## Text from bytes of the input. The input is a `Str`, so its bytes are valid
 ## UTF-8 and `Str.from_utf8` shares them without copying, where
 ## `Str.from_utf8_lossy` decodes twice and allocates.
-bytes_to_str : Utf8.Bytes -> Str
+bytes_to_str : Parser.Utf8.Bytes -> Str
 bytes_to_str = |bytes| Str.from_utf8(bytes) ?? Str.from_utf8_lossy(bytes)
 
 is_white : U8 -> Bool
 is_white = |byte| byte == ' ' or byte == '\t'
 
-split_mapping_entry : Utf8.Bytes -> Try({ key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }, [NotFound])
+split_mapping_entry : Parser.Utf8.Bytes -> Try({ key : Parser.Utf8.Bytes, value : Parser.Utf8.Bytes, value_column : U64 }, [NotFound])
 split_mapping_entry = |bytes| {
 	# One pass over the line by index: quotes and flow brackets are tracked so
 	# a ": " inside them is not the mapping colon.
@@ -2405,7 +2409,7 @@ split_mapping_entry = |bytes| {
 
 ## The items of a flow collection's inside, split at top-level commas, each
 ## trimmed and as a slice of `bytes`.
-split_flow_items : Utf8.Bytes, U64, U64 -> Try(List(Utf8.Bytes), [InvalidYaml(Yaml.Error)])
+split_flow_items : Parser.Utf8.Bytes, U64, U64 -> Try(List(Parser.Utf8.Bytes), [InvalidYaml(Yaml.Error)])
 split_flow_items = |bytes, line, column| {
 	var $items = []
 	var $start = 0
@@ -2475,7 +2479,7 @@ split_flow_items = |bytes, line, column| {
 	}
 }
 
-unwrap_flow : Utf8.Bytes, U8, U8, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
+unwrap_flow : Parser.Utf8.Bytes, U8, U8, U64, U64 -> Try(Parser.Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 unwrap_flow = |bytes, open, close, line, column| {
 	if bytes.len() < 2 or bytes.get(0) != Ok(open) or bytes.get(bytes.len() - 1) != Ok(close) {
 		fail(line, column, UnclosedFlowCollection)
@@ -2484,7 +2488,7 @@ unwrap_flow = |bytes, open, close, line, column| {
 	}
 }
 
-is_sequence_line : Utf8.Bytes -> Bool
+is_sequence_line : Parser.Utf8.Bytes -> Bool
 is_sequence_line = |bytes| {
 	match bytes {
 		['-'] => True
@@ -2493,7 +2497,7 @@ is_sequence_line = |bytes| {
 	}
 }
 
-sequence_payload : Utf8.Bytes -> Utf8.Bytes
+sequence_payload : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 sequence_payload = |bytes| {
 	match bytes {
 		['-'] => []
@@ -2502,13 +2506,13 @@ sequence_payload = |bytes| {
 	}
 }
 
-is_decimal_integer : Utf8.Bytes -> Bool
+is_decimal_integer : Parser.Utf8.Bytes -> Bool
 is_decimal_integer = YamlScalar.is_decimal_integer
 
 is_digit : U8 -> Bool
 is_digit = |byte| byte >= '0' and byte <= '9'
 
-starts_with_space : Utf8.Bytes -> Bool
+starts_with_space : Parser.Utf8.Bytes -> Bool
 starts_with_space = |bytes| {
 	match bytes {
 		[' ', ..] | ['\t', ..] => True
@@ -2516,10 +2520,10 @@ starts_with_space = |bytes| {
 	}
 }
 
-trim_spaces : Utf8.Bytes -> Utf8.Bytes
+trim_spaces : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 trim_spaces = |bytes| trim_end_spaces(trim_start_spaces(bytes))
 
-trim_start_spaces : Utf8.Bytes -> Utf8.Bytes
+trim_start_spaces : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 trim_start_spaces = |bytes| {
 	len = bytes.len()
 	var $start = 0
@@ -2532,7 +2536,7 @@ trim_start_spaces = |bytes| {
 is_space_or_tab : U8 -> Bool
 is_space_or_tab = |b| b == ' ' or b == '\t'
 
-trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
+trim_end_spaces : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 trim_end_spaces = |bytes| {
 	var $len = bytes.len()
 	while $len > 0 and is_white(bytes.get($len - 1) ?? 'x') {
@@ -2541,11 +2545,11 @@ trim_end_spaces = |bytes| {
 	bytes.take_first($len)
 }
 
-append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
+append_bytes : Parser.Utf8.Bytes, Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 append_bytes = |left, right| left.concat(right)
 
 fail : U64, U64, Parser.Problem(Yaml.Problem) -> Try(_, [InvalidYaml(Yaml.Error)])
-fail = |line, column, problem| Err(InvalidYaml({ line, column, problem }))
+fail = |line, column, problem| Err(InvalidYaml({ problem: problem, location: LineColumn({ line: line, column: column }), path: [] }))
 
 when_error : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Try(Parser.Problem(Yaml.Problem), [NoError])
 when_error = |result| {
@@ -2606,14 +2610,14 @@ inspect_text = |text| {
 	bytes_to_str($out.append('"'))
 }
 
-code_point_escape : U32 -> Utf8.Bytes
+code_point_escape : U32 -> Parser.Utf8.Bytes
 code_point_escape = |code| {
 	hex = |digit| if (digit < 10) U32.to_u8_wrap(digit) + '0' else U32.to_u8_wrap(digit) - 10 + 'a'
 	['\\', 'u', '(', hex(code // 16), hex(code % 16), ')']
 }
 
 # Empty documents parse as null.
-expect Yaml.parse_str("") == Ok(Null)
+expect Yaml.parse_str("", {}) == Ok(Null)
 
 # Common frontmatter scalars resolve to useful values.
 expect {
@@ -2624,6 +2628,8 @@ expect {
 			\\count: 3
 			\\rating: 4.5
 			\\description: null
+			,
+			{},
 		)?
 
 	actual
@@ -2645,6 +2651,8 @@ expect {
 			\\  tags:
 			\\    - parser
 			\\    - yaml
+			,
+			{},
 		)?
 
 	actual
@@ -2667,6 +2675,8 @@ expect {
 			\\  - name: Ada
 			\\    active: true
 			\\  - name: Grace
+			,
+			{},
 		)?
 
 	actual
@@ -2683,7 +2693,7 @@ expect {
 
 # Flow collections support concise config values.
 expect {
-	actual = Yaml.parse_str("ports: [80, 443]\nlabels: { tier: web, public: true }")?
+	actual = Yaml.parse_str("ports: [80, 443]\nlabels: { tier: web, public: true }", {})?
 
 	actual
 		== Mapping([
@@ -2694,37 +2704,37 @@ expect {
 
 # Quotes preserve scalar strings and comment markers.
 expect {
-	actual = Yaml.parse_str("enabled: \"true\"\nmessage: 'it''s # text' # comment")?
+	actual = Yaml.parse_str("enabled: \"true\"\nmessage: 'it''s # text' # comment", {})?
 	actual == Mapping([{ key: "enabled", value: Text("true") }, { key: "message", value: Text("it's # text") }])
 }
 
 # Optional document markers work for Markdown frontmatter bodies.
 expect {
-	actual = Yaml.parse_str("---\ntitle: Post\n...")?
+	actual = Yaml.parse_str("---\ntitle: Post\n...", {})?
 	actual == Mapping([{ key: "title", value: Text("Post") }])
 }
 
 # Duplicate mapping keys fail.
-expect Yaml.parse_str("name: first\nname: second").is_err()
+expect Yaml.parse_str("name: first\nname: second", {}).is_err()
 
 # Tabs used for indentation fail.
-expect Yaml.parse_str("root:\n\tchild: value").is_err()
+expect Yaml.parse_str("root:\n\tchild: value", {}).is_err()
 
 # Advanced YAML features fail explicitly.
-expect Yaml.parse_str("value: &anchor text").is_err()
+expect Yaml.parse_str("value: &anchor text", {}).is_err()
 
 # Multiple documents are outside the supported subset.
-expect Yaml.parse_str("one: 1\n---\ntwo: 2").is_err()
+expect Yaml.parse_str("one: 1\n---\ntwo: 2", {}).is_err()
 
 # Plain strings containing dots or the letter e are not mistaken for floats.
 expect {
-	actual = Yaml.parse_str("file: .git\nname: release")?
+	actual = Yaml.parse_str("file: .git\nname: release", {})?
 	actual == Mapping([{ key: "file", value: Text(".git") }, { key: "name", value: Text("release") }])
 }
 
 # Plain scalars resolve with the YAML 1.2 core schema; everything else is a string.
 expect {
-	actual = Yaml.parse_str("[1.2.3, 1e, nUlL, tRUE, 0x1F, 0o17, 1., .5, -1.5e2, .inf, -.Inf, 1_000, 0X1]")?
+	actual = Yaml.parse_str("[1.2.3, 1e, nUlL, tRUE, 0x1F, 0o17, 1., .5, -1.5e2, .inf, -.Inf, 1_000, 0X1]", {})?
 	actual
 		== Sequence([
 			Text("1.2.3"),
@@ -2745,7 +2755,7 @@ expect {
 
 # Not-a-number resolves to a float.
 expect {
-	match Yaml.parse_str(".nan") {
+	match Yaml.parse_str(".nan", {}) {
 		Ok(Float(value)) => F64.is_nan(value)
 		_ => False
 	}
@@ -2753,13 +2763,13 @@ expect {
 
 # Sequence entries may be compact nested sequences.
 expect {
-	actual = Yaml.parse_str("- - a\n  - b\n- - - c\n")?
+	actual = Yaml.parse_str("- - a\n  - b\n- - - c\n", {})?
 	actual == Sequence([Sequence([Text("a"), Text("b")]), Sequence([Sequence([Text("c")])])])
 }
 
 # Mapping values may be sequences at the key's own indentation.
 expect {
-	actual = Yaml.parse_str("steps:\n- run: a\n  name: x\n- b\nnext: 1\n")?
+	actual = Yaml.parse_str("steps:\n- run: a\n  name: x\n- b\nnext: 1\n", {})?
 	actual
 		== Mapping([
 			{ key: "steps", value: Sequence([Mapping([{ key: "run", value: Text("a") }, { key: "name", value: Text("x") }]), Text("b")]) },
@@ -2769,101 +2779,101 @@ expect {
 
 # A byte order mark is not content; control characters are rejected.
 expect {
-	actual = Yaml.parse_str("\u(FEFF)value: one\n")?
-	actual == Mapping([{ key: "value", value: Text("one") }]) and Yaml.parse_str("value: a\u(0)b").is_err() and Yaml.parse_str("v: \u(85)").is_ok()
+	actual = Yaml.parse_str("\u(FEFF)value: one\n", {})?
+	actual == Mapping([{ key: "value", value: Text("one") }]) and Yaml.parse_str("value: a\u(0)b", {}).is_err() and Yaml.parse_str("v: \u(85)", {}).is_ok()
 }
 
 # The root node may start on the document start line, but not a block collection.
 expect {
-	actual = Yaml.parse_str("--- |1-\n x\n")?
-	plain = Yaml.parse_str("---\tscalar\n")?
-	actual == Text("x") and plain == Text("scalar") and Yaml.parse_str("--- a: b\n").is_err()
+	actual = Yaml.parse_str("--- |1-\n x\n", {})?
+	plain = Yaml.parse_str("---\tscalar\n", {})?
+	actual == Text("x") and plain == Text("scalar") and Yaml.parse_str("--- a: b\n", {}).is_err()
 }
 
 # Indicators cannot start plain scalars, and plain scalars cannot hold ": ".
 expect {
 	invalid = ["value: ]", "[-]", "[-, -]", "- [ : empty key ]", "a: b: c: d", "&a: key", "a: -"]
-	valid = Yaml.parse_str("a: ?x\n?y: -z\n")?
-	invalid.all(|text| Yaml.parse_str(text).is_err()) and valid == Mapping([{ key: "a", value: Text("?x") }, { key: "?y", value: Text("-z") }])
+	valid = Yaml.parse_str("a: ?x\n?y: -z\n", {})?
+	invalid.all(|text| Yaml.parse_str(text, {}).is_err()) and valid == Mapping([{ key: "a", value: Text("?x") }, { key: "?y", value: Text("-z") }])
 }
 
 # A tab may separate a sequence dash from a scalar, but not from a nested collection.
 expect {
-	actual = Yaml.parse_str("-\t-1\n")?
-	actual == Sequence([Int(-1)]) and Yaml.parse_str("-\t-\n").is_err() and Yaml.parse_str("- \t-\n").is_err()
+	actual = Yaml.parse_str("-\t-1\n", {})?
+	actual == Sequence([Int(-1)]) and Yaml.parse_str("-\t-\n", {}).is_err() and Yaml.parse_str("- \t-\n", {}).is_err()
 }
 
 # Flow collections count toward the nesting limit.
 expect {
 	deep = Str.concat(Str.repeat("[", 150), Str.repeat("]", 150))
 	shallow = Str.concat(Str.repeat("[", 50), Str.repeat("]", 50))
-	Yaml.parse_str(deep).is_err() and Yaml.parse_str(shallow).is_ok() and Yaml.parse_str(Str.concat("a:\n  b: ", deep)).is_err()
+	Yaml.parse_str(deep, {}).is_err() and Yaml.parse_str(shallow, {}).is_ok() and Yaml.parse_str(Str.concat("a:\n  b: ", deep), {}).is_err()
 }
 
 # A quoted scalar ends at its real closing quote; anything after it is an error.
 expect {
-	stray = Yaml.parse_str("v: \"a\\\\\"\"")
-	trailing = Yaml.parse_str("v: \"a\" x")
-	single = Yaml.parse_str("v: 'it''s'")?
+	stray = Yaml.parse_str("v: \"a\\\\\"\"", {})
+	trailing = Yaml.parse_str("v: \"a\" x", {})
+	single = Yaml.parse_str("v: 'it''s'", {})?
 	message = |result| when_error(result)
 	stray.is_err() and message(trailing) == Ok(TrailingQuotedContent('"')) and single == Mapping([{ key: "v", value: Text("it's") }])
 }
 
 # Errors name the unsupported feature rather than a symptom.
 expect {
-	directive = when_error(Yaml.parse_str("%YAML 1.2\n---\na: 1\n"))
-	continued = when_error(Yaml.parse_str("a: one\n  two\n"))
+	directive = when_error(Yaml.parse_str("%YAML 1.2\n---\na: 1\n", {}))
+	continued = when_error(Yaml.parse_str("a: one\n  two\n", {}))
 	directive == Ok(DirectivesUnsupported) and continued == Ok(MultilinePlainScalarUnsupported)
 }
 
 # Syntax errors report their source location.
 expect {
-	match Yaml.parse_str("root:\n\tchild: value") {
-		Err(InvalidYaml(problem)) => problem.line == 2 and problem.column == 1
+	match Yaml.parse_str("root:\n\tchild: value", {}) {
+		Err(InvalidYaml(problem)) => yaml_position(problem).line == 2 and yaml_position(problem).column == 1
 		Ok(_) => False
 	}
 }
 
 # Root sequences and empty entries are supported.
 expect {
-	actual = Yaml.parse_str("- first\n-\n- third")?
+	actual = Yaml.parse_str("- first\n-\n- third", {})?
 	actual == Sequence([Text("first"), Null, Text("third")])
 }
 
 # CRLF input and comment-only lines are ignored correctly.
 expect {
-	actual = Yaml.parse_str("# config\r\nname: roc-parser\r\n")?
+	actual = Yaml.parse_str("# config\r\nname: roc-parser\r\n", {})?
 	actual == Mapping([{ key: "name", value: Text("roc-parser") }])
 }
 
 # Nested flow collections keep quoted commas inside strings.
 expect {
-	actual = Yaml.parse_str("value: [{ name: 'one,two' }, [1, 2]]")?
+	actual = Yaml.parse_str("value: [{ name: 'one,two' }, [1, 2]]", {})?
 	actual == Mapping([{ key: "value", value: Sequence([Mapping([{ key: "name", value: Text("one,two") }]), Sequence([Int(1), Int(2)])]) }])
 }
 
 # Double-quoted strings support common escapes.
 expect {
-	actual = Yaml.parse_str("message: \"first\\nsecond\"")?
+	actual = Yaml.parse_str("message: \"first\\nsecond\"", {})?
 	actual == Mapping([{ key: "message", value: Text("first\nsecond") }])
 }
 
 # Double-quoted strings support every YAML 1.2 escape, including Unicode.
 expect {
-	actual = Yaml.parse_str("v: \"\\x41\\u00e9\\U0001F600\\/\\_\\0\"")?
+	actual = Yaml.parse_str("v: \"\\x41\\u00e9\\U0001F600\\/\\_\\0\"", {})?
 	actual == Mapping([{ key: "v", value: Text("Aé😀/\u(a0)\u(0)") }])
 }
 
 # Unsupported escapes before a multi-byte character fail instead of crashing.
 expect {
-	match Yaml.parse_str("v: \"\\é\"") {
+	match Yaml.parse_str("v: \"\\é\"", {}) {
 		Err(InvalidYaml({ problem, .. })) => problem == InvalidEscape("é")
 		_ => False
 	}
 }
 
 # Surrogate and short Unicode escapes are rejected.
-expect Yaml.parse_str("v: \"\\uD800\"").is_err() and Yaml.parse_str("v: \"\\u12\"").is_err()
+expect Yaml.parse_str("v: \"\\uD800\"", {}).is_err() and Yaml.parse_str("v: \"\\u12\"", {}).is_err()
 
 # Block scalars parse as multiline strings, including folded style.
 expect {
@@ -2875,6 +2885,8 @@ expect {
 			\\summary: >
 			\\  one
 			\\  two
+			,
+			{},
 		)?
 
 	actual
@@ -2886,80 +2898,80 @@ expect {
 
 # A block scalar's final line without a line break gets no newline, even when kept.
 expect {
-	clip = Yaml.parse_str("a: |\n  x")?
-	keep = Yaml.parse_str("a: |+\n  x")?
+	clip = Yaml.parse_str("a: |\n  x", {})?
+	keep = Yaml.parse_str("a: |+\n  x", {})?
 	clip == Mapping([{ key: "a", value: Text("x") }]) and keep == clip
 }
 
 # Keep chomping at the end of input keeps exactly the trailing line breaks.
 expect {
-	actual = Yaml.parse_str("a: |+\n  x\n\n")?
+	actual = Yaml.parse_str("a: |+\n  x\n\n", {})?
 	actual == Mapping([{ key: "a", value: Text("x\n\n") }])
 }
 
 # Block scalars without content lines are empty unless kept.
 expect {
-	clip = Yaml.parse_str("a: |\n\n")?
-	keep = Yaml.parse_str("a: |+\n\n\n")?
+	clip = Yaml.parse_str("a: |\n\n", {})?
+	keep = Yaml.parse_str("a: |+\n\n\n", {})?
 	clip == Mapping([{ key: "a", value: Text("") }]) and keep == Mapping([{ key: "a", value: Text("\n\n") }])
 }
 
 # Tabs after the indentation are block scalar content, not indentation.
 expect {
-	actual = Yaml.parse_str("a: |\n  x\n  \ty\n")?
+	actual = Yaml.parse_str("a: |\n  x\n  \ty\n", {})?
 	actual == Mapping([{ key: "a", value: Text("x\n\ty\n") }])
 }
 
 # Whitespace beyond the content indentation on an otherwise empty line is content.
 expect {
-	actual = Yaml.parse_str("a: |\n  x\n   \t\n  y\n")?
+	actual = Yaml.parse_str("a: |\n  x\n   \t\n  y\n", {})?
 	actual == Mapping([{ key: "a", value: Text("x\n \t\ny\n") }])
 }
 
 # Folding drops the line break before empty lines between text lines.
 expect {
-	actual = Yaml.parse_str("a: >\n  a\n\n\n  b\n")?
+	actual = Yaml.parse_str("a: >\n  a\n\n\n  b\n", {})?
 	actual == Mapping([{ key: "a", value: Text("a\n\nb\n") }])
 }
 
 # Final whitespace without a line break still ends its line (yaml-test-suite JEF9, L24T).
 expect {
-	keep = Yaml.parse_str("- |+\n   ")?
-	clip = Yaml.parse_str("foo: |\n  x\n   ")?
+	keep = Yaml.parse_str("- |+\n   ", {})?
+	clip = Yaml.parse_str("foo: |\n  x\n   ", {})?
 	keep == Sequence([Text("\n")]) and clip == Mapping([{ key: "foo", value: Text("x\n \n") }])
 }
 
 # Spaces and a tab form a content line that sets the indentation (R4YG, Y79Y).
 expect {
-	actual = Yaml.parse_str("foo: |\n \t\nbar: 1\n")?
+	actual = Yaml.parse_str("foo: |\n \t\nbar: 1\n", {})?
 	actual == Mapping([{ key: "foo", value: Text("\t\n") }, { key: "bar", value: Int(1) }])
 }
 
 # A tab-only line cannot end a block scalar (Y79Y).
-expect Yaml.parse_str("foo: |\n\t\nbar: 1\n").is_err()
+expect Yaml.parse_str("foo: |\n\t\nbar: 1\n", {}).is_err()
 
 # Block scalars at the document root may start in column 0, until a document marker.
 expect {
-	actual = Yaml.parse_str("|\na\n...\n")?
+	actual = Yaml.parse_str("|\na\n...\n", {})?
 	actual == Text("a\n")
 }
 
 # Lone carriage returns are line breaks.
 expect {
-	actual = Yaml.parse_str("value: |\r  one\r  two\r")?
+	actual = Yaml.parse_str("value: |\r  one\r  two\r", {})?
 	actual == Mapping([{ key: "value", value: Text("one\ntwo\n") }])
 }
 
 # Compact mappings in sequence entries are indented by the spaces after "-"
 # (YAML 1.2 8.2.1: here the mapping, and so the indicator, is relative to column 4).
 expect {
-	actual = Yaml.parse_str("-   value: |2\n      a\n    next: done\n")?
+	actual = Yaml.parse_str("-   value: |2\n      a\n    next: done\n", {})?
 	actual == Sequence([Mapping([{ key: "value", value: Text("a\n") }, { key: "next", value: Text("done") }])])
 }
 
 # Quotes and brackets inside plain scalars are ordinary text.
 expect {
-	actual = Yaml.parse_str("k: it's # comment\nit's: \"q\" # c\na[b: x]{\nlist: [a, 'b''c', \"d, e\"]\n")?
+	actual = Yaml.parse_str("k: it's # comment\nit's: \"q\" # c\na[b: x]{\nlist: [a, 'b''c', \"d, e\"]\n", {})?
 	actual
 		== Mapping([
 			{ key: "k", value: Text("it's") },
@@ -2971,37 +2983,37 @@ expect {
 
 # Indicator-like text inside a plain scalar does not start a quoted scalar.
 expect {
-	actual = Yaml.parse_str("{_? -  ': 1, b: 2}")?
+	actual = Yaml.parse_str("{_? -  ': 1, b: 2}", {})?
 	actual == Mapping([{ key: "_? -  '", value: Int(1) }, { key: "b", value: Int(2) }])
 }
 
 # A dash inside plain text is not an indicator that can start a quoted scalar.
 expect {
-	actual = Yaml.parse_str("b- \"q: x\n")?
+	actual = Yaml.parse_str("b- \"q: x\n", {})?
 	actual == Mapping([{ key: "b- \"q", value: Text("x") }])
 }
 
 # A tab before a document marker is not a document marker.
-expect Yaml.parse_str("\t---\na: 1").is_err()
+expect Yaml.parse_str("\t---\na: 1", {}).is_err()
 
 # Leading empty lines may not be indented more than detected block content.
-expect Yaml.parse_str("a: |\n    \n  x\n").is_err()
+expect Yaml.parse_str("a: |\n    \n  x\n", {}).is_err()
 
 # Chomping indicators are supported for block scalars.
 expect {
-	actual = Yaml.parse_str("note: |-\n  hello")?
+	actual = Yaml.parse_str("note: |-\n  hello", {})?
 	actual == Mapping([{ key: "note", value: Text("hello") }])
 }
 
 # Block scalar content keeps blank lines and # characters literally.
 expect {
-	actual = Yaml.parse_str("text: |\n  # not a comment\n\n  after\n")?
+	actual = Yaml.parse_str("text: |\n  # not a comment\n\n  after\n", {})?
 	actual == Mapping([{ key: "text", value: Text("# not a comment\n\nafter\n") }])
 }
 
 # Explicit block indentation indicators are supported.
 expect {
-	actual = Yaml.parse_str("script: |2-\n  echo one\n  echo two\nnext: done")?
+	actual = Yaml.parse_str("script: |2-\n  echo one\n  echo two\nnext: done", {})?
 
 	actual
 		== Mapping([
@@ -3012,34 +3024,34 @@ expect {
 
 # Folded blocks preserve line breaks around indented continuation lines.
 expect {
-	actual = Yaml.parse_str("text: >\n  intro\n    code\n  outro\n")?
+	actual = Yaml.parse_str("text: >\n  intro\n    code\n  outro\n", {})?
 	actual == Mapping([{ key: "text", value: Text("intro\n  code\noutro\n") }])
 }
 
 # Malformed flow collections still fail.
-expect Yaml.parse_str("values: [one, two").is_err()
+expect Yaml.parse_str("values: [one, two", {}).is_err()
 
 # Doc examples.
-expect Yaml.parse_str("draft: false") == Ok(Mapping([{ key: "draft", value: Bool(False) }]))
+expect Yaml.parse_str("draft: false", {}) == Ok(Mapping([{ key: "draft", value: Bool(False) }]))
 expect Yaml.to_inspect(Sequence([Int(1), Text("a")])) == "Sequence([Int(1), Text(\"a\")])"
 
 # Null spellings and an empty value all parse as Null.
-expect Yaml.parse_str("a: null\nb: ~\nc:\n") == Ok(Mapping([{ key: "a", value: Null }, { key: "b", value: Null }, { key: "c", value: Null }]))
+expect Yaml.parse_str("a: null\nb: ~\nc:\n", {}) == Ok(Mapping([{ key: "a", value: Null }, { key: "b", value: Null }, { key: "c", value: Null }]))
 
 # Doc examples for the tree helpers and the parser.
-expect Yaml.parse_str("title: Post").map_ok(|doc| doc.get("title")) == Ok(Ok(Text("Post")))
-expect Yaml.parse_str("[a, b]").map_ok(|doc| doc.at(1)) == Ok(Ok(Text("b")))
-expect Yaml.parse_str("[1, 2]").map_ok(|doc| doc.as_list()) == Ok(Ok([Int(1), Int(2)]))
-expect Utf8.parse_str(Yaml.parser, "a: 1") == Ok(Mapping([{ key: "a", value: Int(1) }]))
+expect Yaml.parse_str("title: Post", {}).map_ok(|doc| doc.get("title")) == Ok(Ok(Text("Post")))
+expect Yaml.parse_str("[a, b]", {}).map_ok(|doc| doc.at(1)) == Ok(Ok(Text("b")))
+expect Yaml.parse_str("[1, 2]", {}).map_ok(|doc| doc.as_list()) == Ok(Ok([Int(1), Int(2)]))
+expect (Yaml.parser({})).parse_str("a: 1") == Ok(Mapping([{ key: "a", value: Int(1) }]))
 
 expect {
-	doc = Yaml.parse_str("jobs:\n  build:\n    steps: [checkout, test]\n")?
+	doc = Yaml.parse_str("jobs:\n  build:\n    steps: [checkout, test]\n", {})?
 	doc.get_path(["jobs", "build", "steps", "1"]) == Ok(Text("test"))
 }
 
 # Helpers report a missing key, index or path segment, and a wrong type.
 expect {
-	doc = Yaml.parse_str("a: 1\nb: [true]\nc: text\n")?
+	doc = Yaml.parse_str("a: 1\nb: [true]\nc: text\n", {})?
 	checks = [
 		doc.get("z") == Err(Missing),
 		doc.at(0) == Err(Missing),
@@ -3056,15 +3068,15 @@ expect {
 
 # Parser failures carry the byte offset of the reported location.
 expect {
-	match Utf8.parse_str(Yaml.parser, "a: 1\nb: [x\n") {
-		Err(ParseError({ offset, .. })) => offset == 8
+	match (Yaml.parser({})).parse_str("a: 1\nb: [x\n") {
+		Err(ParseError(error)) => Diagnostic.byte_offset(error.location) == Ok(8)
 		Ok(_) => False
 	}
 }
 
 expect {
-	match Utf8.parse_str(Yaml.parser, "\u(FEFF)é: [x\n") {
-		Err(ParseError({ offset, .. })) => offset == 7
+	match (Yaml.parser({})).parse_str("\u(FEFF)é: [x\n") {
+		Err(ParseError(error)) => Diagnostic.byte_offset(error.location) == Ok(7)
 		Ok(_) => False
 	}
 }
@@ -3075,7 +3087,7 @@ expect Yaml.to_inspect(Mapping([{ key: "k\t", value: Bool(True) }])) == "Mapping
 
 # Trees can be hashed.
 expect {
-	doc = Yaml.parse_str("a: [1, x]")?
+	doc = Yaml.parse_str("a: [1, x]", {})?
 	set = Set.empty().insert(doc).insert(doc)
 	set.len() == 1
 }
@@ -3084,16 +3096,14 @@ expect {
 DocConfig : { name : Str, version : Str, port : U16, debug : Try(Bool, [Missing]) }
 
 expect {
-	config : Try(DocConfig, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	config = Yaml.decode("name: app\nversion: 1.10\nport: 8080\n")
+	config : Try(DocConfig, [InvalidYaml(Yaml.Error)])
+	config = Yaml.decode_str("name: app\nversion: 1.10\nport: 8080\n", {})
 	config == Ok({ name: "app", version: "1.10", port: 8080, debug: Err(Missing) })
 }
 
-decode_strict = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })
-
 expect {
-	result : Try({ user_id : U64 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = decode_strict("user-id: 7\n")
+	result : Try({ user_id : U64 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("user-id: 7\n", { keys: KebabCase, unknown_keys: Reject })
 	result == Ok({ user_id: 7 })
 }
 
@@ -3110,96 +3120,96 @@ Service : {
 
 expect {
 	text = "image: \"nginx:1.25\"\nports: [80, 0x1BB]\nenv:\n  MODE: production\n  LEVEL: 3\nlimits: { cpu: .5, memory: 512Mi }\npair:\n  - x\n  - -4\ncommand: ~\nextra: ignored\n"
-	result : Try(Service, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode(text)
+	result : Try(Service, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str(text, {})
 	expected_env = Dict.empty().insert("MODE", "production").insert("LEVEL", "3")
 	result == Ok({ image: "nginx:1.25", ports: [80, 443], env: expected_env, limits: { cpu: 0.5, memory: "512Mi" }, pair: ("x", -4), replicas: Err(Missing), command: Err(Null) })
 }
 
 # Plain scalars resolve per target: text keeps its spelling, numbers and booleans follow the core schema.
 expect {
-	result : Try({ a : Str, b : Str, c : F64, d : Bool, e : I8, f : Dec, g : U128 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("a: 1.10\nb: true\nc: 7\nd: FALSE\ne: +12\nf: 1.25\ng: 99999999999999999999\n")
+	result : Try({ a : Str, b : Str, c : F64, d : Bool, e : I8, f : Dec, g : U128 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("a: 1.10\nb: true\nc: 7\nd: FALSE\ne: +12\nf: 1.25\ng: 99999999999999999999\n", {})
 	result == Ok({ a: "1.10", b: "true", c: 7.0, d: False, e: 12, f: 1.25, g: 99999999999999999999 })
 }
 
 expect {
-	result : Try({ e : I8 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("e: -0o0\n")
-	result == Err(InvalidYaml({ line: 1, column: 4, problem: TypeMismatch({ expected: IntegerValue, actual: PlainScalar("-0o0") }) }))
+	result : Try({ e : I8 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("e: -0o0\n", {})
+	result == Err(InvalidYaml({ problem: TypeMismatch({ expected: IntegerValue, actual: PlainScalar("-0o0") }), location: LineColumn({ line: 1, column: 4 }), path: [] }))
 }
 
 # Type mismatches report the value's location.
 expect {
-	result : Try({ port : U16 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("port: \"80\"\n")
-	result == Err(InvalidYaml({ line: 1, column: 7, problem: TypeMismatch({ expected: IntegerValue, actual: QuotedScalar("80") }) }))
+	result : Try({ port : U16 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("port: \"80\"\n", {})
+	result == Err(InvalidYaml({ problem: TypeMismatch({ expected: IntegerValue, actual: QuotedScalar("80") }), location: LineColumn({ line: 1, column: 7 }), path: [] }))
 }
 
 expect {
-	result : Try({ port : U8 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("port: 300\n")
-	result == Err(InvalidYaml({ line: 1, column: 7, problem: IntegerOutOfRange({ value: "300", target: U8 }) }))
+	result : Try({ port : U8 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("port: 300\n", {})
+	result == Err(InvalidYaml({ problem: IntegerOutOfRange({ value: "300", target: U8 }), location: LineColumn({ line: 1, column: 7 }), path: [] }))
 }
 
 expect {
-	result : Try({ name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("name:\n")
-	result == Err(InvalidYaml({ line: 1, column: 6, problem: TypeMismatch({ expected: StringValue, actual: NullValue }) }))
+	result : Try({ name : Str }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("name:\n", {})
+	result == Err(InvalidYaml({ problem: TypeMismatch({ expected: StringValue, actual: NullValue }), location: LineColumn({ line: 1, column: 6 }), path: [] }))
 }
 
 expect {
-	result : Try({ tags : List(Str) }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("tags:\n  a: b\n")
-	result == Err(InvalidYaml({ line: 2, column: 3, problem: TypeMismatch({ expected: SequenceValue, actual: MappingValue }) }))
+	result : Try({ tags : List(Str) }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("tags:\n  a: b\n", {})
+	result == Err(InvalidYaml({ problem: TypeMismatch({ expected: SequenceValue, actual: MappingValue }), location: LineColumn({ line: 2, column: 3 }), path: [] }))
 }
 
 # A missing required field comes from the compiler-generated parser.
 expect {
-	result : Try({ name : Str, port : U16 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("name: app\n")
-	result == Err(MissingRequiredField("port"))
+	result : Try({ name : Str, port : U16 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("name: app\n", {})
+	result == Err(InvalidYaml({ problem: MissingRequiredField("port"), location: Unavailable(NotRetained), path: [Key("port")] }))
 }
 
 # Null decodes as an empty collection, and an empty document as an empty record.
 expect {
-	result : Try({ tags : List(Str), labels : Dict(Str, Str), extra : Try(Str, [Missing]) }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("tags:\nlabels: ~\n")
-	empty : Try({ extra : Try(Str, [Missing]) }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	empty = Yaml.decode("")
+	result : Try({ tags : List(Str), labels : Dict(Str, Str), extra : Try(Str, [Missing]) }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("tags:\nlabels: ~\n", {})
+	empty : Try({ extra : Try(Str, [Missing]) }, [InvalidYaml(Yaml.Error)])
+	empty = Yaml.decode_str("", {})
 	result == Ok({ tags: [], labels: Dict.empty(), extra: Err(Missing) }) and empty == Ok({ extra: Err(Missing) })
 }
 
 # Unknown keys are skipped, including whole nested collections, unless rejected.
 expect {
-	result : Try({ b : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("a:\n  x: [1, {y: 2}]\n  z:\n    - 3\nb: kept\n")
-	strict : Try({ b : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	strict = Yaml.decoder({ keys: SnakeCase, unknown_keys: Reject })("b: kept\nc: 1\n")
-	result == Ok({ b: "kept" }) and strict == Err(InvalidYaml({ line: 2, column: 1, problem: UnknownKey("c") }))
+	result : Try({ b : Str }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("a:\n  x: [1, {y: 2}]\n  z:\n    - 3\nb: kept\n", {})
+	strict : Try({ b : Str }, [InvalidYaml(Yaml.Error)])
+	strict = Yaml.decode_str("b: kept\nc: 1\n", { keys: SnakeCase, unknown_keys: Reject })
+	result == Ok({ b: "kept" }) and strict == Err(InvalidYaml({ problem: UnknownKey("c"), location: LineColumn({ line: 2, column: 1 }), path: [] }))
 }
 
 # Keys may be camelCase.
 expect {
-	result : Try({ user_id : U64, display_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decoder({ keys: CamelCase, unknown_keys: Skip })("userId: 1\ndisplayName: Ada\n")
+	result : Try({ user_id : U64, display_name : Str }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("userId: 1\ndisplayName: Ada\n", { keys: CamelCase, unknown_keys: Skip })
 	result == Ok({ user_id: 1, display_name: "Ada" })
 }
 
 # Tuples need exactly their length; tags decode from their names; dicts may have integer keys.
 expect {
-	short : Try({ p : (I64, I64) }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	short = Yaml.decode("p: [1]\n")
-	level : Try({ level : [Debug, Info] }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	level = Yaml.decode("level: Info\n")
-	bad : Try({ level : [Debug, Info] }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	bad = Yaml.decode("level: Loud\n")
-	codes : Try(Dict(U16, Str), [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	codes = Yaml.decode("200: ok\n404: missing\n")
+	short : Try({ p : (I64, I64) }, [InvalidYaml(Yaml.Error)])
+	short = Yaml.decode_str("p: [1]\n", {})
+	level : Try({ level : [Debug, Info] }, [InvalidYaml(Yaml.Error)])
+	level = Yaml.decode_str("level: Info\n", {})
+	bad : Try({ level : [Debug, Info] }, [InvalidYaml(Yaml.Error)])
+	bad = Yaml.decode_str("level: Loud\n", {})
+	codes : Try(Dict(U16, Str), [InvalidYaml(Yaml.Error)])
+	codes = Yaml.decode_str("200: ok\n404: missing\n", {})
 	checks = [
-		short == Err(InvalidYaml({ line: 1, column: 4, problem: WrongSequenceLength({ expected: 2, actual: 1 }) })),
+		short == Err(InvalidYaml({ problem: WrongSequenceLength({ expected: 2, actual: 1 }), location: LineColumn({ line: 1, column: 4 }), path: [] })),
 		level == Ok({ level: Info }),
-		bad == Err(InvalidYaml({ line: 1, column: 8, problem: UnknownTag("Loud") })),
+		bad == Err(InvalidYaml({ problem: UnknownTag("Loud"), location: LineColumn({ line: 1, column: 8 }), path: [] })),
 		codes == Ok(Dict.empty().insert(200, "ok").insert(404, "missing")),
 	]
 	checks.all(|ok| ok)
@@ -3207,30 +3217,30 @@ expect {
 
 # Lists of records decode from block sequences of compact mappings.
 expect {
-	result : Try(List({ name : Str, tags : List(Str) }), [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("- name: a\n  tags: [x]\n- name: b\n  tags: []\n")
+	result : Try(List({ name : Str, tags : List(Str) }), [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("- name: a\n  tags: [x]\n- name: b\n  tags: []\n", {})
 	result == Ok([{ name: "a", tags: ["x"] }, { name: "b", tags: [] }])
 }
 
 # Invalid YAML fails the same way when decoding.
 expect {
-	result : Try({ a : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("a: [x\n")
+	result : Try({ a : Str }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("a: [x\n", {})
 	result.is_err()
 }
 
 # Floats accept the special values where the type has them.
 expect {
-	result : Try({ a : F64, b : F32 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	result = Yaml.decode("a: -.inf\nb: 1e3\n")
-	dec : Try({ a : Dec }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	dec = Yaml.decode("a: .inf\n")
-	(result == Ok({ a: -F64.infinity, b: 1000.0 })) and (dec == Err(InvalidYaml({ line: 1, column: 4, problem: NumberOutOfRange({ value: ".inf", target: Dec }) })))
+	result : Try({ a : F64, b : F32 }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("a: -.inf\nb: 1e3\n", {})
+	dec : Try({ a : Dec }, [InvalidYaml(Yaml.Error)])
+	dec = Yaml.decode_str("a: .inf\n", {})
+	(result == Ok({ a: -F64.infinity, b: 1000.0 })) and (dec == Err(InvalidYaml({ problem: NumberOutOfRange({ value: ".inf", target: Dec }), location: LineColumn({ line: 1, column: 4 }), path: [] })))
 }
 
 # A key starting with % is reported as a directive, with or without a leading --- (fuzz: yaml-raw).
-expect when_error(Yaml.parse_str("%:")) == when_error(Yaml.parse_str("---\n%:"))
-expect when_error(Yaml.parse_str("%-- x\n...\nx")) == when_error(Yaml.parse_str("---\n%-- x\n...\nx"))
+expect when_error(Yaml.parse_str("%:", {})) == when_error(Yaml.parse_str("---\n%:", {}))
+expect when_error(Yaml.parse_str("%-- x\n...\nx", {})) == when_error(Yaml.parse_str("---\n%-- x\n...\nx", {}))
 
 # Source highlighting acceptance tests. The independent suites live beside
 # the API so package-wide tests execute them without a testing-only export.
@@ -3700,22 +3710,22 @@ expect {
 }
 
 expect {
-	Yaml.validate({ source: "mode: ON", name: "config.yaml" }) == Err(BadQuotedBytes("config.yaml:1:7: YAML: LegacyBoolean(\"ON\")"))
+	yaml_quote_validate({ source: "mode: ON", name: "config.yaml" }) == Err(BadQuotedBytes("config.yaml:1:7: YAML: LegacyBoolean(\"ON\")"))
 }
 
-expect Yaml.validate({ source: "" }) == Ok(Null)
+expect yaml_quote_validate({ source: "" }) == Ok(Null)
 
 expect {
-	Yaml.validate({ source: "on: 'off'\nno: \"YES\"\n" }) == Yaml.parse_str("on: 'off'\nno: \"YES\"\n").map_err(|_| BadQuotedBytes("unexpected parse error"))
+	yaml_quote_validate({ source: "on: 'off'\nno: \"YES\"\n" }) == Yaml.parse_str("on: 'off'\nno: \"YES\"\n", {}).map_err(|_| BadQuotedBytes("unexpected parse error"))
 }
 
 expect {
 	source = "nested:\n  - yes\n"
-	Yaml.validate({ source, lints: { legacy_booleans: False } }) == Yaml.parse_str(source).map_err(|_| BadQuotedBytes("unexpected parse error"))
+	yaml_quote_validate({ source, lints: { legacy_booleans: False } }) == Yaml.parse_str(source, {}).map_err(|_| BadQuotedBytes("unexpected parse error"))
 }
 
 expect {
-	match Yaml.validate({ source: "mode: yes\nbroken: [", name: "bad.yaml" }) {
+	match yaml_quote_validate({ source: "mode: yes\nbroken: [", name: "bad.yaml" }) {
 		Err(BadQuotedBytes(message)) => message.starts_with("bad.yaml:2:") and !message.contains("LegacyBoolean")
 		Ok(_) => False
 	}
@@ -3723,13 +3733,13 @@ expect {
 
 expect {
 	result : Try({ user_id : U64 }, [BadQuotedBytes(Str)])
-	result = Yaml.validate_as({ source: "userId: 18446744073709551615\nextra: ignored", keys: CamelCase })
+	result = yaml_quote_validate_as({ source: "userId: 18446744073709551615\nextra: ignored", keys: CamelCase })
 	result == Ok({ user_id: 18446744073709551615 })
 }
 
 expect {
 	result : Try({ user_id : U64 }, [BadQuotedBytes(Str)])
-	result = Yaml.validate_as({ source: "user-id: 7\nextra: ignored", name: "strict.yaml", keys: KebabCase, unknown_keys: Reject })
+	result = yaml_quote_validate_as({ source: "user-id: 7\nextra: ignored", name: "strict.yaml", keys: KebabCase, unknown_keys: Reject })
 	match result {
 		Err(BadQuotedBytes(message)) => message.starts_with("strict.yaml:2:") and message.contains("extra")
 		Ok(_) => False
@@ -3738,7 +3748,7 @@ expect {
 
 expect {
 	result : Try({ required : Str }, [BadQuotedBytes(Str)])
-	result = Yaml.validate_as({ source: "{}", name: "missing.yaml" })
+	result = yaml_quote_validate_as({ source: "{}", name: "missing.yaml" })
 	match result {
 		Err(BadQuotedBytes(message)) => message.starts_with("missing.yaml: YAML:") and message.contains("required")
 		Ok(_) => False
@@ -3752,7 +3762,7 @@ CheckedYamlFailure := [Never].{
 
 expect {
 	result : Try(CheckedYamlFailure, [BadQuotedBytes(Str)])
-	result = Yaml.validate_as({ source: "anything" })
+	result = yaml_quote_validate_as({ source: "anything" })
 	match result {
 		Err(BadQuotedBytes(message)) => message.contains("CustomYamlFailure") and message.contains("custom detail")
 		Ok(_) => False
@@ -3761,13 +3771,50 @@ expect {
 
 # A closed native problem union can retain its domain when embedded in text.
 expect {
-	parser = Utf8.string("config: ").skip(Yaml.parser.map_problem(|problem| YamlProblem(problem)))
-	Utf8.parse_str(parser, "config: x: 1") == Ok("config: ")
+	parser = Parser.Utf8.string("config: ").skip(Yaml.parser({}).map_problem(|problem| YamlProblem(problem)))
+	(parser).parse_str("config: x: 1") == Ok("config: ")
 }
 expect {
-	parser = Utf8.string("config: ").skip(Yaml.parser.map_problem(|problem| YamlProblem(problem)))
-	match Utf8.parse_str(parser, "config: [") {
-		Err(ParseError(error)) => error.offset == 8 and error.problem == YamlProblem(UnclosedFlowCollection)
+	parser = Parser.Utf8.string("config: ").skip(Yaml.parser({}).map_problem(|problem| YamlProblem(problem)))
+	match (parser).parse_str("config: [") {
+		Err(ParseError(error)) => error.location == Text({ offset: 8, line: 1, column: 9 }) and error.problem == YamlProblem(UnclosedFlowCollection)
 		_ => False
+	}
+}
+
+# Render legacy line-only scanner positions without inventing a byte offset.
+yaml_position : Yaml.Error -> { line : U64, column : U64 }
+yaml_position = |error| match error.location {
+	LineColumn(position) => position
+	Text(position) => { line: position.line, column: position.column }
+	_ => { line: 1, column: 1 }
+}
+
+yaml_quote_validate : Yaml.ValidationProps -> Try(Yaml, [BadQuotedBytes(Str)])
+yaml_quote_validate = |props| Yaml.validate(props).map_err(|InvalidYaml(error)| checked_error(props.name, error))
+
+yaml_quote_validate_as : Yaml.DecodeValidationProps -> Try(a, [BadQuotedBytes(Str)])
+	where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]
+yaml_quote_validate_as = |props| Yaml.validate_as(props).map_err(
+	|failure| match failure {
+		InvalidYaml(error) => checked_error(props.name, error)
+		other => Parser.Quotation.error({ name: props.name, format: "YAML", message: "decoding failed: ${Str.inspect(other)}" })
+	},
+)
+
+## Configured typed parsers expose the same receiver runners as custom grammars.
+expect {
+	value : { port : U16 }
+	value = Yaml.value_parser({}).parse_str("port: 8080")?
+	value.port == 8080
+}
+
+## Missing fields retain their key and explicitly have no physical location.
+expect {
+	result : Try({ required : Str }, [InvalidYaml(Yaml.Error)])
+	result = Yaml.decode_str("other: value", {})
+	match result {
+		Err(InvalidYaml(error)) => error.problem == MissingRequiredField("required") and error.location == Unavailable(NotRetained) and error.path == [Key("required")]
+		Ok(_) => False
 	}
 }

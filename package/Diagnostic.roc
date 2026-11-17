@@ -4,10 +4,10 @@ Diagnostic(problem) := {
 	location : Diagnostic.Location,
 	path : List(Diagnostic.PathSegment),
 }.{
+
 	## Compare and hash diagnostics structurally when their problems support it.
 	is_eq : _
 	to_hash : _
-
 
 	## Offsets count original bytes, except InputOffset which counts input elements.
 	## Lines, columns, records and fields are one-based; indexes are zero-based.

@@ -1,8 +1,7 @@
+import Diagnostic
 import MarkdownEntities
 import MarkdownTypes
 import Parser
-import Utf8
-import Literal as Quotation
 import unicode.Case
 import unicode.GeneralCategory
 import unicode.Scalar
@@ -59,16 +58,19 @@ Markdown := [
 
 		## Convert a quoted document with the default lint rules.
 		from_quote : Str -> Try(Document, [BadQuotedBytes(Str)])
-		from_quote = |source| Markdown.validate({ source: source }).map_ok(|blocks| { blocks: blocks })
+		from_quote = |source| Markdown.validate({ source: source }).map_ok(|blocks| { blocks: blocks }).map_err(|InvalidMarkdown(error)| markdown_quotation_error(error))
 	}
 
 	## Parse Markdown once, rejecting implicit code-fence closures when enabled.
 	## This stricter check does not change CommonMark's permissive parse API.
-	validate : ValidationProps -> Try(List(Markdown), [BadQuotedBytes(Str)])
+	Problem : [UnclosedFence]
+	Error : Diagnostic(Problem)
+
+	validate : ValidationProps -> Try(List(Markdown), [InvalidMarkdown(Error)])
 	validate = |props| {
 		parsed = parse_document_metadata(props.source.to_utf8())
 		match parsed.unclosed_fences.first() {
-			Ok(line) if props.lints.unclosed_fences => Err(Quotation.error({ name: props.name, format: "Markdown", line, message: "unclosed_fences: code fence has no explicit closing delimiter" }))
+			Ok(line) if props.lints.unclosed_fences => Err(InvalidMarkdown({ problem: UnclosedFence, location: LineColumn({ line, column: 1 }), path: [Source(props.name)] }))
 			_ => Ok(parsed.value)
 		}
 	}
@@ -103,13 +105,15 @@ Markdown := [
 	## block becomes the first block, `Frontmatter`.
 	##
 	## ```roc
-	## expect Markdown.parse_str("# Hi\n\nSome *text*.") == [
+	## expect Markdown.parse_str("# Hi\n\nSome *text*.", {}) == [
 	##     Heading({ level: One, content: [Text("Hi")] }),
 	##     Paragraph([Text("Some "), Emphasis([Text("text")]), Text(".")]),
 	## ]
 	## ```
-	parse_str : Str -> List(Markdown)
-	parse_str = |text| parse_document(text.to_utf8())
+	Props := {}
+
+	parse_str : Str, Props -> List(Markdown)
+	parse_str = |text, _props| parse_document(text.to_utf8())
 
 	## Parse inline content, such as a single line of a table cell or a title,
 	## without any block structure. Reference links cannot resolve here, because
@@ -127,20 +131,20 @@ Markdown := [
 
 	## [Markdown.parse_str] as a [Parser] over bytes, for use with the
 	## combinators. It consumes all of its input and never fails.
-	parser : Parser(Utf8.Bytes, List(Markdown), [])
-	parser = Parser.custom(|input| Ok({ value: parse_document(input), rest: [] }))
+	parser : Props -> Parser(Parser.Utf8.Bytes, List(Markdown), [])
+	parser = |_props| Parser.custom(|input| Ok({ value: parse_document(input), rest: [] }))
 
 	## [Markdown.parse_inlines] as a [Parser] over bytes. It consumes all of its
 	## input and never fails.
-	inline_parser : Parser(Utf8.Bytes, List(Inline), [])
+	inline_parser : Parser(Parser.Utf8.Bytes, List(Inline), [])
 	inline_parser = Parser.custom(|input| Ok({ value: parse_inline_bytes(input), rest: [] }))
 
 	## The raw text of the document's frontmatter, or `Err(Missing)` when the
 	## document has none.
 	##
 	## ```roc
-	## expect Markdown.frontmatter(Markdown.parse_str("---\ntitle: Hi\n---\nBody")) == Ok("title: Hi\n")
-	## expect Markdown.frontmatter(Markdown.parse_str("Body")) == Err(Missing)
+	## expect Markdown.frontmatter(Markdown.parse_str("---\ntitle: Hi\n---\nBody", {})) == Ok("title: Hi\n")
+	## expect Markdown.frontmatter(Markdown.parse_str("Body", {})) == Err(Missing)
 	## ```
 	frontmatter : List(Markdown) -> Try(Str, [Missing])
 	frontmatter = |blocks| {
@@ -212,7 +216,7 @@ OpenKind : [
 	FencedBlock({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }),
 	IndentedBlock,
 	HtmlBlockOpen(U64),
-	TableBlock({ align : List(Markdown.Alignment), header : List(Utf8.Bytes) }),
+	TableBlock({ align : List(Markdown.Alignment), header : List(Parser.Utf8.Bytes) }),
 ]
 
 ## First and last source line of a closed block, used to decide list looseness:
@@ -251,7 +255,7 @@ BlockState : {
 	# that has been shortened is copied by the next append.
 	stack : List(Open),
 	depth : U64,
-	line : Utf8.Bytes,
+	line : Parser.Utf8.Bytes,
 	# For each byte offset of the line: the offset of the next byte that is not
 	# a space or tab, and the column of each offset (tab stops of 4). Computed
 	# only for lines that start inside more than `index_depth` open blocks, so
@@ -268,9 +272,9 @@ BlockState : {
 	last_matched : U64,
 	# The innermost leaf block's lines from earlier lines (read only), whether
 	# that leaf was closed on this line, and the lines added on this line.
-	leaf_lines : List(Utf8.Bytes),
+	leaf_lines : List(Parser.Utf8.Bytes),
 	leaf_reset : Bool,
-	leaf_added : List(Utf8.Bytes),
+	leaf_added : List(Parser.Utf8.Bytes),
 	events : List(Event),
 	unclosed_fences : List(U64),
 }
@@ -282,10 +286,10 @@ Continuation : [Matched(BlockState), NotMatched, Consumed(BlockState)]
 StartResult : [NoStart(BlockState), StartedContainer(BlockState), StartedLeaf(BlockState), LineDone(BlockState), StopStarts(BlockState)]
 
 ## Markdown has no syntax errors: every input is a document.
-parse_document : Utf8.Bytes -> List(Markdown)
+parse_document : Parser.Utf8.Bytes -> List(Markdown)
 parse_document = |input| parse_document_metadata(input).value
 
-parse_document_metadata : Utf8.Bytes -> { value : List(Markdown), unclosed_fences : List(U64) }
+parse_document_metadata : Parser.Utf8.Bytes -> { value : List(Markdown), unclosed_fences : List(U64) }
 parse_document_metadata = |input| {
 	all_lines = split_document_lines(input)
 	front = take_frontmatter(all_lines)
@@ -303,7 +307,7 @@ parse_document_metadata = |input| {
 
 ## Line endings are LF, CRLF, or a lone CR; U+0000 becomes U+FFFD. A final line
 ## ending does not start another line.
-split_document_lines : Utf8.Bytes -> List(Utf8.Bytes)
+split_document_lines : Parser.Utf8.Bytes -> List(Parser.Utf8.Bytes)
 split_document_lines = |input| {
 	# Lines are slices of the input; only a line with U+0000 is copied.
 	var $lines = []
@@ -312,7 +316,7 @@ split_document_lines = |input| {
 	var $index = 0
 	len = input.len()
 	while $index < len {
-		$index = Utf8.find_any(input, $index, line_end_or_nul)
+		$index = Parser.Utf8.find_any(input, $index, line_end_or_nul)
 		byte = input.get($index) ?? 0
 		if $index >= len {
 			{}
@@ -335,10 +339,10 @@ split_document_lines = |input| {
 	}
 }
 
-line_end_or_nul : Utf8.ByteClass
-line_end_or_nul = Utf8.ByteClass.from_bytes(['\n', '\r', 0])
+line_end_or_nul : Parser.Utf8.ByteClass
+line_end_or_nul = Parser.Utf8.ByteClass.from_bytes(['\n', '\r', 0])
 
-document_line : Utf8.Bytes, U64, U64, Bool -> Utf8.Bytes
+document_line : Parser.Utf8.Bytes, U64, U64, Bool -> Parser.Utf8.Bytes
 document_line = |input, start, end, has_nul| {
 	line = input.sublist({ start, len: end - start })
 	if has_nul {
@@ -355,7 +359,7 @@ document_line = |input, start, end, has_nul| {
 ## Extension: a first line of exactly `---` up to the next line of exactly
 ## `---` is raw frontmatter, not Markdown. Without a closing line the document
 ## is ordinary Markdown.
-take_frontmatter : List(Utf8.Bytes) -> { frontmatter : Try(Str, [NotFound]), lines : List(Utf8.Bytes) }
+take_frontmatter : List(Parser.Utf8.Bytes) -> { frontmatter : Try(Str, [NotFound]), lines : List(Parser.Utf8.Bytes) }
 take_frontmatter = |lines| {
 	if (lines.first() ?? []) != "---".to_utf8() {
 		{ frontmatter: Err(NotFound), lines }
@@ -377,7 +381,7 @@ new_open = |kind, line_number| {
 	{ kind, start: line_number, last: line_number, has_children: False, nesting: 0 }
 }
 
-parse_block_lines : List(Utf8.Bytes) -> { events : List(Event), unclosed_fences : List(U64) }
+parse_block_lines : List(Parser.Utf8.Bytes) -> { events : List(Event), unclosed_fences : List(U64) }
 parse_block_lines = |lines| {
 	var $state = {
 		stack: [new_open(DocumentBlock, 0)],
@@ -553,7 +557,7 @@ process_line = |initial| {
 	}
 }
 
-index_line : Utf8.Bytes -> { next_nonspace : List(U64), columns : List(U64) }
+index_line : Parser.Utf8.Bytes -> { next_nonspace : List(U64), columns : List(U64) }
 index_line = |line| {
 	len = line.len()
 	var $columns = List.with_capacity(len + 1)
@@ -583,7 +587,7 @@ find_nonspace : BlockState -> Nonspace
 find_nonspace = |s| {
 	len = s.line.len()
 	if s.next_nonspace.is_empty() {
-		pos = if (s.offset >= len) len else Utf8.skip_class(s.line, s.offset, line_spaces)
+		pos = if (s.offset >= len) len else Parser.Utf8.skip_class(s.line, s.offset, line_spaces)
 		# The column after the skipped spaces and tabs. A partly consumed tab
 		# at the offset ends at the same tab stop as a whole one would.
 		var $column = s.column
@@ -605,8 +609,8 @@ find_nonspace = |s| {
 index_depth : U64
 index_depth = 8
 
-line_spaces : Utf8.ByteClass
-line_spaces = Utf8.ByteClass.from_bytes([' ', '\t'])
+line_spaces : Parser.Utf8.ByteClass
+line_spaces = Parser.Utf8.ByteClass.from_bytes([' ', '\t'])
 
 advance_to_nonspace : BlockState, Nonspace -> BlockState
 advance_to_nonspace = |s, ns| {
@@ -819,7 +823,7 @@ pop_open = |s| { ..s, depth: s.depth - 1 }
 
 ## The rest of the line from the current offset; a partly consumed tab
 ## contributes its remaining columns as spaces.
-line_rest : BlockState -> Utf8.Bytes
+line_rest : BlockState -> Parser.Utf8.Bytes
 line_rest = |s| {
 	if s.partial_tab {
 		List.repeat(' ', 4 - (s.column % 4)).concat(drop_n(s.line, s.offset + 1))
@@ -837,10 +841,10 @@ add_line_to_tip = |s| {
 }
 
 ## The innermost leaf block's lines so far.
-tip_lines : BlockState -> List(Utf8.Bytes)
+tip_lines : BlockState -> List(Parser.Utf8.Bytes)
 tip_lines = |s| if (s.leaf_reset) s.leaf_added else s.leaf_lines.concat(s.leaf_added)
 
-tip_last_line : BlockState -> Utf8.Bytes
+tip_last_line : BlockState -> Parser.Utf8.Bytes
 tip_last_line = |s| {
 	match s.leaf_added.last() {
 		Ok(line) => line
@@ -899,11 +903,11 @@ has_gap = |spans| {
 	$gap
 }
 
-placeholder : Utf8.Bytes -> List(Markdown.Inline)
+placeholder : Parser.Utf8.Bytes -> List(Markdown.Inline)
 placeholder = |raw| [Text(bytes_to_str(raw))]
 
 ## The events for a closed leaf block with these lines.
-finish_leaf : Open, List(Utf8.Bytes) -> List(Event)
+finish_leaf : Open, List(Parser.Utf8.Bytes) -> List(Event)
 finish_leaf = |open, lines| {
 	span = { start: open.start, end: open.last }
 	match open.kind {
@@ -1069,7 +1073,7 @@ collect_definitions = |events| {
 	$refs
 }
 
-join_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
+join_with_newlines : List(Parser.Utf8.Bytes) -> Parser.Utf8.Bytes
 join_with_newlines = |lines| {
 	var $out = List.with_capacity(lines.fold(0, |sum, line| sum + line.len() + 1))
 	for line in lines {
@@ -1266,7 +1270,7 @@ is_space_or_tab = |byte| byte == ' ' or byte == '\t'
 ## List item marker at the first non-space (CommonMark 5.2). When it would
 ## interrupt a paragraph, the item may not start blank and an ordered list
 ## must start at 1.
-parse_list_marker : Utf8.Bytes, Bool -> Try(ListMarker, [NotFound])
+parse_list_marker : Parser.Utf8.Bytes, Bool -> Try(ListMarker, [NotFound])
 parse_list_marker = |rest, interrupts_paragraph| {
 	first = rest.first() ?? 0
 	parsed =
@@ -1293,7 +1297,7 @@ parse_list_marker = |rest, interrupts_paragraph| {
 	}
 }
 
-count_leading_digits : Utf8.Bytes -> U64
+count_leading_digits : Parser.Utf8.Bytes -> U64
 count_leading_digits = |bytes| {
 	var $count = 0
 	while is_digit_byte(bytes.get($count) ?? 'x') {
@@ -1303,7 +1307,7 @@ count_leading_digits = |bytes| {
 }
 
 ## ATX heading (CommonMark 4.2): 1-6 `#` then a space, tab, or end of line.
-parse_atx_heading : Utf8.Bytes -> Try(Markdown, [NotFound])
+parse_atx_heading : Parser.Utf8.Bytes -> Try(Markdown, [NotFound])
 parse_atx_heading = |rest| {
 	hashes = count_leading_byte(rest, '#', 0)
 	after = drop_n(rest, hashes)
@@ -1325,7 +1329,7 @@ parse_atx_heading = |rest| {
 	}
 }
 
-count_trailing_byte : Utf8.Bytes, U8 -> U64
+count_trailing_byte : Parser.Utf8.Bytes, U8 -> U64
 count_trailing_byte = |bytes, expected| {
 	var $count = 0
 	while $count < bytes.len() and (bytes.get(bytes.len() - 1 - $count) ?? 0) == expected {
@@ -1335,7 +1339,7 @@ count_trailing_byte = |bytes, expected| {
 }
 
 ## Setext underline (CommonMark 4.3): `=`s or `-`s, then only spaces or tabs.
-setext_level : Utf8.Bytes -> Try(Markdown.Level, [NotFound])
+setext_level : Parser.Utf8.Bytes -> Try(Markdown.Level, [NotFound])
 setext_level = |rest| {
 	marker = rest.first() ?? 0
 	run = count_leading_byte(rest, marker, 0)
@@ -1352,7 +1356,7 @@ setext_level = |rest| {
 
 ## Thematic break (CommonMark 4.1): three or more matching `-`, `_` or `*`,
 ## optionally separated by spaces or tabs.
-is_thematic_break : Utf8.Bytes -> Bool
+is_thematic_break : Parser.Utf8.Bytes -> Bool
 is_thematic_break = |rest| {
 	marker = rest.first() ?? 0
 	if marker != '-' and marker != '_' and marker != '*' {
@@ -1365,7 +1369,7 @@ is_thematic_break = |rest| {
 ## Opening code fence (CommonMark 4.5). A backtick fence's info string may not
 ## contain backticks. Backslash escapes and entity references in the info
 ## string are resolved.
-parse_fence_open : Utf8.Bytes -> Try({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }, [NotFound])
+parse_fence_open : Parser.Utf8.Bytes -> Try({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }, [NotFound])
 parse_fence_open = |rest| {
 	fence_char = rest.first() ?? 0
 	fence_len = count_leading_byte(rest, fence_char, 0)
@@ -1377,7 +1381,7 @@ parse_fence_open = |rest| {
 	}
 }
 
-is_closing_fence : Utf8.Bytes, U8, U64 -> Bool
+is_closing_fence : Parser.Utf8.Bytes, U8, U64 -> Bool
 is_closing_fence = |rest, fence_char, fence_len| {
 	run = count_leading_byte(rest, fence_char, 0)
 	run >= fence_len and bytes_are_blank(drop_n(rest, run))
@@ -1454,10 +1458,10 @@ html_type_6_tags = [
 	"ul",
 ]
 
-lowercase_ascii : Utf8.Bytes -> Utf8.Bytes
+lowercase_ascii : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 lowercase_ascii = |bytes| bytes.map(|byte| if (byte >= 'A' and byte <= 'Z') byte + 32 else byte)
 
-html_block_start : Utf8.Bytes, Bool -> Try(U64, [NotFound])
+html_block_start : Parser.Utf8.Bytes, Bool -> Try(U64, [NotFound])
 html_block_start = |rest, allow_type_7| {
 	lower = lowercase_ascii(rest)
 	tag_end = |name_len| {
@@ -1483,7 +1487,7 @@ html_block_start = |rest, allow_type_7| {
 	}
 }
 
-is_type_6_start : Utf8.Bytes -> Bool
+is_type_6_start : Parser.Utf8.Bytes -> Bool
 is_type_6_start = |lower| {
 	name_start = if (lower.starts_with("</".to_utf8())) 2 else 1
 	name = take_tag_name(drop_n(lower, name_start))
@@ -1493,7 +1497,7 @@ is_type_6_start = |lower| {
 		and (next == ' ' or next == '\t' or next == '>' or after.starts_with("/>".to_utf8()))
 }
 
-take_tag_name : Utf8.Bytes -> Utf8.Bytes
+take_tag_name : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 take_tag_name = |bytes| {
 	match bytes.first() {
 		Ok(first) if is_alphabetic_byte(first) => {
@@ -1514,7 +1518,7 @@ is_tag_name_byte = |byte| is_alphabetic_byte(byte) or is_digit_byte(byte) or byt
 ## Type 7: a complete closing tag, or a complete open tag other than the
 ## type 1 tags (`<pre>` and friends open type 1 blocks instead), alone on the
 ## line.
-is_type_7_start : Utf8.Bytes -> Bool
+is_type_7_start : Parser.Utf8.Bytes -> Bool
 is_type_7_start = |rest| {
 	end =
 		if rest.starts_with("</".to_utf8()) {
@@ -1529,7 +1533,7 @@ is_type_7_start = |rest| {
 	}
 }
 
-html_block_ends : U64, Utf8.Bytes -> Bool
+html_block_ends : U64, Parser.Utf8.Bytes -> Bool
 html_block_ends = |html_type, rest| {
 	lower = lowercase_ascii(rest)
 	match html_type {
@@ -1542,7 +1546,7 @@ html_block_ends = |html_type, rest| {
 	}
 }
 
-contains_bytes : Utf8.Bytes, Utf8.Bytes -> Bool
+contains_bytes : Parser.Utf8.Bytes, Parser.Utf8.Bytes -> Bool
 contains_bytes = |haystack, needle| {
 	var $index = 0
 	var $found = False
@@ -1560,7 +1564,7 @@ contains_bytes = |haystack, needle| {
 ## Cells of a table row: an optional leading and trailing pipe, cells split on
 ## unescaped pipes (even inside code spans), `\|` unescaped to `|`, and each
 ## cell trimmed. A row needs at least one cell.
-split_table_row : Utf8.Bytes -> List(Utf8.Bytes)
+split_table_row : Parser.Utf8.Bytes -> List(Parser.Utf8.Bytes)
 split_table_row = |line| {
 	trimmed = trim_spaces(line)
 	body = if (trimmed.first() == Ok('|')) drop_n(trimmed, 1) else trimmed
@@ -1569,17 +1573,17 @@ split_table_row = |line| {
 	var $cells = []
 	var $start = 0
 	var $escaped = False
-	var $index = Utf8.find_any(body, 0, pipe_or_backslash)
+	var $index = Parser.Utf8.find_any(body, 0, pipe_or_backslash)
 	while $index < len {
 		if byte_at(body, $index) == '\\' {
 			escapes_pipe = byte_at(body, $index + 1) == '|'
 			$escaped = $escaped or escapes_pipe
-			$index = Utf8.find_any(body, $index + (if (escapes_pipe) 2 else 1), pipe_or_backslash)
+			$index = Parser.Utf8.find_any(body, $index + (if (escapes_pipe) 2 else 1), pipe_or_backslash)
 		} else {
 			$cells = $cells.append(table_cell(body, $start, $index, $escaped))
 			$start = $index + 1
 			$escaped = False
-			$index = Utf8.find_any(body, $start, pipe_or_backslash)
+			$index = Parser.Utf8.find_any(body, $start, pipe_or_backslash)
 		}
 	}
 	if $start < len and !bytes_are_blank(body.sublist({ start: $start, len: len - $start })) {
@@ -1589,11 +1593,11 @@ split_table_row = |line| {
 	}
 }
 
-pipe_or_backslash : Utf8.ByteClass
-pipe_or_backslash = Utf8.ByteClass.from_bytes(['|', '\\'])
+pipe_or_backslash : Parser.Utf8.ByteClass
+pipe_or_backslash = Parser.Utf8.ByteClass.from_bytes(['|', '\\'])
 
 ## One trimmed cell, with `\|` unescaped to `|`.
-table_cell : Utf8.Bytes, U64, U64, Bool -> Utf8.Bytes
+table_cell : Parser.Utf8.Bytes, U64, U64, Bool -> Parser.Utf8.Bytes
 table_cell = |body, start, end, escaped| {
 	raw = body.sublist({ start, len: end - start })
 	if escaped {
@@ -1616,7 +1620,7 @@ table_cell = |body, start, end, escaped| {
 }
 
 ## Delimiter row: cells of `:?-+:?` surrounded by optional spaces or tabs.
-parse_table_delimiter_row : Utf8.Bytes -> Try(List(Markdown.Alignment), [NotFound])
+parse_table_delimiter_row : Parser.Utf8.Bytes -> Try(List(Markdown.Alignment), [NotFound])
 parse_table_delimiter_row = |rest| {
 	# Most lines fail on their first byte, so test the bytes before the `-`.
 	if rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) or !has_any(rest, dash) {
@@ -1634,7 +1638,7 @@ parse_table_delimiter_row = |rest| {
 	}
 }
 
-parse_alignment_cell : Utf8.Bytes -> Try(Markdown.Alignment, [NotFound])
+parse_alignment_cell : Parser.Utf8.Bytes -> Try(Markdown.Alignment, [NotFound])
 parse_alignment_cell = |cell| {
 	left = cell.first() == Ok(':')
 	right = cell.len() > 1 and cell.last() == Ok(':')
@@ -1656,7 +1660,7 @@ parse_alignment_cell = |cell| {
 
 ## Remove the link reference definitions that begin a paragraph's raw content,
 ## registering each (the first definition of a label wins).
-extract_reference_definitions : Utf8.Bytes, List(ReferenceDefinition) -> { rest : Utf8.Bytes, refs : List(ReferenceDefinition) }
+extract_reference_definitions : Parser.Utf8.Bytes, List(ReferenceDefinition) -> { rest : Parser.Utf8.Bytes, refs : List(ReferenceDefinition) }
 extract_reference_definitions = |content, refs| {
 	var $rest = content
 	var $refs = refs
@@ -1677,7 +1681,7 @@ extract_reference_definitions = |content, refs| {
 }
 
 ## Spaces or tabs, then at most one line ending, then spaces or tabs.
-skip_spnl : Utf8.Bytes, U64 -> U64
+skip_spnl : Parser.Utf8.Bytes, U64 -> U64
 skip_spnl = |bytes, start| {
 	first = skip_spaces_tabs(bytes, start)
 	if ((bytes.get(first) ?? 0) == '\n') skip_spaces_tabs(bytes, first + 1) else first
@@ -1687,7 +1691,7 @@ skip_spnl = |bytes, start| {
 ## parser's label, destination and title scanners. It may span lines but must
 ## end at a line ending; a title followed by anything else is dropped and the
 ## definition ends after its destination if that ends its line.
-parse_reference_definition : Utf8.Bytes -> Try({ def : ReferenceDefinition, consumed : U64 }, [NotFound])
+parse_reference_definition : Parser.Utf8.Bytes -> Try({ def : ReferenceDefinition, consumed : U64 }, [NotFound])
 parse_reference_definition = |bytes| {
 	label = scan_link_label(bytes, 0)?
 	if label.raw.is_empty() or (bytes.get(label.end) ?? 0) != ':' {
@@ -1723,7 +1727,7 @@ parse_reference_definition = |bytes| {
 	Ok({ def: { label: normalize_reference_label(label.raw), target: { href, title: title_value } }, consumed })
 }
 
-at_line_end : Utf8.Bytes, U64 -> Bool
+at_line_end : Parser.Utf8.Bytes, U64 -> Bool
 at_line_end = |bytes, index| index >= bytes.len() or (bytes.get(index) ?? 0) == '\n'
 
 ## --- Inline phase ---------------------------------------------------------
@@ -1745,7 +1749,7 @@ resolve_inlines = |block, refs| {
 	}
 }
 
-placeholder_raw : List(Markdown.Inline) -> Utf8.Bytes
+placeholder_raw : List(Markdown.Inline) -> Parser.Utf8.Bytes
 placeholder_raw = |content| {
 	match content {
 		[Text(raw)] => raw.to_utf8()
@@ -1809,12 +1813,12 @@ InlineBracket : { item : U64, start : U64, image : Bool, sequence : U64, depth :
 ## A maximal run of backticks in the input.
 TickRun : { start : U64, len : U64 }
 
-parse_inline_bytes : Utf8.Bytes -> List(Markdown.Inline)
+parse_inline_bytes : Parser.Utf8.Bytes -> List(Markdown.Inline)
 parse_inline_bytes = |input| {
 	parse_inlines_with_refs([], input)
 }
 
-parse_inlines_with_refs : List(ReferenceDefinition), Utf8.Bytes -> List(Markdown.Inline)
+parse_inlines_with_refs : List(ReferenceDefinition), Parser.Utf8.Bytes -> List(Markdown.Inline)
 parse_inlines_with_refs = |refs, input| {
 	scan_inlines(prepare_inline_input(input), refs)
 }
@@ -1830,12 +1834,12 @@ prepare_inline_input = |input| {
 	while $pos < len {
 		# Each step starts a line: skip its indentation, then copy up to and
 		# including its line ending in one piece.
-		start = Utf8.skip_class(input, $pos, line_spaces)
+		start = Parser.Utf8.skip_class(input, $pos, line_spaces)
 		if $out.is_empty() and is_line_ending(byte_at(input, start)) and start < len {
 			# Leading blank lines are dropped.
 			$pos = start + 1
 		} else {
-			line_end = Utf8.find_line_end(input, start)
+			line_end = Parser.Utf8.find_line_end(input, start)
 			end = if (line_end < len) line_end + 1 else len
 			$out = append_without_nul($out, input.sublist({ start, len: end - start }))
 			$pos = end
@@ -1848,22 +1852,22 @@ is_line_ending : U8 -> Bool
 is_line_ending = |byte| byte == '\n' or byte == '\r'
 
 ## `List.contains` on bytes is several times slower than a ByteClass scan.
-has_any : List(U8), Utf8.ByteClass -> Bool
-has_any = |bytes, class| Utf8.find_any(bytes, 0, class) < bytes.len()
+has_any : List(U8), Parser.Utf8.ByteClass -> Bool
+has_any = |bytes, class| Parser.Utf8.find_any(bytes, 0, class) < bytes.len()
 
-dash : Utf8.ByteClass
-dash = Utf8.ByteClass.from_bytes(['-'])
+dash : Parser.Utf8.ByteClass
+dash = Parser.Utf8.ByteClass.from_bytes(['-'])
 
-greater_than : Utf8.ByteClass
-greater_than = Utf8.ByteClass.from_bytes(['>'])
+greater_than : Parser.Utf8.ByteClass
+greater_than = Parser.Utf8.ByteClass.from_bytes(['>'])
 
-nul : Utf8.ByteClass
-nul = Utf8.ByteClass.from_bytes([0])
+nul : Parser.Utf8.ByteClass
+nul = Parser.Utf8.ByteClass.from_bytes([0])
 
 ## Append bytes with U+0000 replaced by U+FFFD.
 append_without_nul : List(U8), List(U8) -> List(U8)
 append_without_nul = |out, piece| {
-	if Utf8.find_any(piece, 0, nul) < piece.len() {
+	if Parser.Utf8.find_any(piece, 0, nul) < piece.len() {
 		piece.fold(out, |acc, b| if (b == 0) acc.concat([0xEF, 0xBF, 0xBD]) else acc.append(b))
 	} else {
 		out.concat(piece)
@@ -2115,11 +2119,11 @@ scan_inlines = |input, refs| {
 
 	nodes = process_emphasis(flush_chars($items, $text), max_inline_nesting).nodes
 	# GFM email autolinks need an `@` in the text.
-	if (Utf8.find_any(input, 0, at_sign) < len) autolink_emails_in(nodes) else nodes
+	if (Parser.Utf8.find_any(input, 0, at_sign) < len) autolink_emails_in(nodes) else nodes
 }
 
-at_sign : Utf8.ByteClass
-at_sign = Utf8.ByteClass.from_bytes(['@'])
+at_sign : Parser.Utf8.ByteClass
+at_sign = Parser.Utf8.ByteClass.from_bytes(['@'])
 
 ## Bytes that may start an inline construct (cmark's SPECIAL_CHARS plus the
 ## extension triggers `~`, `w` and `:`).
@@ -2131,11 +2135,11 @@ is_special_byte = |byte| {
 	}
 }
 
-special_bytes : Utf8.ByteClass
-special_bytes = Utf8.ByteClass.from_predicate(is_special_byte)
+special_bytes : Parser.Utf8.ByteClass
+special_bytes = Parser.Utf8.ByteClass.from_predicate(is_special_byte)
 
 find_special_byte : List(U8), U64 -> U64
-find_special_byte = |input, from| Utf8.find_any(input, from, special_bytes)
+find_special_byte = |input, from| Parser.Utf8.find_any(input, from, special_bytes)
 
 flush_chars : List(InlineItem), List(U8) -> List(InlineItem)
 flush_chars = |items, text| {
@@ -2542,18 +2546,18 @@ merge_text_nodes = |nodes| {
 ## Code spans (CommonMark 6.1).
 ## ---------------------------------------------------------------------------
 
-backtick : Utf8.ByteClass
-backtick = Utf8.ByteClass.from_bytes(['`'])
+backtick : Parser.Utf8.ByteClass
+backtick = Parser.Utf8.ByteClass.from_bytes(['`'])
 
 ## All maximal backtick runs, sorted by length and then position.
 backtick_runs : List(U8) -> List(TickRun)
 backtick_runs = |input| {
 	var $runs = []
-	var $index = Utf8.find_any(input, 0, backtick)
+	var $index = Parser.Utf8.find_any(input, 0, backtick)
 	while $index < input.len() {
 		end = skip_byte_run(input, $index, '`')
 		$runs = $runs.append({ start: $index, len: end - $index })
-		$index = Utf8.find_any(input, end, backtick)
+		$index = Parser.Utf8.find_any(input, end, backtick)
 	}
 	if $runs.len() < 2 {
 		return $runs
@@ -2601,7 +2605,7 @@ find_closing_ticks = |runs, from, count| {
 ## when both are present and the content is not only spaces.
 normalize_code_span : List(U8) -> List(U8)
 normalize_code_span = |content| {
-	if Utf8.find_line_end(content, 0) >= content.len() {
+	if Parser.Utf8.find_line_end(content, 0) >= content.len() {
 		return strip_code_span_spaces(content)
 	}
 	var $out = List.with_capacity(content.len())
@@ -3646,7 +3650,7 @@ gfm_validate_protocol = |protocol, data, at_index, rewind, max_rewind| {
 	}
 }
 
-bytes_are_blank : Utf8.Bytes -> Bool
+bytes_are_blank : Parser.Utf8.Bytes -> Bool
 bytes_are_blank = |bytes| {
 	match bytes {
 		[] =>
@@ -3663,10 +3667,10 @@ bytes_are_blank = |bytes| {
 	}
 }
 
-append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
+append_bytes : Parser.Utf8.Bytes, Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 append_bytes = |left, right| left.concat(right)
 
-join_lines_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
+join_lines_with_newlines : List(Parser.Utf8.Bytes) -> Parser.Utf8.Bytes
 join_lines_with_newlines = |lines| {
 	var $total = 0
 	for line in lines {
@@ -3679,12 +3683,12 @@ join_lines_with_newlines = |lines| {
 	$acc
 }
 
-trim_spaces : Utf8.Bytes -> Utf8.Bytes
+trim_spaces : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 trim_spaces = |bytes| {
 	trim_end_spaces(trim_start_spaces(bytes))
 }
 
-trim_start_spaces : Utf8.Bytes -> Utf8.Bytes
+trim_start_spaces : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 trim_start_spaces = |bytes| {
 	len = bytes.len()
 	var $start = 0
@@ -3698,7 +3702,7 @@ trim_start_spaces = |bytes| {
 	}
 }
 
-trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
+trim_end_spaces : Parser.Utf8.Bytes -> Parser.Utf8.Bytes
 trim_end_spaces = |bytes| {
 	len = bytes.len()
 	var $end = len
@@ -3712,7 +3716,7 @@ trim_end_spaces = |bytes| {
 	}
 }
 
-is_space_or_tab_at : Utf8.Bytes, U64 -> Bool
+is_space_or_tab_at : Parser.Utf8.Bytes, U64 -> Bool
 is_space_or_tab_at = |bytes, index| {
 	match bytes.get(index) {
 		Ok(b) => b == ' ' or b == '\t'
@@ -3722,7 +3726,7 @@ is_space_or_tab_at = |bytes, index| {
 
 ## Link label matching (CommonMark 4.7): Unicode case fold, strip leading and
 ## trailing whitespace, and collapse internal whitespace runs to one space.
-normalize_reference_label : Utf8.Bytes -> Str
+normalize_reference_label : Parser.Utf8.Bytes -> Str
 normalize_reference_label = |label| {
 	source = bytes_to_str(label)
 	folded =
@@ -3755,7 +3759,7 @@ lower_ascii_byte = |byte| {
 	}
 }
 
-count_leading_byte : Utf8.Bytes, U8, U64 -> U64
+count_leading_byte : Parser.Utf8.Bytes, U8, U64 -> U64
 count_leading_byte = |bytes, expected, count| {
 	match bytes {
 		[first, .. as rest] if first == expected =>
@@ -3766,7 +3770,7 @@ count_leading_byte = |bytes, expected, count| {
 	}
 }
 
-digits_to_u64 : Utf8.Bytes -> U64
+digits_to_u64 : Parser.Utf8.Bytes -> U64
 digits_to_u64 = |digits| {
 	digits.fold(
 		0,
@@ -3974,18 +3978,18 @@ expect inline_test("[foo`](/u)`") == [Text("[foo"), InlineCode("](/u)")]
 
 # Reference labels match case-insensitively after Unicode case folding.
 expect {
-	actual = Markdown.parse_str("[ẞ]\n\n[SS]: /url")
+	actual = Markdown.parse_str("[ẞ]\n\n[SS]: /url", {})
 	actual == [Paragraph([Link({ label: [Text("ẞ")], target: { href: "/url", title: Err(Missing) } })])]
 }
 
 # Reference definitions decode escapes and entities and reject bracketed labels.
 expect {
-	actual = Markdown.parse_str("[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"")
+	actual = Markdown.parse_str("[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"", {})
 	actual == [Paragraph([Link({ label: [Text("foo")], target: { href: "/fö*", title: Ok("t*") } })])]
 }
 
 expect {
-	actual = Markdown.parse_str("[a[b]\n\n[a[b]: /u")
+	actual = Markdown.parse_str("[a[b]\n\n[a[b]: /u", {})
 	actual == [Paragraph([Text("[a[b]")]), Paragraph([Text("[a[b]: /u")])]
 }
 
@@ -4066,7 +4070,7 @@ expect {
 		\\[roc]: https://roc-lang.org "Roc"
 		\\Read [Roc][roc].
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4080,7 +4084,7 @@ expect {
 
 # Unresolved references remain literal text.
 expect {
-	actual = Markdown.parse_str("Read [Roc][missing].")
+	actual = Markdown.parse_str("Read [Roc][missing].", {})
 
 	actual == [Paragraph([Text("Read [Roc][missing].")])]
 }
@@ -4093,14 +4097,14 @@ expect {
 		\\---
 		\\Body
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual == [Frontmatter("title: Hello\n"), Paragraph([Text("Body")])]
 }
 
 # Standalone thematic breaks parse as block nodes.
 expect {
-	actual = Markdown.parse_str("- - -")
+	actual = Markdown.parse_str("- - -", {})
 
 	actual == [ThematicBreak]
 }
@@ -4111,7 +4115,7 @@ expect {
 		\\3) [x] Done
 		\\4) [ ] Later
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4132,7 +4136,7 @@ expect {
 		\\* One
 		\\+ Two
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4148,7 +4152,7 @@ expect {
 		\\
 		\\- Two
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4169,7 +4173,7 @@ expect {
 		\\- One
 		\\  - Nested
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4202,14 +4206,14 @@ expect {
 		\\main = 1
 		\\~~~
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
 
 # Indented code blocks parse from four leading spaces.
 expect {
-	actual = Markdown.parse_str("    main = 1")
+	actual = Markdown.parse_str("    main = 1", {})
 
 	actual == [Code({ info: "", pre: "main = 1\n" })]
 }
@@ -4222,7 +4226,7 @@ expect {
 		\\| :--- | ---: |
 		\\| **Roc** | `1\\|2` |
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4245,7 +4249,7 @@ expect {
 		\\Name | Count
 		\\not a delimiter
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual == [Paragraph([Text("Name | Count\nnot a delimiter")])]
 }
@@ -4257,7 +4261,7 @@ expect {
 		\\raw
 		\\</section>
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual == [HtmlBlock("<section>\nraw\n</section>\n")]
 }
@@ -4269,7 +4273,7 @@ expect {
 		\\```roc
 		\\main = 1
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
@@ -4278,7 +4282,7 @@ expect {
 ## line starts a type 7 HTML block; only the open tags are excluded from type
 # 7 (CommonMark 4.6).
 expect {
-	actual = Markdown.parse_str("a\n\n</textarea>\nb\n\n<pre class=\"x\">\n")
+	actual = Markdown.parse_str("a\n\n</textarea>\nb\n\n<pre class=\"x\">\n", {})
 
 	actual == [Paragraph([Text("a")]), HtmlBlock("</textarea>\nb\n"), HtmlBlock("<pre class=\"x\">\n")]
 }
@@ -4304,7 +4308,7 @@ expect {
 		\\
 		\\> Quote with **strong** text
 
-	actual = Markdown.parse_str(text)
+	actual = Markdown.parse_str(text, {})
 
 	actual
 		== [
@@ -4353,7 +4357,7 @@ expect {
 # -------------------- example snippets used in docs --------------------
 
 # Markdown.parse_str doc example.
-expect Markdown.parse_str("# Hi\n\nSome *text*.") == [
+expect Markdown.parse_str("# Hi\n\nSome *text*.", {}) == [
 	Heading({ level: One, content: [Text("Hi")] }),
 	Paragraph([Text("Some "), Emphasis([Text("text")]), Text(".")]),
 ]
@@ -4366,12 +4370,12 @@ expect Markdown.parse_inlines("**Bold** and `code`") == [
 ]
 
 # Markdown.frontmatter doc examples.
-expect Markdown.frontmatter(Markdown.parse_str("---\ntitle: Hi\n---\nBody")) == Ok("title: Hi\n")
-expect Markdown.frontmatter(Markdown.parse_str("Body")) == Err(Missing)
+expect Markdown.frontmatter(Markdown.parse_str("---\ntitle: Hi\n---\nBody", {})) == Ok("title: Hi\n")
+expect Markdown.frontmatter(Markdown.parse_str("Body", {})) == Err(Missing)
 
 # The parsers consume their whole input and never fail.
-expect Utf8.parse_str(Markdown.parser, "a\n\n> b") == Ok([Paragraph([Text("a")]), Blockquote([Paragraph([Text("b")])])])
-expect Utf8.parse_str(Markdown.inline_parser, "*a") == Ok([Text("*a")])
+expect (Markdown.parser({})).parse_str("a\n\n> b") == Ok([Paragraph([Text("a")]), Blockquote([Paragraph([Text("b")])])])
+expect (Markdown.inline_parser).parse_str("*a") == Ok([Text("*a")])
 
 # A link title is optional.
 expect Markdown.parse_inlines("[a](/u \"t\") [b](/v)") == [
@@ -4381,16 +4385,16 @@ expect Markdown.parse_inlines("[a](/u \"t\") [b](/v)") == [
 ]
 
 # Syntax trees can be hashed, so they can be Set elements.
-expect Set.from_list(Markdown.parse_str("a\n\n---\n\na")).len() == 2
+expect Set.from_list(Markdown.parse_str("a\n\n---\n\na", {})).len() == 2
 
 # Block quotes nest at most 1000 deep; deeper markers are text.
 expect {
-	blocks = Markdown.parse_str(Str.concat(Str.repeat(">", 1002), " a"))
+	blocks = Markdown.parse_str(Str.concat(Str.repeat(">", 1002), " a"), {})
 	quote_depth(blocks) == 1000 and innermost(blocks) == [Paragraph([Text(">> a")])]
 }
 
 # Lists stop nesting at the limit too.
-expect Markdown.parse_str(Str.repeat("- ", 1500)).len() == 1
+expect Markdown.parse_str(Str.repeat("- ", 1500), {}).len() == 1
 
 quote_depth : List(Markdown) -> U64
 quote_depth = |blocks| {
@@ -4410,7 +4414,7 @@ innermost = |blocks| {
 
 ## Str.from_utf8_lossy is about 10x slower than Str.from_utf8 on valid input
 ## (roc#11966), and Markdown input is almost always valid UTF-8.
-bytes_to_str : Utf8.Bytes -> Str
+bytes_to_str : Parser.Utf8.Bytes -> Str
 bytes_to_str = |bytes| Str.from_utf8(bytes) ?? Str.from_utf8_lossy(bytes)
 
 ## `List.take_first`, `drop_first` and `drop_last` copy the list instead of
@@ -4435,24 +4439,34 @@ drop_last_n = |list, n| {
 expect {
 	document : Markdown.Document
 	document = "# Checked\n\n```roc\nvalue\n```"
-	document.blocks == Markdown.parse_str("# Checked\n\n```roc\nvalue\n```")
+	document.blocks == Markdown.parse_str("# Checked\n\n```roc\nvalue\n```", {})
 }
 expect match Markdown.validate({ source: "---\ntitle: Test\n---\n```roc\nvalue", name: "notes.md" }) {
-	Err(BadQuotedBytes(message)) => message.contains("notes.md:4: Markdown: unclosed_fences")
+	Err(InvalidMarkdown(error)) => error.problem == UnclosedFence and error.location == LineColumn({ line: 4, column: 1 }) and error.path == [Source("notes.md")]
 	Ok(_) => False
 }
 expect match Markdown.validate({ source: "> ```\n> code\noutside" }) {
-	Err(BadQuotedBytes(message)) => message.contains("unclosed_fences")
+	Err(InvalidMarkdown(error)) => error.problem == UnclosedFence
 	Ok(_) => False
 }
 expect Markdown.validate({ source: "> ```\n> code\n> ```\noutside" }).is_ok()
 expect Markdown.validate({ source: "    ```\n    code\n\n<script>\n~~~\n</script>\n\ntext ```inline" }).is_ok()
 expect Markdown.validate({ source: "```\n~~~\n```" }).is_ok()
 expect match Markdown.validate({ source: "```\ncode", lints: { unclosed_fences: False } }) {
-	Ok(blocks) => blocks == Markdown.parse_str("```\ncode")
+	Ok(blocks) => blocks == Markdown.parse_str("```\ncode", {})
 	Err(_) => False
 }
 expect match Markdown.validate({ source: "- ```\n  code\n- next" }) {
-	Err(BadQuotedBytes(message)) => message.contains("unclosed_fences")
+	Err(InvalidMarkdown(error)) => error.problem == UnclosedFence
 	Ok(_) => False
+}
+
+markdown_quotation_error : Markdown.Error -> [BadQuotedBytes(Str)]
+markdown_quotation_error = |error| {
+	position = Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }
+	name = match error.path.first() {
+		Ok(Source(source)) => source
+		_ => "<literal>"
+	}
+	Parser.Quotation.error({ name, format: "Markdown", line: position.line, column: position.column, message: "unclosed_fences: code fence has no explicit closing delimiter" })
 }
