@@ -48,7 +48,13 @@ MarkupTemplate :: [].{
 
 	## Parse a plan with the same source, node, and slot ceilings as runtime parsing.
 	parse_segments_with : List(Str), MarkupCore.Props, (Str -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])), (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(Plan, [InvalidMarkup(MarkupCore.Error)])
-	parse_segments_with = |segments, props, parse, decode| {
+	parse_segments_with = |segments, props, parse, decode| parse_segments_placed_with(segments, props, |source, _boundaries| parse(source).map_ok(|parsed| { parsed, parents: [] }), decode)
+
+	# HTML supplies actual construction parents for empty text boundaries.
+	# Other syntaxes can continue to use source containment intervals.
+	Placement : { offset : U64, parent : Try(U64, [Missing]) }
+	parse_segments_placed_with : List(Str), MarkupCore.Props, (Str, List(U64) -> Try({ parsed : MarkupCore.Parsed, parents : List(Placement) }, [InvalidMarkup(MarkupCore.Error)])), (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(Plan, [InvalidMarkup(MarkupCore.Error)])
+	parse_segments_placed_with = |segments, props, parse, decode| {
 		if segments.is_empty() {
 			return Err(InvalidMarkup(Diagnostic.{ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
@@ -78,13 +84,14 @@ MarkupTemplate :: [].{
 		# retained regions distinguish JavaScript '<' characters from tag opens.
 		# On syntax failure, a generic pass still diagnoses structural holes,
 		# including holes whose removal merely happened to produce valid names.
-		parsed = match parse(source_text) {
+		placed = match parse(source_text, $holes.map(|hole| hole.offset)) {
 			Ok(value) => value
 			Err(error) => {
 				_ = classify_holes(MarkupCore.Source.from_str(source_text), $holes, props.syntax)?
 				return Err(error)
 			}
 		}
+		parsed = placed.parsed
 		positions = classify_holes(parsed.source, $holes, props.syntax)?
 		if parsed.tree.nodes.len() > props.max_nodes {
 			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Nodes, max: props.max_nodes, observed: AtLeast(props.max_nodes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
@@ -92,7 +99,7 @@ MarkupTemplate :: [].{
 		if !parsed.diagnostics.is_empty() {
 			return Err(template_error(parsed.source, 0, 0, RecoveryRequired))
 		}
-		build_plan(segments, parsed, positions, props, decode)
+		build_plan(segments, parsed, positions, placed.parents, props, decode)
 	}
 
 	## Fallibly bind a manually supplied iterator, checking its arity.
@@ -329,8 +336,8 @@ whole_attribute = |source, span, hole, syntax| {
 	False
 }
 
-build_plan : List(Str), MarkupCore.Parsed, List(Position), MarkupCore.Props, (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
-build_plan = |segments, parsed, positions, props, decode| {
+build_plan : List(Str), MarkupCore.Parsed, List(Position), List(MarkupTemplate.Placement), MarkupCore.Props, (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
+build_plan = |segments, parsed, positions, parents, props, decode| {
 	# Sorting intervals and locating slots is bounded by an explicit structural
 	# progress estimate, in addition to the engine's source-scanning budget.
 	var $levels = 0
@@ -394,6 +401,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 	var $attribute_cursor = 0
 	var $element_cursor = 0
 	var $active = []
+	var $parent_cursor = 0
 	for position in positions {
 		hole = position.hole
 		if position.kind == Attribute {
@@ -440,7 +448,14 @@ build_plan = |segments, parsed, positions, props, decode| {
 					while !$active.is_empty() and ($active.last() ?? empty_interval).span.end <= hole.offset {
 						$active = $active.drop_last(1)
 					}
-					$insertions = $insertions.append({ hole, parent: $active.last().map_ok(|entry| entry.node).map_err(|_| Missing) })
+					while $parent_cursor < parents.len() and (parents.get($parent_cursor).map_ok(|entry| entry.offset) ?? hole.offset) < hole.offset {
+						$parent_cursor = $parent_cursor + 1
+					}
+					parent = match parents.get($parent_cursor) {
+						Ok(entry) if entry.offset == hole.offset => entry.parent
+						_ => $active.last().map_ok(|entry| entry.node).map_err(|_| Missing)
+					}
+					$insertions = $insertions.append({ hole, parent })
 				}
 			}
 		}

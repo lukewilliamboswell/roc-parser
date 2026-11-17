@@ -68,6 +68,27 @@ HtmlTree :: [].{
 		)?
 		Ok({ parsed: { ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } }, clones: projected.clones })
 	}
+	# Template-only construction receipts. Origins describe source provenance;
+	# they are not element containment ranges (adoption/form closes may retain
+	# only an opening token). Record the actual open parent before each boundary.
+	Placement : { offset : U64, parent : Try(U64, [Missing]) }
+	Placed : { parsed : MarkupCore.Parsed, parents : List(Placement) }
+	parse_placed : Str, Bool, Context, MarkupCore.Props, List(U64) -> Try(Placed, [InvalidMarkup(MarkupCore.Error)])
+	parse_placed = |source, fragment, context, props, boundaries| {
+		if fragment and context.namespace == MarkupCore.html_namespace and (context.name == "body" or context.name == "div") {
+			match direct_fragment_placed(source, context.namespace, props, boundaries) {
+				Ok(result) => return Ok(result)
+				Err(Replay) => {}
+			}
+		}
+		if !fragment and context.namespace == MarkupCore.html_namespace {
+			match direct_document_placed(source, context.namespace, props, boundaries) {
+				Ok(result) => return Ok(result)
+				Err(Replay) => {}
+			}
+		}
+		parse_general_placed(source, fragment, context, props, boundaries)
+	}
 	parse : Str, Bool, Context, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	parse = |source, fragment, context, props| {
 		if fragment and context.namespace == MarkupCore.html_namespace and (context.name == "body" or context.name == "div") {
@@ -107,7 +128,11 @@ HtmlTree :: [].{
 	}
 
 	parse_general : Str, Bool, Context, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	parse_general = |source, fragment, context, props| {
+	parse_general = |source, fragment, context, props| parse_general_placed(source, fragment, context, props, []).map_ok(|result| result.parsed)
+
+	parse_general_placed : Str, Bool, Context, MarkupCore.Props, List(U64) -> Try(Placed, [InvalidMarkup(MarkupCore.Error)])
+	parse_general_placed = |source, fragment, context, props, boundaries| {
+		var $placements = { cursor: 0, parents: [] }
 		if source.count_utf8_bytes() > props.max_source_bytes {
 			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: SourceBytes, max: props.max_source_bytes, observed: AtLeast(props.max_source_bytes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
@@ -174,6 +199,10 @@ HtmlTree :: [].{
 				Err(_) => {}
 			}
 
+			parent = if fragment and $state.stack.last() == Ok(0) {
+				Err(Missing)
+			} else $state.stack.last().map_err(|_| Missing)
+			$placements = record_boundaries(boundaries, $placements, next.token.span.start, parent)
 			previous_nodes = $state.nodes.len()
 			# Resolve the end target before mutation without retaining the old arena.
 			expected_end = if props.strict_foreign_spelling and $spelling_failure.is_err() {
@@ -304,7 +333,7 @@ HtmlTree :: [].{
 		roots = if fragment {
 			(node_at($state, 0)).children
 		} else $state.roots
-		Ok({ source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics })
+		Ok({ parsed: { source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics }, parents: $placements.parents })
 	}
 }
 
@@ -312,7 +341,11 @@ HtmlTree :: [].{
 # uncertain token, repair, diagnostic or resource boundary replays the complete
 # general parser, which owns error precedence and all HTML recovery behavior.
 direct_fragment : Str, Str, MarkupCore.Props -> Try(MarkupCore.Parsed, [Replay])
-direct_fragment = |source, namespace, props| {
+direct_fragment = |source, namespace, props| direct_fragment_placed(source, namespace, props, []).map_ok(|result| result.parsed)
+
+direct_fragment_placed : Str, Str, MarkupCore.Props, List(U64) -> Try(HtmlTree.Placed, [Replay])
+direct_fragment_placed = |source, namespace, props, boundaries| {
+	var $placements = { cursor: 0, parents: [] }
 	if source.count_utf8_bytes() > props.max_source_bytes {
 		return Err(Replay)
 	}
@@ -357,6 +390,10 @@ direct_fragment = |source, namespace, props| {
 			return Err(Replay)
 		}
 		$reader = next.reader
+		placement_parent = if $open.len() == 1 {
+			Err(Missing)
+		} else $open.last().map_ok(|entry| entry.id).map_err(|_| Missing)
+		$placements = record_boundaries(boundaries, $placements, next.token.span.start, placement_parent)
 		match source_token(next.token, $reader.bytes) {
 			Ok(region) => {
 				$regions = $regions.append(region)
@@ -460,7 +497,7 @@ direct_fragment = |source, namespace, props| {
 				# This accepted grammar already proves exact authored structure:
 				# explicit balanced ends, no repairs, and no dropped attributes.
 				# It contains no selectedcontent/template projection candidates.
-				return Ok({ source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots }, diagnostics: [] })
+				return Ok({ parsed: { source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots }, diagnostics: [] }, parents: $placements.parents })
 			}
 			_ => return Err(Replay)
 		}
@@ -497,7 +534,11 @@ direct_formatting_flag = |name| match name {
 # Missing wrappers, table repairs, foster text, foreign/template/raw content and
 # every uncertain resource boundary replay the complete general parser.
 direct_document : Str, Str, MarkupCore.Props -> Try(MarkupCore.Parsed, [Replay])
-direct_document = |source, namespace, props| {
+direct_document = |source, namespace, props| direct_document_placed(source, namespace, props, []).map_ok(|result| result.parsed)
+
+direct_document_placed : Str, Str, MarkupCore.Props, List(U64) -> Try(HtmlTree.Placed, [Replay])
+direct_document_placed = |source, namespace, props, boundaries| {
+	var $placements = { cursor: 0, parents: [] }
 	if source.count_utf8_bytes() > props.max_source_bytes {
 		return Err(Replay)
 	}
@@ -549,6 +590,8 @@ direct_document = |source, namespace, props| {
 			return Err(Replay)
 		}
 		$reader = next.reader
+		placement_parent = $open.last().map_ok(|entry| entry.id).map_err(|_| Missing)
+		$placements = record_boundaries(boundaries, $placements, next.token.span.start, placement_parent)
 		match source_token(next.token, $reader.bytes) {
 			Ok(region) => {
 				$regions = $regions.append(region)
@@ -776,7 +819,7 @@ direct_document = |source, namespace, props| {
 					if $nodes.len() > props.max_nodes {
 						return Err(Replay)
 					}
-					return Ok({ source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots: $roots }, diagnostics: [] })
+					return Ok({ parsed: { source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots: $roots }, diagnostics: [] }, parents: $placements.parents })
 				}
 				_ => return Err(Replay)
 			}
@@ -4071,3 +4114,78 @@ expect {
 		},
 	)
 }
+
+# Each sorted boundary is visited once, independent of nesting depth. Attribute
+# and token-interior boundaries are classified by MarkupTemplate before use;
+# their receipts are irrelevant. Existing text spans retain their normal split.
+record_boundaries : List(U64), { cursor : U64, parents : List(HtmlTree.Placement) }, U64, Try(U64, [Missing]) -> { cursor : U64, parents : List(HtmlTree.Placement) }
+record_boundaries = |boundaries, progress, offset, parent| {
+	var $next = progress
+	while $next.cursor < boundaries.len() {
+		at = boundaries.get($next.cursor) ?? offset
+		if at > offset {
+			break
+		}
+		$next = { cursor: $next.cursor + 1, parents: $next.parents.append({ offset: at, parent }) }
+	}
+	$next
+}
+
+# Empty template boundaries follow construction ancestry, independently of the
+# deliberately opening-only formatting/form origins. Both proof paths retain
+# exactly the same public parse result as their ordinary entry points.
+expect {
+	["strong", "b", "em", "i", "a", "form"].all(
+		|name| {
+			prefix = Str.join_with(["<div><", name, ">"], "")
+			source = Str.join_with([prefix, "</", name, "></div>"], "")
+			boundaries = [prefix.count_utf8_bytes(), prefix.count_utf8_bytes()]
+			direct = match direct_fragment_placed(source, MarkupCore.html_namespace, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			general = match HtmlTree.parse_general_placed(source, True, {}, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			direct.parsed == general.parsed and direct.parents == general.parents and Ok(direct.parsed) == direct_fragment(source, MarkupCore.html_namespace, {}) and Ok(general.parsed) == HtmlTree.parse_general(source, True, {}, {}) and placement_names(direct) == [name, name]
+		},
+	)
+}
+expect {
+	["strong", "b", "em", "i", "a", "form"].all(
+		|name| {
+			prefix = Str.join_with(["<!doctype html><html><head></head><body><div><", name, ">"], "")
+			source = Str.join_with([prefix, "</", name, "></div></body></html>"], "")
+			boundaries = [prefix.count_utf8_bytes()]
+			direct = match direct_document_placed(source, MarkupCore.html_namespace, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			general = match HtmlTree.parse_general_placed(source, False, {}, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			direct.parsed == general.parsed and direct.parents == general.parents and Ok(direct.parsed) == direct_document(source, MarkupCore.html_namespace, {}) and placement_names(direct) == [name]
+		},
+	)
+}
+# A form-pointer close can remove a noncurrent stack entry. The still-open div
+# remains the insertion parent; lexical tag nesting cannot recover that fact.
+expect {
+	prefix = "<form><div></form>"
+	source = Str.concat(prefix, "</div>")
+	placed = HtmlTree.parse_general_placed(source, True, {}, { recovery: Browser }, [prefix.count_utf8_bytes()])?
+	placement_names(placed) == ["div"] and placed.parsed == HtmlTree.parse_general(source, True, {}, { recovery: Browser })?
+}
+
+placement_names : HtmlTree.Placed -> List(Str)
+placement_names = |placed| placed.parents.map(
+	|entry| match entry.parent {
+		Ok(id) => match (placed.parsed.tree.nodes.get(id) ?? empty_node).kind {
+			Element(name) => name.local
+			_ => ""
+		}
+		Err(Missing) => ""
+	},
+)
