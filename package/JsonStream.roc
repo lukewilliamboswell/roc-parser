@@ -30,7 +30,7 @@ JsonStream :: [].{
 
 	## Start a decoder without pulling input.
 	decoder : Props -> Decoder
-	decoder = |props| { props, phase: Start, record: [], number: 1, line: 1, column: 1, record_line: 1, record_column: 1, previous_cr: False, string: False, escape: False, stack: [], comment: Normal, bom: 0, utf8_remaining: 0, utf8_low: 0x80, utf8_high: 0xBF }
+	decoder = |props| { props, phase: Start, record: [], workspace: Box.box(JsonValue.Workspace.empty()), number: 1, line: 1, column: 1, record_line: 1, record_column: 1, previous_cr: False, string: False, escape: False, stack: [], comment: Normal, bom: 0, utf8_remaining: 0, utf8_low: 0x80, utf8_high: 0xBF }
 
 	## Consume at most one value. Only Final establishes document completion.
 	step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, JsonValue, Error)
@@ -57,6 +57,7 @@ State : {
 	props : JsonStream.Props,
 	phase : [Start, First, Next, End, Bom],
 	record : List(U8),
+	workspace : Box(JsonValue.Workspace),
 	number : U64,
 	line : U64,
 	column : U64,
@@ -132,14 +133,19 @@ limit_error = |message| ["document exceeds the limit of ", "nesting exceeds the 
 
 record_result : State, U64 -> Streaming.Step(State, JsonValue, JsonStream.Error)
 record_result = |state, consumed| {
-	text = Str.from_utf8(state.record) ?? ""
-	next = reset(state)
-	options = if (state.props.format == Array) { ..state.props.json, bom: False } else state.props.json
-	match JsonValue.parse_with(text, options) {
+	# Move the workspace out before parsing; retaining a second reference would
+	# force its growing buffers to copy instead of reusing their capacity.
+	workspace = state.workspace
+	base = { ..state, workspace: Box.box(JsonValue.Workspace.empty()) }
+	text = Str.from_utf8(base.record) ?? ""
+	options = if (base.props.format == Array) { ..base.props.json, bom: False } else base.props.json
+	parsed = JsonValue.parse_reusing(text, options, Box.unbox(workspace))
+	next = { ..reset(base), workspace: Box.box(parsed.workspace) }
+	match parsed.result {
 		Ok(value) => { state: next, consumed, outcome: Item(value) }
 		Err(InvalidJsonValue(error)) => {
-			located = { record: state.number, line: state.record_line + error.line - 1, column: error.column + if (error.line == 1) state.record_column - 1 else 0, message: error.message }
-			{ state: next, consumed, outcome: if (state.props.format == Ndjson and !limit_error(error.message)) RecordError(located) else Failed(located) }
+			located = { record: base.number, line: base.record_line + error.line - 1, column: error.column + if (error.line == 1) base.record_column - 1 else 0, message: error.message }
+			{ state: next, consumed, outcome: if (base.props.format == Ndjson and !limit_error(error.message)) RecordError(located) else Failed(located) }
 		}
 	}
 }
@@ -285,7 +291,22 @@ array_step = |initial, bytes, end| {
 	var $record_bytes = $record.len()
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
-		if $scan.utf8_remaining == 0 and byte < 0x80 and byte != '\r' and byte != '\n' and $scan.string and !$scan.escape and $scan.comment == Normal and byte != '"' and byte != '\\' {
+		# Consume an entirely ASCII, unescaped string in one framing step.
+		# A miss uses the ordinary split/encoding/budget path unchanged.
+		plain_end = if byte == '"' and !$scan.string and $collecting and $scan.comment == Normal and $scan.utf8_remaining == 0 {
+			stop = ascii_run_end(bytes, $index + 1, True)
+			next_byte = bytes.get(stop + 1) ?? 0
+			tail = if (next_byte == ':' or (next_byte == ',' and !$scan.stack.is_empty())) stop + 2 else stop + 1
+			if bytes.get(stop) == Ok('"') and tail - $index <= props.max_record_bytes - U64.min($record_bytes, props.max_record_bytes) {
+				tail
+			} else $index
+		} else $index
+		if plain_end > $index {
+			len = plain_end - $index
+			$scan = { ..$scan, column: $scan.column + len, previous_cr: False }
+			$index = plain_end
+			$record_bytes = $record_bytes + len
+		} else if $scan.utf8_remaining == 0 and byte < 0x80 and byte != '\r' and byte != '\n' and $scan.string and !$scan.escape and $scan.comment == Normal and byte != '"' and byte != '\\' {
 			run_end = ascii_run_end(bytes, $index, True)
 			len = U64.min(run_end - $index, props.max_record_bytes - U64.min($record_bytes, props.max_record_bytes))
 			$scan = { ..$scan, column: $scan.column + len, previous_cr: False }
@@ -638,3 +659,15 @@ expect {
 	props = { format: Array, json: { control_characters: True, non_finite: True, duplicates: KeepLast, lone_surrogates: Replace } }
 	splits_agree(text, props) and Streaming.collect(JsonStream.parse_iter([text.to_utf8()].iter(), props)) == Ok([String("x\u(0)\r\ny"), Number("NaN"), Object([{ key: "x", value: Number("2") }]), String("�")])
 }
+
+# The complete-string shortcut may consume a colon or a nested comma, but must
+# preserve framing, source positions, limits, and every split around that tail.
+expect ["[{\"name\":\"value\",\"x\":\"\"}]", "[[\"x\",\"y\"],\"z\"]", "[{\"x\":\"value\",\"y\":\"escaped\\n\"}]", "[{\"x\"::1}]", "[{\"x\":\"v\"},]\n", "[{\"x\":\"v\"}]junk"].all(
+	|text| {
+		var $same = True
+		for limit in (0.U64).to(40) {
+			$same = $same and splits_agree(text, { format: Array, max_record_bytes: limit })
+		}
+		$same
+	},
+)

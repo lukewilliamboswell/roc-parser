@@ -176,6 +176,28 @@ JsonValue := [
 		}
 	}
 
+	## Reusable empty parser buffers for a sequence of complete JSON records.
+	## Successful reads retain capacity without retaining a previous source or
+	## value. Keep only the latest workspace to permit in-place buffer reuse.
+	Workspace :: { open : List(Frame), items : List(JsonValue), members : List(Member), key_ats : List(U64) }.{
+
+		## Start without retained parser buffers.
+		empty : () -> Workspace
+		empty = || Workspace.{ open: [], items: [], members: [], key_ats: [] }
+	}
+
+	## Parse one complete record, retaining only empty workspace buffers for the
+	## next call. Syntax errors and limits match parse_with; failure clears any
+	## unfinished values so the returned workspace cannot retain their source.
+	parse_reusing : Str, Options, Workspace -> { result : Try(JsonValue, [InvalidJsonValue(Error)]), workspace : Workspace }
+	parse_reusing = |input, options, workspace| match scan_reusing(input, input.to_utf8(), options, workspace) {
+		Ok(parsed) => {
+			result = if (parsed.pos == input.count_utf8_bytes()) Ok(parsed.value) else Err(InvalidJsonValue(locate(input, parsed.pos, "unexpected content after the JSON value")))
+			{ result, workspace: parsed.workspace }
+		}
+		Err(JsonFail(failure)) => { result: Err(InvalidJsonValue(locate(input, failure.offset, failure.message))), workspace: Workspace.empty() }
+	}
+
 	## A [Parser] that reads one strict JSON value and the whitespace around
 	## it, and leaves the rest of the input for the next parser. A failure is
 	## `ParseError({ message, offset })` with the byte offset of the problem.
@@ -496,7 +518,10 @@ Member : { key : Str, value : JsonValue }
 # refers to, so appending updates them in place; a container's children are
 # copied out once, when it closes.
 scan : Str, List(U8), JsonValue.Options -> Try({ value : JsonValue, pos : U64 }, [JsonFail(Failure)])
-scan = |src, bytes, options| {
+scan = |src, bytes, options| scan_reusing(src, bytes, options, JsonValue.Workspace.empty()).map_ok(|parsed| { value: parsed.value, pos: parsed.pos })
+
+scan_reusing : Str, List(U8), JsonValue.Options, JsonValue.Workspace -> Try({ value : JsonValue, pos : U64, workspace : JsonValue.Workspace }, [JsonFail(Failure)])
+scan_reusing = |src, bytes, options, workspace| {
 	if bytes.len() > options.max_bytes {
 		return fail(options.max_bytes, "document exceeds the limit of ${options.max_bytes.to_str()} bytes")
 	}
@@ -509,13 +534,13 @@ scan = |src, bytes, options| {
 	var $pos = skip_ws(bytes, start, comments, check)?
 	check_top_level(bytes, $pos, options)?
 	var $open : List(Frame)
-	var $open = []
+	var $open = workspace.open
 	var $items : List(JsonValue)
-	var $items = []
+	var $items = workspace.items
 	var $members : List(Member)
-	var $members = []
+	var $members = workspace.members
 	var $key_ats : List(U64)
-	var $key_ats = []
+	var $key_ats = workspace.key_ats
 	var $container : Container
 	var $container = Top
 	var $first = 0
@@ -530,7 +555,7 @@ scan = |src, bytes, options| {
 			match $container {
 				Top => {
 					end = skip_ws(bytes, $pos, comments, check)?
-					return Ok({ value: $value, pos: end })
+					return Ok({ value: $value, pos: end, workspace: JsonValue.Workspace.{ open: $open, items: $items, members: $members, key_ats: $key_ats } })
 				}
 
 				InArray => {
@@ -2442,4 +2467,29 @@ expect {
 		}
 	}
 	$same
+}
+
+# Reused buffers must start every independent document logically empty, and
+# changing options or recovering after failure must not expose previous values.
+expect {
+	options : List(JsonValue.Options)
+	options = [{}, { comments: True, trailing_commas: True, bom: True, non_finite: True, lone_surrogates: Replace }, { max_depth: 0 }, { max_items: 1 }, { max_string_bytes: 2 }, { max_number_digits: 2 }, { max_bytes: 8 }, { duplicates: KeepFirst }, { duplicates: KeepLast }, { duplicates: CollapseIdentical }]
+	var $same = True
+	for props in options {
+		var $workspace = JsonValue.Workspace.empty()
+		for input in ["{\"name\":\"longer source\",\"items\":[1,{\"x\":true},3]}", "[1,2,", "{\"x\":1,\"x\":2}", "{\"x\":1,\"x\":1}", "{\"x\":\"é😀\"}", "/*c*/[1,]", "\u(FEFF)null", "NaN", "\"\\ud800\"", "1 extra", "", "{}", "false", "[4]"] {
+			parsed = JsonValue.parse_reusing(input, props, $workspace)
+			$workspace = parsed.workspace
+			$same = $same and parsed.result == JsonValue.parse_with(input, props)
+			$same = $same and $workspace.open.is_empty() and $workspace.items.is_empty() and $workspace.members.is_empty() and $workspace.key_ats.is_empty()
+		}
+	}
+	$same
+}
+
+expect {
+	first = JsonValue.parse_reusing("{\"old\":[1,2,{\"name\":\"previous\"}]}", {}, JsonValue.Workspace.empty())
+	left = JsonValue.parse_reusing("{\"left\":[3,4]}", {}, first.workspace)
+	right = JsonValue.parse_reusing("{\"right\":[5,{\"name\":\"next\"}]}", {}, first.workspace)
+	first.result == JsonValue.parse_str("{\"old\":[1,2,{\"name\":\"previous\"}]}") and left.result == JsonValue.parse_str("{\"left\":[3,4]}") and right.result == JsonValue.parse_str("{\"right\":[5,{\"name\":\"next\"}]}")
 }
