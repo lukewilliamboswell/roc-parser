@@ -103,7 +103,7 @@ HtmlTree :: [].{
 	parse_general : Str, Bool, Context, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	parse_general = |source, fragment, context, props| {
 		if source.count_utf8_bytes() > props.max_source_bytes {
-			return Err(InvalidMarkup(Diagnostic.{ problem: SourceTooLarge(props.max_source_bytes), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: SourceBytes, max: props.max_source_bytes, observed: AtLeast(props.max_source_bytes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		initial : State
 		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, context_class: namespace_class(context.namespace), diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }

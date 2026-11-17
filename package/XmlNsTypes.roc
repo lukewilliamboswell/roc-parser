@@ -1,18 +1,12 @@
+import ExpandedName
 # TODO(https://github.com/roc-lang/roc/issues/13077): move Node and its methods
 # back under XmlNsCore once nested derived methods stop producing duplicate warnings.
 # Keep these backing types in a separate module until public aliases also work
 # with exposed-field validation (https://github.com/roc-lang/roc/issues/13023).
 XmlNsTypes :: [].{
 	Namespace : [Uri(Str), NoNamespace]
-	Name := { namespace : Namespace, local : Str, prefix : [Prefix(Str), Unprefixed] }.{
-		is_eq : _
-		to_hash : _
-		qualified : Name -> Str
-		qualified = |name| match name.prefix {
-			Unprefixed => name.local
-			Prefix(prefix) => "${prefix}:${name.local}"
-		}
-	}
+	Name : ExpandedName
+
 	Binding : { prefix : [Prefix(Str), Default], namespace : Namespace }
 	Attribute : { name : Name, value : Str }
 

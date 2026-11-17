@@ -1,3 +1,4 @@
+import MarkupGrammar
 import Diagnostic
 import Parser
 import XmlCore
@@ -122,10 +123,10 @@ MarkupCore :: [].{
 	}
 
 	## Typed attribute grammars shared by validators and interpolation slots.
-	ValueGrammar : [Number, NonnegativeNumber, Length, NonnegativeLength, NumberList(U64), LengthList, PathData, TransformList, Keyword(List(Str)), TokenList, Color, Paint, AspectRatio, Language(ValueLanguage)]
+	ValueGrammar : MarkupGrammar.ValueGrammar
 
 	## Closed attribute/text language grammars used by validators.
-	ValueLanguage : [HTMLAttribute, Attribute, AutoOrNonnegativeLength, CoordinatePairs, Dasharray, ExtensionAttribute, Integer, MathLength, Miterlimit, NamespacedAttribute, NonnegativeInteger, NonnegativeMathLength, NonnegativeNumberPair, NumberList, NumberOrPercentage, Opaque, PositiveInteger, Text]
+	ValueLanguage : MarkupGrammar.ValueLanguage
 
 	## A structural repair forbidden by exact authored HTML parsing.
 	StructureReason : [ImpliedElement(Str), MissingEndTag(Str), UnexpectedEndTag(Str), NonVoidSelfClosing(Str), ReparentedContent, IgnoredMarkup, ReconstructedContent, ChangedAttributes]
@@ -140,7 +141,7 @@ MarkupCore :: [].{
 	InterpolationProblem : [RawTextHole, MissingStaticSegment, TextHoleForbidden(Str), RecoveryRequired, SplitCharacterReference, InvalidHolePosition, MultipleAttributeHoles, MarkupDelimiterHole, IncompleteHoleMarkup, LostAttributeHole, CdataHoleNamespace]
 
 	## Structured reason for rejection. Presentation is separate.
-	Problem : [NonCanonicalName({ authored : Str, expected : Str, span : Span }), HtmlStructure({ reason : StructureReason, span : Span }), SyntaxError(Parser.Problem(XmlCore.Problem)), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNsCore.Problem), WrongRoot({ expected : { namespace : XmlNsCore.Namespace, local : Str }, actual : ActualRoot }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : ChildGrammar }), Unsupported(UnsupportedReason), SourceTooLarge(U64), LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), Interpolation({ index : U64, reason : InterpolationProblem }), BindingCount({ expected : U64, actual : U64 })]
+	Problem : [NonCanonicalName({ authored : Str, expected : Str, span : Span }), HtmlStructure({ reason : StructureReason, span : Span }), SyntaxError(XmlCore.Problem), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNsCore.Problem), WrongRoot({ expected : { namespace : XmlNsCore.Namespace, local : Str }, actual : ActualRoot }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Diagnostic.Excerpt, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : ChildGrammar }), Unsupported(UnsupportedReason), LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), Interpolation({ index : U64, reason : InterpolationProblem }), BindingCount({ expected : U64, actual : U64 })]
 
 	## One-based lines and UTF-8 byte columns refer to authored source.
 	Error : Diagnostic(Problem)
@@ -333,7 +334,7 @@ parse_xml_source = |text, namespace, fragment, props| {
 		return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(HtmlParserRequired), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 	}
 	if text.count_utf8_bytes() > props.max_source_bytes {
-		return Err(InvalidMarkup(Diagnostic.{ problem: SourceTooLarge(props.max_source_bytes), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+		return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: SourceBytes, max: props.max_source_bytes, observed: AtLeast(props.max_source_bytes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 	}
 	prefix = if fragment {
 		"<_markup_fragment xmlns='${escape_namespace(namespace)}'>"
@@ -400,20 +401,35 @@ escape_namespace = |namespace| Str.join_with(Str.join_with(namespace.split_on("&
 
 located_xml_error : XmlNsCore.ReadError, Str, U64 -> [InvalidMarkup(MarkupCore.Error)]
 located_xml_error = |error, text, prefix| {
-	(problem, line, original_column) = match error {
-		InvalidXml(e) => (SyntaxError(e.problem), (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).line, (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).column)
-		InvalidNamespace(e) => (NamespaceError(e.problem), (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).line, (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).column)
+	(problem, native_location, path) = match error {
+		InvalidXml(native) => (
+			match native.problem {
+				LimitExceeded(limit) => LimitExceeded({ resource: Xml(limit.resource), max: limit.max, observed: limit.observed })
+				reason => SyntaxError(reason)
+			},
+			native.location,
+			native.path,
+		)
+		InvalidNamespace(native) => (NamespaceError(native.problem), native.location, native.path)
 	}
-	column = if line == 1 {
-		if original_column > prefix {
-			original_column - prefix
-		} else 1
-	} else original_column
-	last = Parser.Quotation.position(text, text.count_utf8_bytes())
-	at = if line > last.line or (line == last.line and column > last.column) {
-		last
-	} else { line, column }
-	InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: at.line, column: at.column }), path: [] })
+	location = match native_location {
+		Text(point) => authored_location(text, prefix, point.offset)
+		ByteOffset(offset) => authored_location(text, prefix, offset)
+		LineColumn(point) => {
+			column = if (point.line == 1 and point.column > prefix) point.column - prefix else point.column
+			LineColumn({ line: point.line, column })
+		}
+		other => other
+	}
+	InvalidMarkup(Diagnostic.{ problem, location, path })
+}
+
+authored_location : Str, U64, U64 -> Diagnostic.Location
+authored_location = |text, prefix, offset| {
+	relative = if (offset > prefix) offset - prefix else 0
+	bounded = if (relative > text.count_utf8_bytes()) text.count_utf8_bytes() else relative
+	point = Parser.Quotation.position(text, bounded)
+	Text({ offset: bounded, line: point.line, column: point.column })
 }
 
 construct_xml_tree : MarkupCore.Source, List(StartInfo), Bool, MarkupCore.Props, U64 -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
@@ -556,7 +572,7 @@ empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) 
 error_at : MarkupCore.Source, U64, MarkupCore.Problem -> [InvalidMarkup(MarkupCore.Error)]
 error_at = |source, offset, problem| {
 	at = MarkupCore.position(source, offset)
-	InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: at.line, column: at.column }), path: [] })
+	InvalidMarkup(Diagnostic.{ problem: problem, location: Text({ offset, line: at.line, column: at.column }), path: [] })
 }
 
 normalize_lines : Str -> Str
@@ -655,7 +671,7 @@ expect MarkupCore.parse_xml_fragment("", MarkupCore.svg_namespace, {}).map_ok(|p
 expect MarkupCore.parse_xml_fragment("<a><b/></a>", "", { max_depth: 1 }).is_err()
 expect MarkupCore.parse_xml_fragment("<a/>", "", { max_depth: 1, max_elements: 1, max_attributes: 0 }).is_ok()
 expect MarkupCore.parse_xml_fragment("<a x='1'/>", "", { max_attributes: 0 }).is_err()
-expect MarkupCore.parse_xml_fragment("<p:a/>", "", {}) == Err(InvalidMarkup(Diagnostic.{ problem: NamespaceError(UndeclaredPrefix("p")), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+expect MarkupCore.parse_xml_fragment("<p:a/>", "", {}) == Err(InvalidMarkup(Diagnostic.{ problem: NamespaceError(UndeclaredPrefix("p")), location: Text({ offset: 0, line: 1, column: 1 }), path: [] }))
 expect {
 	actual = MarkupCore.parse_xml_fragment("<a>\n<b></a>", "", {}).map_err(|InvalidMarkup(error)| ((Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column))
 	actual == Err((2, 4))

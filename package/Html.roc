@@ -14,6 +14,7 @@ import HtmlTemplate
 Html := { parsed : MarkupCore.Parsed }.{
 
 	RepairContext : DomConstruction.Context
+	RepairProblem : DomConstruction.Problem
 	RepairProps : DomConstruction.Props
 
 	## HTML defaults and explicit XML/recovery/validation/fragment-context options.
@@ -26,12 +27,10 @@ Html := { parsed : MarkupCore.Parsed }.{
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Parse a complete HTML document with strict defaults.
-	parse_str : Str -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
-	parse_str = |text| parse_with(text, {})
 
 	## Parse and validate a document, retaining recovery diagnostics when enabled.
-	parse_with : Str, Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
-	parse_with = |text, props| {
+	parse_str : Str, Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
+	parse_str = |text, props| {
 		{ parsed, domain } = authored_syntax(text, props, False)?
 		root = MarkupCore.single_root(parsed.tree).map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
 		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
@@ -97,12 +96,12 @@ Html := { parsed : MarkupCore.Parsed }.{
 	}
 
 	## Validate a complete document for a checked constant or imported file.
-	validate : ValidationProps -> Try(Html, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(e)| Parser.Quotation.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).column }))
+	validate : ValidationProps -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Check a complete HTML literal during compilation.
 	from_quote : Str -> Try(Html, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| validate({ source: source }).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("Html", error))
 
 	## A fragment preserves all authored roots and source bytes.
 	Fragment : HtmlFragment
@@ -136,8 +135,8 @@ HtmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 HtmlFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Validate imported fragment text with named diagnostics and options.
-	validate : Html.ValidationProps -> Try(Html.Fragment, [BadQuotedBytes(Str)])
-	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(e)| Parser.Quotation.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).column }))
+	validate : Html.ValidationProps -> Try(Html.Fragment, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Check a fragment literal in the default body context.
 	from_quote : Str -> Try(Html.Fragment, [BadQuotedBytes(Str)])
@@ -228,7 +227,7 @@ expect {
 	}
 }
 
-expect Html.parse_str("<!doctype html><html lang='en'><head><title>Example</title></head><body><p>Hello &amp; welcome</p></body></html>").is_ok()
+expect Html.parse_str("<!doctype html><html lang='en'><head><title>Example</title></head><body><p>Hello &amp; welcome</p></body></html>", {}).is_ok()
 expect Html.parse_fragment("<input type='CHECKBOX' checked><span aria-pressed='false'>x</span>", {}).is_ok()
 expect Html.parse_fragment("<div hidden='false'></div>", {}).is_err()
 expect Html.parse_fragment("<div hidden='until-found'></div>", {}).is_ok()
@@ -262,7 +261,7 @@ expect {
 	p.metadata().slots.first()?.expected == NonnegativeLength
 }
 expect Html.parse_segments(["<span>", "</span>"], { max_slots: 0 }).is_err()
-expect Html.parse_with("<html/>", { max_diagnostics: 0 }).is_err()
+expect Html.parse_str("<html/>", { max_diagnostics: 0 }).is_err()
 
 expect {
 	f = Html.parse_fragment("<unknown thing='x'></unknown>", { allow_unknown_elements: True, allow_unknown_attributes: True })?

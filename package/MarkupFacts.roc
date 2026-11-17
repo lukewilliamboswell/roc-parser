@@ -1,3 +1,4 @@
+import InitialNewline
 import MarkupCore
 import MarkupVocabulary
 import HtmlValidate
@@ -127,40 +128,22 @@ MarkupFacts :: [].{
 		NoNamespace => False
 	}
 
-	## Pending means no token has yet followed an eligible HTML start tag.
-	## An empty text binding emits no token and leaves this state unchanged.
-	InitialNewlineState : [Pending, Preserve]
-
-	## Decoded HTML token events, after input newline preprocessing and
-	## character-reference decoding. RCDATA comment spelling is Characters,
-	## rather than Comment; Other covers every other emitted token.
-	InitialNewlineToken : [Characters(Str), Comment, Other]
-
-	## Seed the next-token rule after emitting this element's HTML start tag.
-	initial_newline : MarkupCore.Name -> InitialNewlineState
-	initial_newline = |element| if (drops_initial_newline(element)) Pending else Preserve
-
-	## Model the first-token LF rule. Comments and other emitted tokens consume
-	## Pending; later text is preserved. Exactly one leading LF can be removed.
-	initial_newline_step : InitialNewlineState, InitialNewlineToken -> { state : InitialNewlineState, token : InitialNewlineToken, skipped : Bool }
-	initial_newline_step = |state, token| match token {
-		Characters(text) if text.is_empty() => { state, token, skipped: False }
-		Characters(text) if state == Pending and text.starts_with("\n") => { state: Preserve, token: Characters(text.drop_prefix("\n")), skipped: True }
-		_ => { state: Preserve, token, skipped: False }
-	}
-
 	## Recognize known handler content attributes by element namespace and expanded name.
 	## Consumers may forbid these in literals; ordinary parsers continue accepting them.
 	is_event_handler : MarkupCore.Name, MarkupCore.Name -> Bool
 	is_event_handler = MarkupVocabulary.event_attribute
 }
 
+html_name : Str -> MarkupCore.Name
 html_name = |local| { namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed, local }
 
+svg_name : Str -> MarkupCore.Name
 svg_name = |local| { namespace: Uri(MarkupCore.svg_namespace), prefix: Unprefixed, local }
 
+math_name : Str -> MarkupCore.Name
 math_name = |local| { namespace: Uri(MarkupCore.mathml_namespace), prefix: Unprefixed, local }
 
+plain_attribute : Str -> MarkupCore.Name
 plain_attribute = |local| { namespace: NoNamespace, prefix: Unprefixed, local }
 
 expect MarkupFacts.is_known_element(html_name("input"))
@@ -260,19 +243,19 @@ expect ["pre", "listing", "textarea"].all(|local| MarkupFacts.drops_initial_newl
 expect !MarkupFacts.drops_initial_newline(html_name("div")) and !MarkupFacts.drops_initial_newline(html_name("PRE"))
 expect !MarkupFacts.drops_initial_newline(svg_name("pre")) and !MarkupFacts.drops_initial_newline(math_name("textarea"))
 expect !MarkupFacts.drops_initial_newline({ namespace: NoNamespace, prefix: Unprefixed, local: "pre" })
-expect MarkupFacts.initial_newline(html_name("pre")) == Pending and MarkupFacts.initial_newline(svg_name("pre")) == Preserve
-expect MarkupFacts.initial_newline_step(Pending, Characters("\n\nvalue")) == { state: Preserve, token: Characters("\nvalue"), skipped: True }
-expect MarkupFacts.initial_newline_step(Preserve, Characters("\nvalue")) == { state: Preserve, token: Characters("\nvalue"), skipped: False }
-expect MarkupFacts.initial_newline_step(Pending, Characters("")) == { state: Pending, token: Characters(""), skipped: False }
-expect MarkupFacts.initial_newline_step(Pending, Characters("value\n")) == { state: Preserve, token: Characters("value\n"), skipped: False }
-expect MarkupFacts.initial_newline_step(Pending, Characters("\rvalue")) == { state: Preserve, token: Characters("\rvalue"), skipped: False }
-expect MarkupFacts.initial_newline_step(Pending, Comment) == { state: Preserve, token: Comment, skipped: False }
-expect MarkupFacts.initial_newline_step(Pending, Other) == { state: Preserve, token: Other, skipped: False }
+expect (html_name("pre")).initial_newline() == InitialNewline.from_behavior(DropInitialLf) and (svg_name("pre")).initial_newline() == InitialNewline.from_behavior(PreserveInitialLf)
+expect (InitialNewline.from_behavior(DropInitialLf)).step(Characters("\n\nvalue")) == { state: InitialNewline.from_behavior(PreserveInitialLf), token: Characters("\nvalue"), action: Skipped }
+expect (InitialNewline.from_behavior(PreserveInitialLf)).step(Characters("\nvalue")) == { state: InitialNewline.from_behavior(PreserveInitialLf), token: Characters("\nvalue"), action: Preserved }
+expect (InitialNewline.from_behavior(DropInitialLf)).step(Characters("")) == { state: InitialNewline.from_behavior(DropInitialLf), token: Characters(""), action: Preserved }
+expect (InitialNewline.from_behavior(DropInitialLf)).step(Characters("value\n")) == { state: InitialNewline.from_behavior(PreserveInitialLf), token: Characters("value\n"), action: Preserved }
+expect (InitialNewline.from_behavior(DropInitialLf)).step(Characters("\rvalue")) == { state: InitialNewline.from_behavior(PreserveInitialLf), token: Characters("\rvalue"), action: Preserved }
+expect (InitialNewline.from_behavior(DropInitialLf)).step(Comment) == { state: InitialNewline.from_behavior(PreserveInitialLf), token: Comment, action: Preserved }
+expect (InitialNewline.from_behavior(DropInitialLf)).step(Other) == { state: InitialNewline.from_behavior(PreserveInitialLf), token: Other, action: Preserved }
 expect {
-	comment = MarkupFacts.initial_newline_step(MarkupFacts.initial_newline(html_name("pre")), Comment)
-	MarkupFacts.initial_newline_step(comment.state, Characters("\nvalue")).skipped == False
+	comment = ((html_name("pre")).initial_newline()).step(Comment)
+	(comment.state).step(Characters("\nvalue")).action == Preserved
 }
 expect {
-	comment_text = MarkupFacts.initial_newline_step(MarkupFacts.initial_newline(html_name("textarea")), Characters("<!-- comment -->"))
-	MarkupFacts.initial_newline_step(comment_text.state, Characters("\nvalue")).token == Characters("\nvalue")
+	comment_text = ((html_name("textarea")).initial_newline()).step(Characters("<!-- comment -->"))
+	(comment_text.state).step(Characters("\nvalue")).token == Characters("\nvalue")
 }

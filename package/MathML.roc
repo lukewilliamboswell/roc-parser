@@ -20,12 +20,10 @@ MathML := { parsed : MarkupCore.Parsed }.{
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Parse a complete namespaced document with strict defaults.
-	parse_str : Str -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
-	parse_str = |source| parse_with(source, {})
 
 	## Parse a complete document with the requested syntax and checks.
-	parse_with : Str, Props -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
-	parse_with = |source, props| {
+	parse_str : Str, Props -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
+	parse_str = |source, props| {
 		parsed = if props.syntax == HtmlSyntax {
 			HtmlTree.parse(source, True, { namespace: MarkupCore.html_namespace, name: "body", defer_projection: True }, props)?
 		} else {
@@ -55,12 +53,12 @@ MathML := { parsed : MarkupCore.Parsed }.{
 	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
-	validate : ValidationProps -> Try(MathML, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
+	validate : ValidationProps -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Convert a checked complete document literal.
 	from_quote : Str -> Try(MathML, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| validate({ source: source }).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("MathML", error))
 
 	## Parse fixed literal segments into an indexed plan without binding values.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
@@ -128,8 +126,8 @@ MathmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 MathmlFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Check imported fragment text with explicit options and a diagnostic name.
-	validate : MathML.ValidationProps -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
-	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
+	validate : MathML.ValidationProps -> Try(MathML.Fragment, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Check a fragment literal with strict defaults.
 	from_quote : Str -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
@@ -143,8 +141,8 @@ MathmlFragment := { parsed : MarkupCore.Parsed }.{
 	}
 }
 
-expect MathML.parse_str("<math xmlns='http://www.w3.org/1998/Math/MathML'><mi>x</mi></math>").is_ok()
-expect MathML.parse_str("<math/>").is_err()
+expect MathML.parse_str("<math xmlns='http://www.w3.org/1998/Math/MathML'><mi>x</mi></math>", {}).is_ok()
+expect MathML.parse_str("<math/>", {}).is_err()
 expect MathML.parse_fragment("<mfrac><mn>1</mn><mn>2</mn></mfrac>", {}).is_ok()
 expect MathML.parse_fragment("<mfrac><mn>1</mn></mfrac>", {}).is_err()
 expect MathML.parse_fragment("<mfrac>x<mn>1</mn><mn>2</mn></mfrac>", {}).is_err()
@@ -178,7 +176,7 @@ fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
 } else {
 	MarkupCore.parse_xml_fragment(source, MarkupCore.mathml_namespace, props)
 }
-expect MathML.parse_with("<math><mfrac><mn>1</mn><mn>2</mn></mfrac></math>", { syntax: HtmlSyntax }).is_ok()
+expect MathML.parse_str("<math><mfrac><mn>1</mn><mn>2</mn></mfrac></math>", { syntax: HtmlSyntax }).is_ok()
 expect MathML.parse_fragment("<mtext><span>HTML</span></mtext>", { syntax: HtmlSyntax }).is_ok()
 
 expect MathML.parse_fragment("<mmultiscripts/>", {}).is_err()

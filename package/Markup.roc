@@ -1,3 +1,5 @@
+import InitialNewline
+import ExpandedName
 import MarkupCore
 import MarkupContext
 import MarkupTemplate
@@ -12,6 +14,7 @@ Markup :: [].{
 		Bound(a) : MarkupTemplate.Bound(a)
 		Slot : MarkupTemplate.Slot
 	}
+	ContextProblem : MarkupContext.Problem
 	ContextProps : MarkupContext.ContextProps
 	ContextChildProps : MarkupContext.ContextChildProps
 	Syntax : MarkupCore.Syntax
@@ -19,6 +22,7 @@ Markup :: [].{
 	Token : MarkupCore.Token
 	Source : MarkupCore.Source
 	ValueGrammar : MarkupCore.ValueGrammar
+	ValueLanguage : MarkupCore.ValueLanguage
 	StructureReason : MarkupCore.StructureReason
 	ChildGrammar : MarkupCore.ChildGrammar
 	UnsupportedReason : MarkupCore.UnsupportedReason
@@ -28,7 +32,12 @@ Markup :: [].{
 	Problem : MarkupCore.Problem
 	Error : MarkupCore.Error
 	Props : MarkupCore.Props
-	Name : MarkupCore.Name
+	InitialNewlineState : InitialNewline
+	InitialNewlineToken : InitialNewline.Token
+	Name : ExpandedName
+	NameProps : ExpandedName.QualifiedProps
+	AttributeProps : ExpandedName.AttributeProps
+	NameTextProps : ExpandedName.TextProps
 	Attribute : MarkupCore.Attribute
 	Origin : MarkupCore.Origin
 	Node : MarkupCore.Node

@@ -55,7 +55,7 @@ MarkupTemplate :: [].{
 		var $source_size = 0
 		for segment in segments {
 			if segment.count_utf8_bytes() > props.max_source_bytes - $source_size {
-				return Err(InvalidMarkup(Diagnostic.{ problem: SourceTooLarge(props.max_source_bytes), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+				return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: SourceBytes, max: props.max_source_bytes, observed: AtLeast(props.max_source_bytes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			}
 			$source_size = $source_size + segment.count_utf8_bytes()
 		}
@@ -106,12 +106,12 @@ MarkupTemplate :: [].{
 		var $items = []
 		for value in values {
 			if $items.len() == expected {
-				return Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: expected, actual: $items.len() + 1 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+				return Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: expected, actual: $items.len() + 1 }), location: Unavailable(GeneratedValue), path: [] }))
 			}
 			$items = $items.append(value)
 		}
 		if $items.len() != expected {
-			return Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: expected, actual: $items.len() }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: expected, actual: $items.len() }), location: Unavailable(GeneratedValue), path: [] }))
 		}
 		Ok(Bound.{ plan, values: $items })
 	}
@@ -640,11 +640,11 @@ expect {
 }
 expect {
 	plan = xml_plan(["<g>", "</g>"])?
-	MarkupTemplate.bind_values(plan, [1, 2].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 2 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	MarkupTemplate.bind_values(plan, [1, 2].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 2 }), location: Unavailable(GeneratedValue), path: [] }))
 }
 expect {
 	plan = xml_plan(["<g>", "</g>"])?
-	MarkupTemplate.bind_values(plan, [].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 0 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	MarkupTemplate.bind_values(plan, [].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 0 }), location: Unavailable(GeneratedValue), path: [] }))
 }
 
 expect {
@@ -831,7 +831,7 @@ expect {
 	plan = xml_plan(["<g>", "</g>"])?
 	projection = clone_plan_roots(plan)
 	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, {})?
-	MarkupTemplate.bind_values(fanned, [42, 43].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 2 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	MarkupTemplate.bind_values(fanned, [42, 43].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 2 }), location: Unavailable(GeneratedValue), path: [] }))
 }
 expect {
 	plan = xml_plan(["<g title='", "'>", "</g>"])?

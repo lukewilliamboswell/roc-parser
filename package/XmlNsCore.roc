@@ -315,7 +315,7 @@ XmlNsCore := {
 	##   always written with `xml`.
 	## - `attribute_order`: `AsGiven` keeps each element's attributes in order,
 	##   and `SortedBy(compare)` sorts them.
-	RenderProps := {
+	WriteProps := {
 		declaration : [Plain, Standalone, Omitted] ?? Plain,
 		prefixes : [AsRead, Table(List({ prefix : Str, namespace : Str }))] ?? AsRead,
 		attribute_order : [AsGiven, SortedBy((Name, Name -> [Before, Same, After]))] ?? AsGiven,
@@ -332,7 +332,7 @@ XmlNsCore := {
 	##   `""` stands for no namespace, when a default namespace is in scope.
 	## - `DuplicateAttribute(name)`: two attributes with the same namespace
 	##   and local name.
-	RenderProblem : [InvalidName(Str), InvalidChar(U32), UnboundNamespace(Str), DuplicateAttribute(Str)]
+	EncodeProblem : [InvalidName(Str), InvalidChar(U32), UnboundNamespace(Str), DuplicateAttribute(Str)]
 
 	## Write a document as XML 1.0 text. The output is a function of the
 	## tree and `props` alone, and [XmlNsCore.parse_str] reads it back as the
@@ -347,16 +347,16 @@ XmlNsCore := {
 	## ```roc
 	## expect {
 	##     doc = XmlNsCore.parse_str("<p:a xmlns:p='urn:p' k='1 &amp; 2'>x &lt; y</p:a>")?
-	##     XmlNsCore.render(doc, { declaration: Omitted }) == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
+	##     render_document(doc, { declaration: Omitted }) == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
 	## }
 	##
 	## expect {
 	##     doc = XmlNsCore.parse_str("<a xmlns='urn:w'><b/></a>")?
-	##     XmlNsCore.render(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
+	##     render_document(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
 	## }
 	## ```
-	render : XmlNsCore, RenderProps -> Try(Str, [Unrenderable({ problem : RenderProblem, path : List(Str) })])
-	render = |doc, props| {
+	encode : XmlNsCore, WriteProps -> Try(List(U8), EncodeError)
+	encode = |doc, props| {
 		start =
 			match props.declaration {
 				Plain => "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n".to_utf8()
@@ -369,7 +369,7 @@ XmlNsCore := {
 				AsRead => render_as_read(start, doc.root, order)
 				Table(entries) => render_with_table(start, doc.root, order, entries)
 			}
-		written.map_ok(|bytes| Str.from_utf8(bytes) ?? "")
+		written
 	}
 
 	## The namespace the `xml` prefix is always bound to.
@@ -413,6 +413,9 @@ XmlNsCore := {
 ## bindings start, and `active` the index of the innermost binding of each
 ## prefix ("" for the default namespace). Each entry remembers the binding
 ## it shadows, so leaving an element restores the outer ones.
+render_document : XmlNsCore, XmlNsCore.WriteProps -> Try(Str, EncodeError)
+render_document = |doc, props| XmlNsCore.encode(doc, props).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "Xml: validated encoding must produce UTF-8")
+
 Scope : {
 	entries : List({ prefix : Str, namespace : XmlNsCore.Namespace, previous : U64 }),
 	active : Dict(Str, U64),
@@ -824,7 +827,7 @@ build_scoped = |reader, start| {
 
 # Writing
 
-RenderError : [Unrenderable({ problem : XmlNsCore.RenderProblem, path : List(Str) })]
+EncodeError : [Unrenderable(Diagnostic(XmlNsCore.EncodeProblem))]
 
 AttributeOrder : [AsGiven, SortedBy((XmlNsCore.Name, XmlNsCore.Name -> [Before, Same, After]))]
 
@@ -836,8 +839,8 @@ Bound : {
 
 Work : [Enter(XmlNsCore.Node), Leave({ written : Str, mark : U64 })]
 
-unrenderable : XmlNsCore.RenderProblem, List(Str) -> Try(_, RenderError)
-unrenderable = |problem, path| Err(Unrenderable({ problem, path }))
+unrenderable : XmlNsCore.EncodeProblem, List(Str) -> Try(_, EncodeError)
+unrenderable = |problem, path| Err(Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: (path).map(|part| Key(part)) }))
 
 bind : Bound, Str, XmlNsCore.Namespace -> Bound
 bind = |bound, key, namespace| {
@@ -889,7 +892,7 @@ ordered = |attributes, order| {
 }
 
 # Each element's own prefixes and bindings, checked against the scope.
-render_as_read : List(U8), XmlNsCore.Node, AttributeOrder -> Try(List(U8), RenderError)
+render_as_read : List(U8), XmlNsCore.Node, AttributeOrder -> Try(List(U8), EncodeError)
 render_as_read = |start, root, order| {
 	var $out = start
 	var $bound = { entries: [], active: Dict.empty() }
@@ -906,7 +909,7 @@ render_as_read = |start, root, order| {
 			}
 
 			Enter(Text(text)) => {
-				$out = escape_text($out, text).map_err(|problem| Unrenderable({ problem, path: $path }))?
+				$out = escape_text($out, text).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 			}
 
 			Enter(Element(element)) => {
@@ -918,7 +921,7 @@ render_as_read = |start, root, order| {
 				for binding in element.bindings {
 					declared = check_binding(binding, $path)?
 					$bound = bind($bound, declared.key, binding.namespace)
-					$out = write_attribute($out, declared.attribute, namespace_str(binding.namespace)).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					$out = write_attribute($out, declared.attribute, namespace_str(binding.namespace)).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 				}
 				key = match element.name.prefix {
 					Prefix(prefix) => prefix
@@ -929,7 +932,7 @@ render_as_read = |start, root, order| {
 				}
 				attributes = ordered(element.attributes, order)
 				if attributes.len() > 1 {
-					check_unique(attributes).map_err(|_| Unrenderable({ problem: DuplicateAttribute(written_name_of(attributes)), path: $path }))?
+					check_unique(attributes).map_err(|_| Unrenderable(Diagnostic.{ problem: DuplicateAttribute(written_name_of(attributes)), location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 				}
 				for attribute in attributes {
 					check_name(attribute.name.prefix, attribute.name.local, $path)?
@@ -941,7 +944,7 @@ render_as_read = |start, root, order| {
 					if !in_scope {
 						return unrenderable(UnboundNamespace(namespace_str(attribute.name.namespace)), $path)
 					}
-					$out = write_attribute($out, written_name(attribute.name.prefix, attribute.name.local), attribute.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					$out = write_attribute($out, written_name(attribute.name.prefix, attribute.name.local), attribute.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 				}
 				if element.children.is_empty() {
 					$out = $out.append('/').append('>')
@@ -971,7 +974,7 @@ render_as_read = |start, root, order| {
 # Prefixes from a table, declared on the root. `$default` is the default
 # namespace in effect, changed with `xmlns` where an unprefixed element needs
 # another; `$defaults` remembers it for each open element.
-render_with_table : List(U8), XmlNsCore.Node, AttributeOrder, List({ prefix : Str, namespace : Str }) -> Try(List(U8), RenderError)
+render_with_table : List(U8), XmlNsCore.Node, AttributeOrder, List({ prefix : Str, namespace : Str }) -> Try(List(U8), EncodeError)
 render_with_table = |start, root, order, entries| {
 	root_path = match root {
 		Element(element) => [written_name(element.name.prefix, element.name.local)]
@@ -1026,7 +1029,7 @@ render_with_table = |start, root, order, entries| {
 			}
 
 			Enter(Text(text)) => {
-				$out = escape_text($out, text).map_err(|problem| Unrenderable({ problem, path: $path }))?
+				$out = escape_text($out, text).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 			}
 
 			Enter(Element(element)) => {
@@ -1045,18 +1048,18 @@ render_with_table = |start, root, order, entries| {
 				$out = $out.append('<').concat(written.to_utf8())
 				outer_default = $default
 				if prefix == Ok("") and $default != element.name.namespace {
-					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 					$default = element.name.namespace
 				}
 				if $first {
 					for declared in $declarations {
-						$out = write_attribute($out, declared.name, declared.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
+						$out = write_attribute($out, declared.name, declared.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 					}
 					$first = False
 				}
 				attributes = ordered(element.attributes, order)
 				if attributes.len() > 1 {
-					check_unique(attributes).map_err(|_| Unrenderable({ problem: DuplicateAttribute(written_name_of(attributes)), path: $path }))?
+					check_unique(attributes).map_err(|_| Unrenderable(Diagnostic.{ problem: DuplicateAttribute(written_name_of(attributes)), location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 				}
 				for attribute in attributes {
 					if !is_ncname(attribute.name.local) {
@@ -1068,7 +1071,7 @@ render_with_table = |start, root, order, entries| {
 							Ok(p) => "${p}:${attribute.name.local}"
 							Err(_) => return unrenderable(UnboundNamespace(namespace_str(attribute.name.namespace)), $path)
 						}
-					$out = write_attribute($out, attribute_name, attribute.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					$out = write_attribute($out, attribute_name, attribute.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
 				}
 				if element.children.is_empty() {
 					$out = $out.append('/').append('>')
@@ -1166,7 +1169,7 @@ written_name_of = |attributes| {
 	}
 }
 
-check_name : [Prefix(Str), Unprefixed], Str, List(Str) -> Try({}, RenderError)
+check_name : [Prefix(Str), Unprefixed], Str, List(Str) -> Try({}, EncodeError)
 check_name = |prefix, local, path| {
 	match prefix {
 		Prefix(p) if !is_ncname(p) => unrenderable(InvalidName(p), path)
@@ -1175,7 +1178,7 @@ check_name = |prefix, local, path| {
 }
 
 # A binding's attribute name and scope key, with the reserved-prefix rules.
-check_binding : XmlNsCore.Binding, List(Str) -> Try({ key : Str, attribute : Str }, RenderError)
+check_binding : XmlNsCore.Binding, List(Str) -> Try({ key : Str, attribute : Str }, EncodeError)
 check_binding = |binding, path| {
 	match binding.prefix {
 		Default =>
@@ -1197,7 +1200,7 @@ check_binding = |binding, path| {
 	}
 }
 
-write_attribute : List(U8), Str, Str -> Try(List(U8), XmlNsCore.RenderProblem)
+write_attribute : List(U8), Str, Str -> Try(List(U8), XmlNsCore.EncodeProblem)
 write_attribute = |out, attribute_name, value| {
 	escaped = escape_value(out.append(' ').concat(attribute_name.to_utf8()).append('=').append('"'), value)?
 	Ok(escaped.append('"'))
@@ -1205,7 +1208,7 @@ write_attribute = |out, attribute_name, value| {
 
 # See https://www.w3.org/TR/xml/#syntax. Runs that need no escaping are
 # copied whole.
-escape_text : List(U8), Str -> Try(List(U8), XmlNsCore.RenderProblem)
+escape_text : List(U8), Str -> Try(List(U8), XmlNsCore.EncodeProblem)
 escape_text = |out, text| {
 	bytes = text.to_utf8()
 	var $out = out
@@ -1242,7 +1245,7 @@ escape_text = |out, text| {
 
 # See https://www.w3.org/TR/xml/#AVNormalize: whitespace characters are
 # written as references, so normalisation keeps them.
-escape_value : List(U8), Str -> Try(List(U8), XmlNsCore.RenderProblem)
+escape_value : List(U8), Str -> Try(List(U8), XmlNsCore.EncodeProblem)
 escape_value = |out, value| {
 	bytes = value.to_utf8()
 	var $out = out
@@ -1283,7 +1286,7 @@ escape_value = |out, value| {
 
 # The position after the character at `pos` of valid UTF-8, if XML 1.0
 # allows it (https://www.w3.org/TR/xml/#NT-Char).
-check_scalar : List(U8), U64 -> Try(U64, XmlNsCore.RenderProblem)
+check_scalar : List(U8), U64 -> Try(U64, XmlNsCore.EncodeProblem)
 check_scalar = |bytes, pos| {
 	scalar = scalar_at(bytes, pos)
 	c = scalar.code
@@ -1527,10 +1530,10 @@ expect {
 	XmlNsCore.parse_str(input).is_ok()
 }
 
-render_omitted : Str -> Try(Str, [Parse, Render(XmlNsCore.RenderProblem)])
+render_omitted : Str -> Try(Str, [Parse, Render(XmlNsCore.EncodeProblem)])
 render_omitted = |input| {
 	match XmlNsCore.parse_str(input) {
-		Ok(doc) => XmlNsCore.render(doc, { declaration: Omitted }).map_err(|Unrenderable(failure)| Render(failure.problem))
+		Ok(doc) => render_document(doc, { declaration: Omitted }).map_err(|Unrenderable(failure)| Render(failure.problem))
 		Err(_) => Err(Parse)
 	}
 }
@@ -1541,8 +1544,8 @@ example_element = |element_name, bindings, attributes, children| Element({ name:
 plain : Str -> XmlNsCore.Name
 plain = |local| { namespace: NoNamespace, local, prefix: Unprefixed }
 
-render_tree : XmlNsCore.Node, XmlNsCore.RenderProps -> Try(Str, [Unrenderable({ problem : XmlNsCore.RenderProblem, path : List(Str) })])
-render_tree = |root, props| XmlNsCore.render({ declaration: Err(Missing), root }, props)
+render_tree : XmlNsCore.Node, XmlNsCore.WriteProps -> Try(Str, [Unrenderable(Diagnostic(XmlNsCore.EncodeProblem))])
+render_tree = |root, props| render_document({ declaration: Err(Missing), root }, props)
 
 # Escaping: `&` and `<` everywhere, `>` after `]]`, `"` and whitespace in
 # attribute values, and a carriage return in text.
@@ -1557,28 +1560,28 @@ expect render_tree(example_element(plain("a"), [], [], []), { declaration: Stand
 expect render_omitted("<r xmlns='urn:d' xmlns:p='urn:p'><p:a p:k='1' k='2'/><b xmlns=''/>t</r>") == Ok("<r xmlns=\"urn:d\" xmlns:p=\"urn:p\"><p:a p:k=\"1\" k=\"2\"/><b xmlns=\"\"/>t</r>")
 
 # Characters and names XML 1.0 does not allow are refused, with a path.
-expect render_tree(example_element(plain("a"), [], [], [example_element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable({ problem: InvalidChar(1), path: ["a", "b"] }))
-expect render_tree(example_element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable({ problem: InvalidChar(0xFFFE), path: ["a"] }))
-expect render_tree(example_element(plain("1a"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("1a"), path: ["1a"] }))
-expect render_tree(example_element(plain("a:b"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("a:b"), path: ["a:b"] }))
-expect render_tree(example_element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:xmlns"), path: ["a"] }))
-expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [], [], [example_element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable(Diagnostic.{ problem: InvalidChar(1), location: Unavailable(GeneratedValue), path: (["a", "b"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable(Diagnostic.{ problem: InvalidChar(0xFFFE), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("1a"), [], [], []), {}) == Err(Unrenderable(Diagnostic.{ problem: InvalidName("1a"), location: Unavailable(GeneratedValue), path: (["1a"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("a:b"), [], [], []), {}) == Err(Unrenderable(Diagnostic.{ problem: InvalidName("a:b"), location: Unavailable(GeneratedValue), path: (["a:b"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable(Diagnostic.{ problem: InvalidName("xmlns:xmlns"), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable(Diagnostic.{ problem: InvalidName("xmlns:p"), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
 
 # A prefix must be bound to its name's namespace where it is used.
-expect render_tree(example_element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace("urn:p"), path: ["p:a"] }))
-expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
-expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(example_element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable(Diagnostic.{ problem: UnboundNamespace("urn:p"), location: Unavailable(GeneratedValue), path: (["p:a"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable(Diagnostic.{ problem: UnboundNamespace(""), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
+expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable(Diagnostic.{ problem: UnboundNamespace(""), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
 expect render_tree(example_element(plain("a"), [], [{ name: { namespace: Uri(XmlNsCore.xml_namespace), local: "lang", prefix: Prefix("xml") }, value: "en" }], []), { declaration: Omitted }) == Ok("<a xml:lang=\"en\"/>")
 
 # Duplicate expanded attribute names are refused.
-expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable({ problem: DuplicateAttribute("q:k"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable(Diagnostic.{ problem: DuplicateAttribute("q:k"), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
 
 # A table names every namespace once, on the root, in table order, with no
 # unused declarations, and switches the default where needed.
 expect {
 	match XmlNsCore.parse_str("<x:doc xmlns:x='urn:w' xmlns:r='urn:r'><x:body><p xmlns='' r:id='1'/><x:p/></x:body></x:doc>") {
 		Ok(doc) =>
-			XmlNsCore.render(doc, { declaration: Omitted, prefixes: Table([{ prefix: "unused", namespace: "urn:unused" }, { prefix: "", namespace: "urn:w" }, { prefix: "rel", namespace: "urn:r" }]) })
+			render_document(doc, { declaration: Omitted, prefixes: Table([{ prefix: "unused", namespace: "urn:unused" }, { prefix: "", namespace: "urn:w" }, { prefix: "rel", namespace: "urn:r" }]) })
 				== Ok("<doc xmlns=\"urn:w\" xmlns:rel=\"urn:r\"><body><p xmlns=\"\" rel:id=\"1\"/><p/></body></doc>")
 
 		Err(_) => False
@@ -1586,13 +1589,13 @@ expect {
 }
 expect {
 	match XmlNsCore.parse_str("<a xmlns='urn:a'/>") {
-		Ok(doc) => XmlNsCore.render(doc, { prefixes: Table([]) }) == Err(Unrenderable({ problem: UnboundNamespace("urn:a"), path: ["a"] }))
+		Ok(doc) => render_document(doc, { prefixes: Table([]) }) == Err(Unrenderable(Diagnostic.{ problem: UnboundNamespace("urn:a"), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
 		Err(_) => False
 	}
 }
 expect {
 	match XmlNsCore.parse_str("<a xmlns='urn:a'/>") {
-		Ok(doc) => XmlNsCore.render(doc, { prefixes: Table([{ prefix: "p", namespace: "urn:a" }, { prefix: "p", namespace: "urn:b" }]) }) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
+		Ok(doc) => render_document(doc, { prefixes: Table([{ prefix: "p", namespace: "urn:a" }, { prefix: "p", namespace: "urn:b" }]) }) == Err(Unrenderable(Diagnostic.{ problem: InvalidName("xmlns:p"), location: Unavailable(GeneratedValue), path: (["a"]).map(|part| Key(part)) }))
 		Err(_) => False
 	}
 }
@@ -1607,7 +1610,7 @@ by_first_byte = |a, b| {
 expect render_omitted("<a z='1' y='2' x='3'/>") == Ok("<a z=\"1\" y=\"2\" x=\"3\"/>")
 expect {
 	match XmlNsCore.parse_str("<a z='1' y='2' x='3'/>") {
-		Ok(doc) => XmlNsCore.render(doc, { declaration: Omitted, attribute_order: SortedBy(|a, b| by_first_byte(a.local, b.local)) }) == Ok("<a x=\"3\" y=\"2\" z=\"1\"/>")
+		Ok(doc) => render_document(doc, { declaration: Omitted, attribute_order: SortedBy(|a, b| by_first_byte(a.local, b.local)) }) == Ok("<a x=\"3\" y=\"2\" z=\"1\"/>")
 		Err(_) => False
 	}
 }
@@ -1622,8 +1625,8 @@ expect {
 		|input| {
 			match XmlNsCore.parse_str(input) {
 				Ok(doc) =>
-					match XmlNsCore.render(doc, {}) {
-						Ok(text) => XmlNsCore.parse_str(text).map_ok(|again| again.root) == Ok(doc.root) and XmlNsCore.render(doc, {}) == Ok(text)
+					match render_document(doc, {}) {
+						Ok(text) => XmlNsCore.parse_str(text).map_ok(|again| again.root) == Ok(doc.root) and render_document(doc, {}) == Ok(text)
 						Err(_) => False
 					}
 
@@ -1644,7 +1647,7 @@ expect {
 expect render_omitted("<p:a xmlns:p='urn:p' k='1 &amp; 2'>x &lt; y</p:a>") == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
 expect {
 	match XmlNsCore.parse_str("<a xmlns='urn:w'><b/></a>") {
-		Ok(doc) => XmlNsCore.render(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
+		Ok(doc) => render_document(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
 		Err(_) => False
 	}
 }

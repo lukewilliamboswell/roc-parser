@@ -1,3 +1,4 @@
+import Diagnostic
 import MarkupCore
 import HtmlContextRules as Rules
 import MarkupVocabulary
@@ -130,12 +131,12 @@ ConstructionContext :: { parent : MarkupCore.Name, scripting : Bool, scopes : Ru
 	from_parent = |props| DomConstruction.root({ parent: props.parent, scripting: props.scripting == Enabled })
 
 	## Check a new child and return its descendant context.
-	child : ConstructionContext, MarkupCore.Name -> Try(ConstructionContext, DomConstruction.Problem)
-	child = |context, name| DomConstruction.enter(context, name)
+	child : ConstructionContext, MarkupCore.Name -> Try(ConstructionContext, [InvalidConstruction(Diagnostic(DomConstruction.Problem))])
+	child = |context, name| DomConstruction.enter(context, name).map_err(construction_error)
 
 	## Check decoded text placement.
-	text : ConstructionContext, Str -> Try({}, DomConstruction.Problem)
-	text = |context, value| DomConstruction.text(context, value)
+	text : ConstructionContext, Str -> Try({}, [InvalidConstruction(Diagnostic(DomConstruction.Problem))])
+	text = |context, value| DomConstruction.text(context, value).map_err(construction_error)
 }
 
 html = |name| name.namespace == Uri(MarkupCore.html_namespace)
@@ -285,3 +286,6 @@ expect {
 	table = DomConstruction.enter(form, h("table"))?
 	rule(table, "form").is_ok()
 }
+
+construction_error : DomConstruction.Problem -> [InvalidConstruction(Diagnostic(DomConstruction.Problem))]
+construction_error = |problem| InvalidConstruction(Diagnostic.{ problem, location: Unavailable(GeneratedValue), path: [] })

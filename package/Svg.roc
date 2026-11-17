@@ -23,12 +23,10 @@ Svg := { parsed : MarkupCore.Parsed }.{
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Parse a complete namespaced document with strict defaults.
-	parse_str : Str -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
-	parse_str = |source| parse_with(source, {})
 
 	## Parse a complete document with the requested syntax and checks.
-	parse_with : Str, Props -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
-	parse_with = |source, props| {
+	parse_str : Str, Props -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
+	parse_str = |source, props| {
 		parsed = if props.syntax == HtmlSyntax {
 			HtmlTree.parse(source, True, { namespace: MarkupCore.html_namespace, name: "body", defer_projection: True }, props)?
 		} else {
@@ -58,12 +56,12 @@ Svg := { parsed : MarkupCore.Parsed }.{
 	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
-	validate : ValidationProps -> Try(Svg, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
+	validate : ValidationProps -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Convert a checked complete document literal.
 	from_quote : Str -> Try(Svg, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| validate({ source: source }).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("Svg", error))
 
 	## Parse fixed literal segments into an indexed plan without binding values.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
@@ -131,8 +129,8 @@ SvgTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 SvgFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Check imported fragment text with explicit options and a diagnostic name.
-	validate : Svg.ValidationProps -> Try(Svg.Fragment, [BadQuotedBytes(Str)])
-	validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
+	validate : Svg.ValidationProps -> Try(Svg.Fragment, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Check a fragment literal with strict defaults.
 	from_quote : Str -> Try(Svg.Fragment, [BadQuotedBytes(Str)])
@@ -146,9 +144,9 @@ SvgFragment := { parsed : MarkupCore.Parsed }.{
 	}
 }
 
-expect Svg.parse_str("<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0L10 10z' pathLength='10'/></svg>").is_ok()
-expect Svg.parse_str("<svg/>").is_err()
-expect Svg.parse_str("<s:svg xmlns:s='http://www.w3.org/2000/svg'/>").is_ok()
+expect Svg.parse_str("<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0L10 10z' pathLength='10'/></svg>", {}).is_ok()
+expect Svg.parse_str("<svg/>", {}).is_err()
+expect Svg.parse_str("<s:svg xmlns:s='http://www.w3.org/2000/svg'/>", {}).is_ok()
 expect Svg.parse_fragment("<path d='M0 0' pathLength='1'/>", {}).is_ok()
 expect Svg.parse_fragment("<path pathlength='1'/>", {}).is_err()
 expect Svg.parse_fragment("<lineargradient/>", {}).is_err()
@@ -203,7 +201,7 @@ fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
 }
 expect Svg.parse_fragment("<lineargradient viewbox='0 0 10 10'/>", { syntax: HtmlSyntax }).is_err()
 expect Svg.parse_fragment("<lineargradient id='g'/>", { syntax: HtmlSyntax }).is_ok()
-expect Svg.parse_with("<svg viewbox='0 0 10 10'><path pathlength='1' d='M0 0'/></svg>", { syntax: HtmlSyntax }).is_ok()
+expect Svg.parse_str("<svg viewbox='0 0 10 10'><path pathlength='1' d='M0 0'/></svg>", { syntax: HtmlSyntax }).is_ok()
 expect Svg.parse_fragment("<circle><path/></circle>", {}).is_err()
 expect Svg.parse_fragment("<path fill='gibberish'/>", {}).is_err()
 expect Svg.parse_fragment("<path fill='url(#gradient) red'/>", {}).is_ok()
@@ -236,7 +234,7 @@ expect {
 	p.metadata().slots.first()?.expected == Language(ExtensionAttribute)
 }
 
-expect match Svg.parse_with("<svg viewbox='0 0 1 1'></svg>", { syntax: HtmlSyntax, strict_foreign_spelling: True }) {
+expect match Svg.parse_str("<svg viewbox='0 0 1 1'></svg>", { syntax: HtmlSyntax, strict_foreign_spelling: True }) {
 	Err(InvalidMarkup(error)) => match error.problem {
 		NonCanonicalName(detail) => detail.authored == "viewbox" and detail.expected == "viewBox"
 		_ => False
@@ -247,4 +245,4 @@ expect Svg.parse_fragment("<linearGradient id='g'/>", { syntax: HtmlSyntax, stri
 expect Svg.parse_fragment("<lineargradient id='g'/>", { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_err()
 expect Svg.parse_segments(["<lineargradient id='", "'/>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_err()
 expect Svg.parse_segments(["<linearGradient id='", "'/>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
-expect Svg.parse_with("<svg xmlns='http://www.w3.org/2000/svg' viewbox='0 0 1 1'/>", { strict_foreign_spelling: True, allow_unknown_attributes: True }).is_ok()
+expect Svg.parse_str("<svg xmlns='http://www.w3.org/2000/svg' viewbox='0 0 1 1'/>", { strict_foreign_spelling: True, allow_unknown_attributes: True }).is_ok()

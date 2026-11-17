@@ -1,3 +1,6 @@
+import XmlNamespaced
+import XmlParseProps
+import Diagnostic
 import XmlCore
 import XmlNsCore
 import Parser
@@ -8,7 +11,7 @@ Xml := { declaration : Try(XmlCore.Declaration, [Missing]), root : XmlCore.Node 
 	to_hash : _
 
 	## XML documents with namespace-resolved names.
-	Namespaced : XmlNsCore
+	Namespaced : XmlNamespaced
 	Lints : XmlCore.Lints
 	ValidationProps : XmlCore.ValidationProps
 	Attribute : XmlCore.Attribute
@@ -20,6 +23,7 @@ Xml := { declaration : Try(XmlCore.Declaration, [Missing]), root : XmlCore.Node 
 	Construct : XmlCore.Construct
 	Error : XmlCore.Error
 	ReaderProps : XmlCore.ReaderProps
+	Props : XmlParseProps
 	Limit : XmlCore.Limit
 	ReadError : XmlCore.ReadError
 	StreamProps : XmlCore.StreamProps
@@ -38,16 +42,22 @@ Xml := { declaration : Try(XmlCore.Declaration, [Missing]), root : XmlCore.Node 
 	reader = XmlCore.reader
 
 	## Parse complete XML with explicit resource limits.
-	parse_str : Str, ReaderProps -> Try(Xml, ReadError)
-	parse_str = |source, props| XmlCore.parse(source, props).map_ok(|doc| Xml.{ declaration: doc.declaration, root: doc.root })
+	parse_str : Str, Props -> Try(Xml, ReadError)
+	parse_str = |source, props| {
+		result = match props.limits {
+			Unbounded => XmlCore.parse_str(source)
+			Bounded(limits) => XmlCore.parse(source, limits)
+		}
+		result.map_ok(|doc| Xml.{ declaration: doc.declaration, root: doc.root })
+	}
 
 	## Construct an XML parser for composition.
 	parser : {} -> Parser(Parser.Utf8.Bytes, Xml, Problem)
 	parser = |_| XmlCore.parser.map(|doc| Xml.{ declaration: doc.declaration, root: doc.root })
 
 	## Check source with quotation lint rules using typed native diagnostics.
-	validate : ValidationProps -> Try(Xml, [BadQuotedBytes(Str)])
+	validate : ValidationProps -> Try(Xml, [InvalidXml(Error)])
 	validate = |props| XmlCore.validate(props).map_ok(|doc| Xml.{ declaration: doc.declaration, root: doc.root })
 	from_quote : Str -> Try(Xml, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| XmlCore.from_quote(source).map_ok(|doc| Xml.{ declaration: doc.declaration, root: doc.root })
 }

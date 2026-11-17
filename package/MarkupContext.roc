@@ -1,3 +1,4 @@
+import Diagnostic
 import MarkupCore
 import DomName
 import HtmlValidate
@@ -101,17 +102,17 @@ ConstructorContext :: { parent : MarkupCore.Name, attributes : HtmlValidate.Attr
 
 	## Validate a parent identity and seed its authoring context.
 	Props := { parent : MarkupCore.Name, attributes : List(MarkupContext.Attribute) ?? [], syntax : MarkupCore.Syntax ?? HtmlSyntax, scripting : [Enabled, Disabled] ?? Enabled }
-	from_parent : Props -> Try(ConstructorContext, MarkupContext.Problem)
-	from_parent = |props| MarkupContext.seed(props.parent, props.attributes, { syntax: props.syntax, scripting: props.scripting == Enabled })
+	from_parent : Props -> Try(ConstructorContext, [InvalidPlacement(Diagnostic(MarkupContext.Problem))])
+	from_parent = |props| MarkupContext.seed(props.parent, props.attributes, { syntax: props.syntax, scripting: props.scripting == Enabled }).map_err(placement_error)
 
 	## Validate a child without changing the reusable parent context.
 	ChildProps := { name : MarkupCore.Name, attributes : List(MarkupContext.Attribute) ?? [] }
-	child : ConstructorContext, ChildProps -> Try(ConstructorContext, MarkupContext.Problem)
-	child = |context, props| MarkupContext.child(context, props.name, props.attributes)
+	child : ConstructorContext, ChildProps -> Try(ConstructorContext, [InvalidPlacement(Diagnostic(MarkupContext.Problem))])
+	child = |context, props| MarkupContext.child(context, props.name, props.attributes).map_err(placement_error)
 
 	## Validate decoded text against the parent's content model.
-	text : ConstructorContext, Str -> Try({}, MarkupContext.Problem)
-	text = |context, value| MarkupContext.text(context, value)
+	text : ConstructorContext, Str -> Try({}, [InvalidPlacement(Diagnostic(MarkupContext.Problem))])
+	text = |context, value| MarkupContext.text(context, value).map_err(placement_error)
 }
 
 TableMode : [Body, Table, Section, Row, Colgroup]
@@ -430,3 +431,6 @@ expect {
 	group = MarkupContext.child(select, html_name("optgroup"), [])?
 	$ok and MarkupContext.child(group, html_name("option"), []).is_ok() and MarkupContext.child(group, html_name("optgroup"), []).is_err() and MarkupContext.child(group, html_name("hr"), []).is_err()
 }
+
+placement_error : MarkupContext.Problem -> [InvalidPlacement(Diagnostic(MarkupContext.Problem))]
+placement_error = |problem| InvalidPlacement(Diagnostic.{ problem, location: Unavailable(GeneratedValue), path: [] })
