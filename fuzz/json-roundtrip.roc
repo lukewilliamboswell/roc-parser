@@ -1099,7 +1099,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${JsonValue.describe_problem(error.problem)}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

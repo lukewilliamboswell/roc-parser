@@ -101,7 +101,7 @@ report : Str -> Str
 report = |text| {
 	match JsonValue.parse_str(text) {
 		Ok(_) => "valid"
-		Err(InvalidJsonValue({ line, column, problem })) => "${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}"
+		Err(InvalidJsonValue({ line, column, problem })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 
@@ -136,7 +136,7 @@ modes = |text| {
 		|(name, chosen)| {
 			match JsonValue.parse_with(text, chosen) {
 				Ok(value) => "${name}: ${JsonValue.to_str(value) ?? "?"}"
-				Err(InvalidJsonValue({ line, column, problem })) => "${name}: ${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}"
+				Err(InvalidJsonValue({ line, column, problem })) => "${name}: ${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 			}
 		},
 	)
@@ -275,7 +275,7 @@ show! : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)]) => Try({}, _)
 show! = |parsed| {
 	match parsed {
 		Ok(value) => Stdout.line!(JsonValue.to_str(value) ?? "not writable")?
-		Err(InvalidJsonValue({ line, column, problem })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}")?
+		Err(InvalidJsonValue({ line, column, problem })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}")?
 	}
 	Ok({})
 }

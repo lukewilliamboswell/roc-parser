@@ -22,27 +22,6 @@ JsonStream :: [].{
 	## Record framing failures and the underlying structured JSON problem.
 	Problem : [Json(Parser.Problem(JsonValue.Problem)), InvalidUtf8, IncompleteUtf8, RecordByteLimitExceeded(U64), InvalidBom, ExpectedComment, TrailingComma, ExpectedArray, UnexpectedContent, ExpectedArrayItem, IncompleteArray, MismatchedDelimiter, NestingLimitExceeded(U64)]
 
-	## Human-readable display text; match Problem tags for program decisions.
-	describe_problem : Parser.Problem(Problem) -> Str
-	describe_problem = |detail| match detail {
-		Json(inner) => JsonValue.describe_problem(inner)
-		InvalidUtf8 => "invalid UTF-8"
-		IncompleteUtf8 => "incomplete UTF-8 character"
-		InvalidBom => "invalid byte order mark"
-		ExpectedComment => "expected a JSON comment"
-		TrailingComma => "trailing comma is not allowed"
-		ExpectedArray => "expected a top-level JSON array"
-		UnexpectedContent => "unexpected content after the array"
-		ExpectedArrayItem => "expected an array item"
-		IncompleteArray => "incomplete JSON array"
-		MismatchedDelimiter => "mismatched closing delimiter"
-		RecordByteLimitExceeded(_) => "record byte limit exceeded"
-		NestingLimitExceeded(_) => "nesting limit exceeded"
-		UnexpectedInput => "unexpected input"
-		NoAlternatives => "no alternatives"
-		CharacterNotFound => "character not found"
-	}
-
 	## Writers validate a complete value before emitting it. Memory includes one
 	## encoded record, bounded by max_record_bytes before rendering.
 	WriteProps := { format : Format ?? Ndjson, sort_keys : Bool ?? False, max_record_bytes : U64 ?? 4_194_304 }

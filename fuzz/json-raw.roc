@@ -117,9 +117,6 @@ check_location = |bytes, result| {
 			if error.line == 0 or error.column == 0 {
 				crash "JSON error locations must be one-based: ${show_result(result)}"
 			}
-			if JsonValue.describe_problem(error.problem).is_empty() {
-				crash "JSON errors must explain the problem"
-			}
 			lengths = line_lengths(bytes)
 			match lengths.get(error.line - 1) {
 				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${show_result(result)}"
@@ -145,7 +142,7 @@ check_bytes = |bytes| {
 				crash "JsonValue.parser returned more input than it was given"
 			}
 		Err(ParseError({ problem, offset })) =>
-			if offset > bytes.len() or JsonValue.describe_problem(problem).is_empty() {
+			if offset > bytes.len() {
 				crash "JsonValue.parser failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}"
 			}
 	}
@@ -572,7 +569,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${JsonValue.describe_problem(error.problem)}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

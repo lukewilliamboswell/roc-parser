@@ -139,14 +139,19 @@ include::examples/json-guide.expected[lines=4..5]
 == Show where an error is
 
 `InvalidJsonValue` carries a `JsonValue.Error` record: a one-based `line` and
-`column` and a structured `problem`. Match `JsonValue.Problem` tags such as
-`DuplicateKey(key)` or
-`LimitExceeded({ limit, max })` for program decisions.
-`JsonValue.describe_problem(problem)` formats display text.
-Columns count bytes from the start of the line, and
-a line ends at LF, CR or CRLF. The position is the start of the problem: the
-first character of a bad number or literal, the comma before a closing
-bracket, the slash of a comment, or the opening quote of a repeated key.
+`column` and a structured `problem`. Columns count bytes from the start of
+the line, and a line ends at LF, CR or CRLF. The position is the start of the
+problem: the first character of a bad number or literal, the comma before
+a closing bracket, the slash of a comment, or the opening quote of a
+repeated key.
+
+Match `JsonValue.Problem` tags for program decisions. `DuplicateKey(key)`
+and `ConflictingDuplicateKey(key)` carry the decoded key.
+`LimitExceeded({ limit, max })` identifies the bound and its configured maximum.
+`NonInteroperableNumber({ text, reason })` preserves the exact numeric lexeme
+and distinguishes an unsafe integer, excessive significant digits,
+non-finite value, double overflow or double underflow.
+`Str.inspect(problem)` provides a diagnostic for logs and command-line tools.
 
 [source,roc]
 ----

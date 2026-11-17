@@ -234,7 +234,7 @@ test = |input| {
 				if chosen.duplicates == CollapseIdentical {
 					match (result, rejecting_result) {
 						(Ok(value), Ok(other)) if value != other => crash "CollapseIdentical changed a document without repeated keys\n${Str.inspect(text)}"
-						(Ok(_), Err(InvalidJsonValue(error))) if !is_duplicate(error.problem) => crash "CollapseIdentical accepted a document that Reject refuses for another reason: ${JsonValue.describe_problem(error.problem)}\n${Str.inspect(text)}\n${show_choice(chosen)}"
+						(Ok(_), Err(InvalidJsonValue(error))) if !is_duplicate(error.problem) => crash "CollapseIdentical accepted a document that Reject refuses for another reason: ${Str.inspect(error.problem)}\n${Str.inspect(text)}\n${show_choice(chosen)}"
 						_ => {}
 					}
 				}
@@ -299,9 +299,6 @@ check_location = |input, choice, result| {
 			if error.line == 0 or error.column == 0 {
 				crash "JSON error locations must be one-based: ${context}"
 			}
-			if JsonValue.describe_problem(error.problem).is_empty() {
-				crash "JSON errors must explain the problem: ${context}"
-			}
 			lengths = line_lengths(input.document)
 			match lengths.get(error.line - 1) {
 				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${context}"
@@ -327,7 +324,7 @@ check_bytes = |input| {
 				crash "JsonValue.parser_with returned more input than it was given\n${show_choice(input.choice)}"
 			}
 		Err(ParseError({ problem, offset })) =>
-			if offset > bytes.len() or JsonValue.describe_problem(problem).is_empty() {
+			if offset > bytes.len() {
 				crash "JsonValue.parser_with failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}\n${show_choice(input.choice)}"
 			}
 	}
@@ -368,7 +365,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${JsonValue.describe_problem(error.problem)}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

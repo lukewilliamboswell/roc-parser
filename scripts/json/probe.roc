@@ -173,7 +173,7 @@ run = |bytes, flags| {
 				}
 				Err(InvalidJsonValue(error)) => {
 					location = "\"line\":${error.line.to_str()},\"column\":${error.column.to_str()}"
-					"{\"status\":\"error\",${location},\"message\":${json_string(JsonValue.describe_problem(error.problem))},\"parser_agrees\":${boolean(combinator.is_err())}}"
+					"{\"status\":\"error\",${location},\"message\":${json_string(Str.inspect(error.problem))},\"parser_agrees\":${boolean(combinator.is_err())}}"
 				}
 			}
 		}
@@ -183,7 +183,7 @@ run = |bytes, flags| {
 				Err(ParseError({ problem, offset })) => {
 					at = position(bytes, offset)
 					location = "\"line\":${at.line.to_str()},\"column\":${at.column.to_str()},\"offset\":${offset.to_str()}"
-					"{\"status\":\"error\",${location},\"message\":${json_string(JsonValue.describe_problem(problem))},\"parser_agrees\":true}"
+					"{\"status\":\"error\",${location},\"message\":${json_string(Str.inspect(problem))},\"parser_agrees\":true}"
 				}
 			}
 		}
