@@ -11,6 +11,7 @@ import cli.Stdout
 import cli.Stderr
 import src/CommandLine
 import src/Vocabulary
+import "markup/vocabulary.json" as vocabulary_json : Str
 main! = |raw| match Cli.parse_or_display_message(CommandLine.generate, raw, OsStr.to_raw) {
 	Err(Help(message)) | Err(Version(message)) => Stdout.line!(message)
 	Err(InvalidUsage(message)) => {
@@ -30,8 +31,24 @@ generate! = |args| {
 	if args.generator != "vocabulary" {
 		return Err(UnknownGenerator(args.generator))
 	}
+	output = Path.utf8("package/MarkupNameTables.roc")
+	if args.check {
+		if Path.read_utf8!(output)? != vocabulary_text {
+			return Err(StaleGeneratedSource(Path.display(output)))
+		}
+	} else {
+		Path.write_utf8!(output, vocabulary_text)?
+	}
+	Ok({})
+}
+
+## Validate and render the checked-in inventory while compiling the generator.
+vocabulary_text : Str
+vocabulary_text = render_vocabulary(vocabulary_json) ?? crash "scripts/markup/vocabulary.json: invalid vocabulary inventory"
+
+render_vocabulary = |json| {
 	parsed : Try({ schema_version : U64, tables : Dict(Str, List(Str)) }, _)
-	parsed = Json.parse(Path.read_utf8!("scripts/markup/vocabulary.json")?)
+	parsed = Json.parse(json)
 	document = parsed.map_err(|_| InvalidVocabularyDocument)?
 	if document.schema_version != 1 {
 		return Err(UnsupportedSchema(document.schema_version))
@@ -40,14 +57,5 @@ generate! = |args| {
 		return Err(InvalidVocabularyDocument)
 	}
 	tables = { html: document.tables.get("html").map_err(|_| InvalidVocabularyDocument)?, svg: document.tables.get("svg").map_err(|_| InvalidVocabularyDocument)?, mathml: document.tables.get("mathml").map_err(|_| InvalidVocabularyDocument)?, aria: document.tables.get("aria").map_err(|_| InvalidVocabularyDocument)? }
-	text = Vocabulary.render(tables)?
-	output = Path.utf8("package/MarkupNameTables.roc")
-	if args.check {
-		if Path.read_utf8!(output)? != text {
-			return Err(StaleGeneratedSource(Path.display(output)))
-		}
-	} else {
-		Path.write_utf8!(output, text)?
-	}
-	Ok({})
+	Vocabulary.render(tables)
 }

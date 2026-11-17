@@ -13,6 +13,10 @@ import cli.Stderr
 import cli.Stdout
 import src/CommandLine
 import src/LiteralContract
+import "literals/cases.json" as fixture_json : Str
+
+fixtures : List({ name : Str, body : Str, errors : List(Str), assets : Dict(Str, Str) })
+fixtures = Json.parse(fixture_json) ?? crash "scripts/literals/cases.json: invalid literal fixtures"
 
 main! = |raw| match Cli.parse_or_display_message(CommandLine.literals, raw, OsStr.to_raw) {
 	Err(Help(message)) | Err(Version(message)) => Stdout.line!(message)
@@ -34,9 +38,7 @@ run! = |args| {
 	root = Path.canonicalize!(".")?
 	compiler = if args.roc == "" (Env.var_str!("ROC") ?? "roc") else args.roc
 	roc = if compiler.contains("/") Path.display(Path.canonicalize!(Path.utf8(compiler))?) else compiler
-	parsed : Try(List({ name : Str, body : Str, errors : List(Str), assets : Dict(Str, Str) }), _)
-	parsed = Json.parse(Path.read_utf8!("scripts/literals/cases.json")?)
-	cases = parsed.map_err(|_| InvalidLiteralFixtures)?.keep_if(|case| case.name.contains(filter))
+	cases = fixtures.keep_if(|case| case.name.contains(filter))
 	invalidation = "cache-invalidation".contains(filter)
 	if cases.is_empty() and !invalidation {
 		return Err(NoMatchingContracts(filter))

@@ -171,9 +171,7 @@ prepare! = |target, args, root| {
 	corpus = Path.absolute!(Path.utf8(if args.corpus_dir == "" "${Path.display(root)}/.roc-parser-tmp/fuzz/corpus/${target.name}" else args.corpus_dir))?
 	Path.create_all!(corpus)?
 	if target.seeds != "" {
-		parsed : Try(List(Str), _)
-		parsed = Json.parse(Path.read_utf8!(Path.utf8(target.seeds))?)
-		seeds = parsed.map_err(|_| InvalidSeeds(target.seeds))?
+		seeds = FuzzPlan.seed_values(target.name)
 		for seed in seeds {
 			bytes = FuzzPlan.encode(seed, target.encoding)?
 			hash = Process.digest!(bytes)?

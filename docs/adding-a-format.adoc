@@ -176,7 +176,9 @@ iteration-bounded run in CI, `--seconds` and `--seed` for local runs, and a
   encoding (`raw` for raw bytes, none for a structured target), seeds,
   dictionary, input size and timeout.
 . Add reviewable seeds in `fuzz/seeds/toml.json` and syntax tokens in
-  `fuzz/dictionaries/toml.dict` for the raw target.
+  `fuzz/dictionaries/toml.dict` for the raw target. Add an import and
+  a `seed_sources` entry in `scripts/src/FuzzPlan.roc` for the new seed JSON.
+  Seed JSON and encoding bounds are validated at compile time.
 . Add each target to the `target` matrix of the `fuzz` job in
   `.github/workflows/fuzz.yml`, in the same order as the scheduled entries in `FuzzPlan.entries`. Register the review in
   `reviews` in `scripts/src/HarnessPlan.roc`, with its command and

@@ -57,9 +57,7 @@ check! = || {
 			return Err(UnreviewedFuzzPlatform(entry.name))
 		}
 		if entry.seeds != "" {
-			parsed : Try(List(Str), _)
-			parsed = Json.parse(Path.read_utf8!(Path.utf8(entry.seeds))?)
-			for seed in parsed.map_err(|_| InvalidSeeds(entry.seeds))? {
+			for seed in FuzzPlan.seed_values(entry.name) {
 				_ = FuzzPlan.encode(seed, entry.encoding)?
 			}
 		}

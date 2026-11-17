@@ -1,3 +1,24 @@
+import "../../fuzz/seeds/asciidoc.json" as asciidoc_seeds : Str
+import "../../fuzz/seeds/csv.json" as csv_seeds : Str
+import "../../fuzz/seeds/http-request.json" as http_request_seeds : Str
+import "../../fuzz/seeds/http-response.json" as http_response_seeds : Str
+import "../../fuzz/seeds/json-options.json" as json_options_seeds : Str
+import "../../fuzz/seeds/json.json" as json_seeds : Str
+import "../../fuzz/seeds/markdown-document.json" as markdown_document_seeds : Str
+import "../../fuzz/seeds/markdown-inline-pathological.json" as markdown_inline_pathological_seeds : Str
+import "../../fuzz/seeds/markdown-inline.json" as markdown_inline_seeds : Str
+import "../../fuzz/seeds/markup.json" as markup_seeds : Str
+import "../../fuzz/seeds/ofx.json" as ofx_seeds : Str
+import "../../fuzz/seeds/qif.json" as qif_seeds : Str
+import "../../fuzz/seeds/roc-syntax.json" as roc_syntax_seeds : Str
+import "../../fuzz/seeds/validate.json" as validate_seeds : Str
+import "../../fuzz/seeds/xml-ceilings.json" as xml_ceilings_seeds : Str
+import "../../fuzz/seeds/xml-limits.json" as xml_limits_seeds : Str
+import "../../fuzz/seeds/xml-stream.json" as xml_stream_seeds : Str
+import "../../fuzz/seeds/xml.json" as xml_seeds : Str
+import "../../fuzz/seeds/xmlns.json" as xmlns_seeds : Str
+import "../../fuzz/seeds/yaml.json" as yaml_seeds : Str
+
 ## Native target registration; generators live in the entries themselves.
 FuzzPlan := [].{
 
@@ -79,6 +100,10 @@ FuzzPlan := [].{
 		{ name: "roc-syntax-spans", seeds: "fuzz/seeds/roc-syntax.json", encoding: "raw", dictionary: "fuzz/dictionaries/roc-syntax.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
 		{ name: "roc-syntax-span-model", seeds: "", encoding: "", dictionary: "", size: 512, timeout: 5, examples: False, scheduled: True },
 	]
+
+	## Seed JSON and encoding bounds are checked while compiling the runner.
+	seed_values : Str -> List(Str)
+	seed_values = |name| seed_corpora.find_first(|entry| entry.name == name).map_ok(|entry| entry.values) ?? crash "unregistered seed target: ${name}"
 	select : List(Str), Bool -> Try(List(Target), [InvalidSelection(List(Str)), UnknownTarget(Str), EmptySelection])
 	select = |names, ci| {
 		requested = if names.is_empty() or names == ["all"] entries.map(|target| target.name) else names
@@ -120,3 +145,42 @@ expect {
 	}
 	$valid and FuzzPlan.encode(Str.repeat("a", 256), "fuzz-str").is_err()
 }
+
+seed_sources : List({ path : Str, source : Str })
+seed_sources = [
+	{ path: "fuzz/seeds/asciidoc.json", source: asciidoc_seeds },
+	{ path: "fuzz/seeds/csv.json", source: csv_seeds },
+	{ path: "fuzz/seeds/http-request.json", source: http_request_seeds },
+	{ path: "fuzz/seeds/http-response.json", source: http_response_seeds },
+	{ path: "fuzz/seeds/json-options.json", source: json_options_seeds },
+	{ path: "fuzz/seeds/json.json", source: json_seeds },
+	{ path: "fuzz/seeds/markdown-document.json", source: markdown_document_seeds },
+	{ path: "fuzz/seeds/markdown-inline-pathological.json", source: markdown_inline_pathological_seeds },
+	{ path: "fuzz/seeds/markdown-inline.json", source: markdown_inline_seeds },
+	{ path: "fuzz/seeds/markup.json", source: markup_seeds },
+	{ path: "fuzz/seeds/ofx.json", source: ofx_seeds },
+	{ path: "fuzz/seeds/qif.json", source: qif_seeds },
+	{ path: "fuzz/seeds/roc-syntax.json", source: roc_syntax_seeds },
+	{ path: "fuzz/seeds/validate.json", source: validate_seeds },
+	{ path: "fuzz/seeds/xml-ceilings.json", source: xml_ceilings_seeds },
+	{ path: "fuzz/seeds/xml-limits.json", source: xml_limits_seeds },
+	{ path: "fuzz/seeds/xml-stream.json", source: xml_stream_seeds },
+	{ path: "fuzz/seeds/xml.json", source: xml_seeds },
+	{ path: "fuzz/seeds/xmlns.json", source: xmlns_seeds },
+	{ path: "fuzz/seeds/yaml.json", source: yaml_seeds },
+]
+
+seed_corpora : List({ name : Str, values : List(Str) })
+seed_corpora = FuzzPlan.entries.map(
+	|target| {
+		values : List(Str)
+		values = if target.seeds == "" [] else {
+			source = seed_sources.find_first(|entry| entry.path == target.seeds).map_ok(|entry| entry.source) ?? crash "unregistered seed file: ${target.seeds}"
+			Json.parse(source) ?? crash "${target.seeds}: expected a JSON array of seed strings"
+		}
+		for seed in values {
+			_ = FuzzPlan.encode(seed, target.encoding) ?? crash "${target.seeds}: seed exceeds the ${target.encoding} encoding bound"
+		}
+		{ name: target.name, values }
+	},
+)
