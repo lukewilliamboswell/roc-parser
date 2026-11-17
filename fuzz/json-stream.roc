@@ -5,9 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.JsonValue
-import parser.JsonStream
-import parser.Streaming
-
+import parser.Parser
 chunks : List(U8), U64 -> Iter(List(U8))
 chunks = |bytes, width| Iter.custom(
 	(0.U64, False),
@@ -28,11 +26,11 @@ chunks = |bytes, width| Iter.custom(
 
 # Independent whole-document model; the wrapper's depth is excluded from the
 # per-item max_depth, and max_items applies within values, not to the stream.
-oracle : List(U8), JsonStream.Format, JsonValue.Options -> Try(List(JsonValue), [Invalid])
+oracle : List(U8), [Ndjson, Array], JsonValue.Props -> Try(List(JsonValue), [Invalid])
 oracle = |bytes, format, json| {
 	text = Str.from_utf8(bytes).map_err(|_| Invalid)?
 	if format == Array {
-		value = JsonValue.parse_with(text, { ..json, max_depth: json.max_depth + 1 }).map_err(|_| Invalid)?
+		value = JsonValue.parse_str(text, { ..json, max_depth: json.max_depth + 1 }).map_err(|_| Invalid)?
 		match value {
 			Array(values) => Ok(values)
 			_ => Err(Invalid)
@@ -41,7 +39,7 @@ oracle = |bytes, format, json| {
 		var $values = []
 		for line in text.split_on("\n") {
 			if !line.to_utf8().all(|byte| byte == ' ' or byte == '\t' or byte == '\r') {
-				$values = $values.append(JsonValue.parse_with(line, json).map_err(|_| Invalid)?)
+				$values = $values.append(JsonValue.parse_str(line, json).map_err(|_| Invalid)?)
 			}
 		}
 		Ok($values)
@@ -51,17 +49,17 @@ oracle = |bytes, format, json| {
 check : List(U8) -> {}
 check = |bytes| {
 	width = (bytes.first() ?? 0).to_u64() % 31 + 1
-	options : List(JsonValue.Options)
+	options : List(JsonValue.Props)
 	options = [{}, { comments: True, trailing_commas: True, bom: True }]
 	for format in [Ndjson, Array] {
 		for json in options {
-			props : JsonStream.Props
-			props = { format, json }
-			whole = List.from_iter(Streaming.read_iter([bytes].iter(), JsonStream.decoder(props)))
-			if List.from_iter(Streaming.read_iter(chunks(bytes, width), JsonStream.decoder(props))) != whole {
+			props : JsonValue.RecordProps
+			props = { framing: format, json }
+			whole = List.from_iter((JsonValue.record_decoder(props)).read_iter([bytes].iter()))
+			if List.from_iter((JsonValue.record_decoder(props)).read_iter(chunks(bytes, width))) != whole {
 				crash "JSON split changed values or diagnostics"
 			}
-			actual = Streaming.collect(Streaming.read_iter(chunks(bytes, width), JsonStream.decoder(props)))
+			actual = (JsonValue.record_decoder(props)).collect(chunks(bytes, width))
 			match (oracle(bytes, format, json), actual) {
 				(Ok(want), Ok(found)) => {
 					if want != found {
@@ -71,15 +69,15 @@ check = |bytes| {
 				(Err(_), Err(_)) => {}
 				_ => crash "JSON stream differs from whole-input acceptance"
 			}
-			limited : JsonStream.Props
+			limited : JsonValue.RecordProps
 			limited = { ..props, max_record_bytes: width, json: { ..json, max_depth: width % 4, max_items: width % 4, max_string_bytes: width, max_number_digits: width } }
-			if List.from_iter(Streaming.read_iter([bytes].iter(), JsonStream.decoder(limited).with_errors({ error_policy: ReportInvalidRecords, max_errors: 2 }))) != List.from_iter(Streaming.read_iter(chunks(bytes, 1), JsonStream.decoder(limited).with_errors({ error_policy: ReportInvalidRecords, max_errors: 2 }))) {
+			if List.from_iter((JsonValue.record_decoder({ ..limited, errors: { policy: ReportInvalidRecords, max_errors: 2 } })).read_iter([bytes].iter())) != List.from_iter((JsonValue.record_decoder({ ..limited, errors: { policy: ReportInvalidRecords, max_errors: 2 } })).read_iter(chunks(bytes, 1))) {
 				crash "JSON limit outcome depends on chunks"
 			}
 		}
 		values = [String(Str.from_utf8_lossy(bytes)), Number(bytes.len().to_str()), Object([{ key: "nested", value: Array([Null, Bool(True)]) }])]
 		var $encoded = []
-		for part in Streaming.write_iter(values.iter(), JsonStream.encoder({ format: format }).with_chunk_bytes(width)) {
+		for part in (JsonValue.record_encoder({ framing: format, chunk_bytes: width })).write_iter(values.iter()) {
 			match part {
 				Ok(chunk) => {
 					if chunk.is_empty() or chunk.len() > width {
@@ -90,7 +88,7 @@ check = |bytes| {
 				Err(_) => crash "valid JSON values failed to encode"
 			}
 		}
-		if Streaming.collect(Streaming.read_iter(chunks($encoded, 1), JsonStream.decoder({ format: format }))) != Ok(values) {
+		if (JsonValue.record_decoder({ framing: format })).collect(chunks($encoded, 1)) != Ok(values) {
 			crash "JSON streaming roundtrip changed values"
 		}
 	}
@@ -102,7 +100,7 @@ test! = |bytes| {
 	source : Stream(Try(List(U8), [Injected]))
 	source = [Ok("[1,".to_utf8()), Err(Injected), Ok("2]".to_utf8())].iter().stream()
 	var $read = []
-	for! item in Streaming.read_stream(source, JsonStream.decoder({ format: Array })) {
+	for! item in (JsonValue.record_decoder({ framing: Array })).read_stream(source) {
 		$read = $read.append(item)
 	}
 	if $read != [Ok(Value(Number("1"))), Err(SourceErr(Injected))] {
@@ -111,7 +109,7 @@ test! = |bytes| {
 	values : Stream(Try(JsonValue, [Injected]))
 	values = [Ok(Number("1")), Err(Injected), Ok(Number("2"))].iter().stream()
 	var $written = []
-	for! item in Streaming.write_stream(values, JsonStream.encoder({ format: Array }).with_chunk_bytes(8)) {
+	for! item in (JsonValue.record_encoder({ framing: Array, chunk_bytes: 8 })).write_stream(values) {
 		$written = $written.append(item)
 	}
 	if $written != [Ok("[1".to_utf8()), Err(SourceErr(Injected))] {

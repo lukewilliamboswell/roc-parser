@@ -4,14 +4,14 @@ app [target] {
 }
 import fuzz.Fuzz
 import parser.OFX
-import parser.Streaming
+import parser.Parser
 import OfxGen
 
 test : List(U8) -> Fuzz.Outcome
 test = |choices| {
 	generated = OfxGen.generate(choices)
-	expected = List.from_iter(Streaming.read_iter([generated.bytes].iter(), OFX.decoder({})))
-	actual = List.from_iter(Streaming.read_iter(OfxGen.chunks(generated.bytes, choices).iter(), OFX.decoder({})))
+	expected = List.from_iter((OFX.decoder({})).read_iter([generated.bytes].iter()))
+	actual = List.from_iter((OFX.decoder({})).read_iter(OfxGen.chunks(generated.bytes, choices).iter()))
 	if actual != expected {
 		crash "chunking changed OFX events or errors"
 	}

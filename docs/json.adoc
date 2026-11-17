@@ -138,8 +138,9 @@ include::examples/json-guide.expected[lines=4..5]
 [#json-errors]
 == Show where an error is
 
-`InvalidJsonValue` carries a `JsonValue.Error` record: a one-based `line` and
-`column` and a structured `problem`. Columns count bytes from the start of
+`InvalidJsonValue` carries a `JsonValue.Error` diagnostic with `problem`,
+`location`, and `path`. Parsed text has `location: Text({ offset, line, column })`: a
+zero-based original byte offset and one-based line and column. Columns count bytes from the start of
 the line, and a line ends at LF, CR or CRLF. The position is the start of the
 problem: the first character of a bad number or literal, the comma before
 a closing bracket, the slash of a comment, or the opening quote of a
@@ -147,7 +148,8 @@ repeated key.
 
 Match `JsonValue.Problem` tags for program decisions. `DuplicateKey(key)`
 and `ConflictingDuplicateKey(key)` carry the decoded key.
-`LimitExceeded({ limit, max })` identifies the bound and its configured maximum.
+`LimitExceeded({ resource, max, observed })` identifies the typed resource, its
+configured maximum, and an exact count or lower bound.
 `NonInteroperableNumber({ text, reason })` preserves the exact numeric lexeme
 and distinguishes an unsafe integer, excessive significant digits,
 non-finite value, double overflow or double underflow.
@@ -267,10 +269,10 @@ value. The conformance review reads the pinned schema this way (see
 [#json-options]
 == Choose how strict to be
 
-`JsonValue.parse_with(text, options)` takes a `JsonValue.Options` record
+`JsonValue.parse_str(text, props)` takes a `JsonValue.Props` record
 whose fields all have defaults, so you pass only the fields you change.
-`parse_str(text)` is `parse_with(text, {})`: strict RFC 8259, no repeated
-keys, and at most 128 levels of nesting. A limit or check that fails is
+`parse_str(text, {})` defaults to strict RFC 8259, no repeated keys,
+and at most 128 levels of nesting. A limit or check that fails is
 reported as an `InvalidJsonValue` error at the offending value, like any other
 error.
 
@@ -379,7 +381,7 @@ include::examples/json-guide.roc[tag=jsonc,indent=0]
 ----
 
 Reading `tsconfig_text` with `read_jsonc`, and then strictly with
-`parse_str`, and writing the first result with `to_str`:
+`parse_str`, and writing the first result with `encode({})`:
 
 .Output
 [source,text]
@@ -419,7 +421,7 @@ include::examples/json-guide.expected[lines=31..33]
 Python's `json.dumps` writes `NaN`, `Infinity` and `-Infinity` for floats
 that JSON cannot express, unless it is told not to. `non_finite: True` reads
 them as `Number` text. They are not numbers that `as_dec`, `as_i64` or
-`as_u64` can convert, and the writer refuses them, so what `to_str` writes is
+`as_u64` can convert, and the writer refuses them, so what `encode` writes is
 always strict JSON:
 
 [source,roc]
@@ -465,8 +467,8 @@ check `Str.count_utf8_bytes` before parsing if you need to.
 [#json-write]
 == Write JSON
 
-`JsonValue.to_str` writes a value as compact JSON, and
-`JsonValue.to_str_with` takes `JsonValue.WriteOptions`:
+`value.encode(props)` returns UTF-8 bytes. Its `JsonValue.WriteProps`
+fields default to compact JSON:
 
 * `indent` greater than zero puts each item and member on its own line,
   indented by that many spaces per level, with a space after each `:`. Empty
@@ -475,10 +477,10 @@ check `Str.count_utf8_bytes` before parsing if you need to.
   their keys, which is Unicode code point order. Otherwise members keep their
   order.
 
-Set `max_bytes` in `WriteOptions` to bound the exact UTF-8 output size,
+Set `max_bytes` in `WriteProps` to bound the exact UTF-8 output size,
 including escaped strings, keys and indentation. It defaults to no limit.
 The writer checks the size before allocating its output and returns
-`TooLarge(max_bytes)` if the budget would be exceeded. It adds no final
+`InvalidJsonValue` with `LimitExceeded({ resource: DocumentBytes, max, observed })` if the budget would be exceeded. It adds no final
 newline: reserve one byte from your budget if the calling protocol appends one.
 
 [source,roc]
@@ -518,14 +520,16 @@ include::examples/json-guide.expected[lines=41..53]
 
 A value built in your code can hold something that JSON cannot express, and
 the writer refuses it rather than write text that would read back as
-something else:
+something else. All writer problems are carried by `InvalidJsonValue`, with
+`location: Unavailable(GeneratedValue)` in the shared diagnostic envelope. Invalid
+number excerpts own at most 40 bytes and retain the original byte length.
 
-`InvalidNumber(text)`:: A `Number` whose text is not a JSON number, such as
+`InvalidNumber(excerpt)`:: A `Number` whose text is not a JSON number, such as
 `0x10`, `+1`, `1.` or text with spaces around it, including `NaN` and
 `Infinity`.
 `DuplicateKey(key)`:: A key repeated in one object.
-`TooDeep`:: More than 128 levels of nesting.
-`TooLarge(max_bytes)`:: The serialized output would exceed the byte budget.
+`LimitExceeded({ resource: Nesting, max, observed })`:: More than the supported nesting depth.
+`InvalidJsonValue` with `LimitExceeded({ resource: DocumentBytes, max, observed })`:: The serialized output would exceed the byte budget.
 
 So what the writer returns always reads back with `parse_str` as the value
 you wrote, or, with `sort_keys`, as its sorted copy. It does not keep the
@@ -560,8 +564,8 @@ include::examples/json-guide.roc[tag=imported,indent=0]
 ----
 
 `JsonValue.validate` takes `source`, a `name` used in errors (default
-`"<literal>"`), and `options`, the same `JsonValue.Options` that
-`parse_with` takes (default `{}`). JSON has no separate lint checks: its
+`"<literal>"`), and `options`, the same `JsonValue.Props` that
+`parse_str` takes (default `{}`). JSON has no separate lint checks: its
 extra checks are these options. There is no `validate_as`; to decode JSON
 into a record, use the builtin `Json`.
 
@@ -576,17 +580,17 @@ include::examples/json-guide.roc[tag=compile-time-run,indent=0]
 include::examples/json-guide.expected[lines=54..57]
 ----
 
-The last line shows the message a failed check gives, which the compiler
-reports with the name, line and column.
+The last line shows a runtime validation failure, including its source name
+and text position. Compiler quotations render the same structured problem as text.
 
 [#json-compose]
 == Combine with other parsers
 
-`JsonValue.parser` is a `Parser(Utf8.Bytes, JsonValue, JsonValue.Problem)` for use with the
+`JsonValue.parser(props)` is a `Parser(Parser.Utf8.Bytes, JsonValue, JsonValue.Problem)` for use with the
 combinators. It reads the whitespace before a value, one strict JSON value,
 and the whitespace after it, and leaves the rest of the input for the next
-parser. `JsonValue.parser_with(options)` takes the same options as
-`parse_with`. Failures are `ParseError({ problem, offset })`, with the same
+parser. `JsonValue.parser(props)` takes the same options as
+`parse_str`. Failures are `ParseError({ problem, location, path })`, with the same
 structured problem as `parse_str` and the byte offset of the problem.
 
 JSON Lines (newline-delimited JSON) logs hold one value per line, which
@@ -615,25 +619,24 @@ its own.
 [#json-streaming]
 == Read and write records in chunks
 
-Use `JsonStream` when NDJSON logs or a top-level JSON array are too large to
-hold in memory. Create a reader with `JsonStream.decoder(props)` and pass it
-to `Streaming.read_iter(chunks, reader)` for an `Iter(List(U8))`, or
-`Streaming.read_stream(chunks, reader)` for a
+Use `JsonValue.record_decoder(props)` when NDJSON logs or a top-level JSON
+array are too large to hold in memory. Call `reader.read_iter(chunks)` for
+an `Iter(List(U8))`, or `reader.read_stream(chunks)` for a
 `Stream(Try(List(U8), source_error))`.
 Both produce `Value(JsonValue)` events and a final `Finished(report)` inside
 `Try`. Chunk boundaries may split UTF-8, escapes, numbers or nested values.
 Empty chunks do not signal EOF. Consume through `Finished` to validate the
 array's closing bracket and any trailing input.
 
-The default `format: Ndjson` reads one complete value per LF-delimited line,
+The default `framing: Ndjson` reads one complete value per LF-delimited line,
 accepts CRLF, ignores lines containing only JSON whitespace, and accepts a
 final value without LF. Each line must contain exactly one value. With
-`format: Array`, each item of the outer array becomes a value; nested objects
+`framing: Array`, each item of the outer array becomes a value; nested objects
 and arrays within an item are collected before it is emitted. An empty
 array yields only `Finished`. Arbitrary top-level objects do not have a
 chunked event interface.
 
-The `json` field takes `JsonValue.Options` for each emitted value. Thus
+The `json` field takes `JsonValue.Props` for each emitted value. Thus
 `max_depth` excludes the outer array wrapper, `max_items` limits containers
 inside each item rather than the number of streamed items, and `top_level`
 checks each item. Array wrapper comments, a leading BOM, and a trailing
@@ -649,17 +652,15 @@ Use a pull loop to process and discard values instead of collecting the
 whole stream.
 
 Configure the shared <<streaming,error policy>> with
-`reader.with_errors({ error_policy: ReportInvalidRecords })`. NDJSON can report or
+`errors: { policy: ReportInvalidRecords }` in the reader props. NDJSON can report or
 skip a rejected line because its framing is independent. Array syntax
 errors, invalid encoding, resource limits and source failures are terminal.
 Diagnostics identify the record and its original one-based line and byte
 column. Source failures remain `SourceErr` and never produce `Finished`.
 
-Create a writer with `JsonStream.encoder(props)` and set its output bound
-with `writer.with_chunk_bytes(chunk_bytes)`. Pass it to
-`Streaming.write_iter(values, writer)` or
-`Streaming.write_stream(values, writer)`. Writers emit compact NDJSON by default;
-`format: Array` writes an enclosing array. Writers validate each complete
+Create a writer with `JsonValue.record_encoder({ chunk_bytes, ..props })`.
+Call `writer.write_iter(values)` or `writer.write_stream(source)`. Writers emit compact NDJSON by default;
+`framing: Array` writes an enclosing array. Writers validate each complete
 value before its first bytes, retain one encoded record, and emit chunks no
 larger than `chunk_bytes`. Their `max_record_bytes` bounds encoded JSON for
 one value, excluding the single LF, comma or bracket framing byte. It is
@@ -669,8 +670,7 @@ only after successful source exhaustion.
 
 The complete link:{src}/examples/json-streaming.roc[`json-streaming.roc`]
 example reads NDJSON from stdin and writes one compact JSON array to stdout.
-It connects `Streaming.read_stream` through `Streaming.values_stream` to
-`Streaming.write_stream`, so rejected records and missing completion remain errors.
+It connects `reader.values_stream(source)` to `writer.write_stream(values)`, so rejected records and missing completion remain errors.
 
 [#json-unsupported]
 == What is not supported
@@ -678,7 +678,7 @@ It connects `Streaming.read_stream` through `Streaming.values_stream` to
 These limits are by design:
 
 Document events:: `JsonValue` reads a complete document and returns a tree;
-it has no event or token interface. `JsonStream` incrementally emits NDJSON
+it has no event or token interface. `JsonValue.record_decoder` incrementally emits NDJSON
 records or top-level array items, but collects each item as a tree. Numbers
 and unescaped strings share their input memory, so complete-document values
 can keep the whole document alive and streamed values can keep their record
@@ -689,7 +689,7 @@ trailing decimal points, a leading `+`, and line breaks escaped inside
 strings are always errors.
 Type-directed decoding:: There is no `JsonValue.decode` or `validate_as`.
 To decode JSON into your own record type, use the builtin `Json`.
-Other encodings:: The input is UTF-8. `JsonValue.parser`, which takes bytes,
+Other encodings:: The input is UTF-8. `JsonValue.parser(props)`, which takes bytes,
 rejects a value that contains bytes that are not UTF-8. Convert UTF-16 and
 UTF-32 documents first.
 Queries and schemas:: `get_path` takes a list of keys and indexes, not a JSON

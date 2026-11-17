@@ -31,9 +31,9 @@ and body fragments, use the incremental APIs in <<http-streaming>>.
 
 == Parse a request
 
-Parse a request with `HTTP.parse_request`. It takes the raw bytes as a
-`List(U8)` (use `Str.to_utf8` for a `Str`) and returns the `request` and the
-`rest` of the bytes after it:
+Parse a request with `HTTP.Request.parse_bytes(bytes, props)`. It takes the raw bytes as a
+`List(U8)` (use `text.to_utf8()` for a `Str`) and returns a complete
+`HTTP.Request`, rejecting trailing input:
 
 [source,roc]
 ----
@@ -84,7 +84,7 @@ method: Extension("PURGE")
 
 === Read header fields
 
-Look a field up with `HTTP.header`, which compares names case-insensitively
+Look a field up with `message.header(name)`, which compares names case-insensitively
 (HTTP field names are) and returns the first match, or `Err(Missing)`:
 
 [source,roc]
@@ -105,7 +105,7 @@ once per occurrence, so walk `headers` yourself to see every value.
 
 == Parse a response
 
-Parse a response with `HTTP.parse_response`. `status_code` is a `U16` and
+Parse a response with `HTTP.Response.parse_bytes(bytes, props)`. `status_code` is a `U16` and
 `reason` is the reason phrase, which may be empty:
 
 [source,roc]
@@ -167,8 +167,8 @@ decoded body: Wikipedia
 == Read pipelined messages
 
 A client may send several requests on one connection without waiting for
-responses. `HTTP.parse_request` consumes exactly one message and returns the
-bytes that follow it as `rest`; parse `rest` again for the next message. To
+responses. `HTTP.Request.parser(props).run(bytes)` consumes one message prefix and returns
+the following bytes as `rest`; run it again on `rest` for the next message. To
 read a whole buffer of requests at once, use `HTTP.parse_requests`, which
 fails unless the buffer ends exactly at the end of a request:
 
@@ -191,10 +191,10 @@ always the last message in a buffer.
 [#http-streaming]
 == Read messages from byte chunks
 
-Use `Streaming.read_stream(chunks, HTTP.request_decoder(props))` to process a request pipeline from a
+Use `HTTP.Request.decoder(props).read_stream(chunks)` to process a request pipeline from a
 file or socket without collecting its bodies. `chunks` is a
 `Stream(Try(List(U8), source_error))`; the pure equivalent is
-`Streaming.read_iter(chunks, HTTP.request_decoder(props))`. Empty chunks do not mean EOF, and
+`HTTP.Request.decoder(props).read_iter(chunks)`. Empty chunks do not mean EOF, and
 chunk boundaries may occur inside any HTTP line, UTF-8 header value, or body.
 
 The reader emits `Value(RequestHead(head))`, followed by zero or more
@@ -208,7 +208,7 @@ source through EOF; drain the reader through it to detect an incomplete next
 message or malformed suffix. Stopping after a head or body fragment leaves the
 remaining input unvalidated. A source failure is returned as
 `Err(SourceErr(original_error))` and never completes a truncated message.
-HTTP framing and limit failures are terminal `Err(ParseErr(error))` values,
+HTTP framing and limit failures are terminal `Err(InvalidHttp(error))` values,
 with byte offsets counted from the start of the source. HTTP readers never
 skip rejected messages or attempt to resume at another line.
 
@@ -231,8 +231,8 @@ finished; protocol bytes: 0
 
 === Associate responses with requests
 
-Use `Streaming.read_stream(chunks, HTTP.response_decoder(methods, props))`
-or `Streaming.read_iter` for responses. The decoder requires an `Iter(HTTP.Method)` containing the request methods in response
+Use `HTTP.Response.decoder({ methods, reader: props }).read_stream(chunks)`
+or `.read_iter(chunks)` for responses. The decoder requires an `Iter(HTTP.Method)` containing the request methods in response
 order. A response without a matching method is an error. An informational
 response such as `100` or `103` produces its own head and `MessageEnd`, while
 retaining the method for the final response. Methods are pulled only when a
@@ -278,9 +278,9 @@ chunk. Keeping emitted values intentionally adds to application memory use.
 These limits do not bound the total body length, connection lifetime, or time
 spent waiting for input; enforce those in the application when needed.
 
-For a custom driver, `HTTP.request_decoder(props)` or
-`HTTP.response_decoder(methods, props)` returns a shared `Streaming.Decoder`.
-`decoder.step(bytes, More)` returns at most one event and the number of
+For a custom driver, `HTTP.Request.decoder(props)` or
+`HTTP.Response.decoder({ methods, reader: props })` returns a configured reader.
+`decoder.step({ bytes, end: More })` returns at most one event and the number of
 bytes consumed from that call. Supply `Final` only when the source has ended,
 and continue stepping to the terminal result. The shared
 xref:streaming.adoc#streaming[chunk reader contract] describes consumption and
@@ -289,7 +289,7 @@ completion in detail.
 [#http-embedded]
 == Use the parsers inside a larger grammar
 
-`HTTP.request` and `HTTP.response` are the same parsers as a
+`HTTP.Request.parser(props)` and `HTTP.Response.parser(props)` are the same parsers as a
 `Parser(Utf8.Bytes, _, HTTP.Problem)`, for when a message is one part of a larger format. They
 leave the bytes after the message for the next parser:
 
@@ -310,8 +310,9 @@ Output:
 health check: /health
 ----
 
-They fail with `ParseError({ problem, offset })`, preserving the native
-`HTTP.Problem` tag and byte offset from the start of the whole input.
+They fail with `ParseError({ problem, location, path })`, preserving the native
+`HTTP.Problem` tag. Byte runners identify generic input positions with
+`InputOffset(offset)`; string runners provide original byte, line and column coordinates.
 
 [#http-security]
 == Rejected messages and request smuggling
@@ -352,9 +353,9 @@ The status line has rules of its own: the status code is exactly three digits
 and at least `100`, and the space before the reason phrase may be left out
 when the phrase is empty.
 
-`parse_request` and `parse_response` fail with `InvalidHttp(Error)`, where an
-`Error` is `{ offset, problem }`: the tag identifies the broken rule and
-the offset is the byte where the problem is. A framing error points at the
+The complete-message constructors fail with `InvalidHttp(Error)`, where an
+`Error` is `{ problem, location, path }`: the tag identifies the broken rule and
+`location: ByteOffset(offset)` identifies the original byte. A framing error points at the
 start of the field line responsible; a missing `Host` field is reported at
 offset 0, the start of the message.
 

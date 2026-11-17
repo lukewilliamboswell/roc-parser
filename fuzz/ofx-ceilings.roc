@@ -2,7 +2,7 @@ app [target] {
 	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.6.2/3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
 	parser: "../package/main.roc",
 }
-import parser.Streaming
+import parser.Parser
 import fuzz.Fuzz
 import parser.OFX
 
@@ -27,7 +27,7 @@ drain = |count| {
 		},
 	)
 	var $count = 0.U64
-	for event in Streaming.read_iter(chunks, OFX.decoder({})) {
+	for event in (OFX.decoder({})).read_iter(chunks) {
 		match event {
 			Ok(Value(Transaction(_))) => {
 				$count = $count + 1
@@ -66,7 +66,7 @@ retain_id = |count| {
 	)
 	var $id = ""
 	var $count = 0.U64
-	for event in Streaming.read_iter(chunks, OFX.decoder({ max_token_bytes: 524288 })) {
+	for event in (OFX.decoder({ max_token_bytes: 524288 })).read_iter(chunks) {
 		match event {
 			Ok(Value(Transaction(transaction))) => {
 				if $count == 0 {
@@ -83,14 +83,14 @@ retain_id = |count| {
 
 ## Only the unfinished field and its bounded context may outlive a source
 ## chunk; a short seamless slice must not retain this unrelated large comment.
-pending_leaf : {} -> Streaming.Decoder(_, OFX.Event, OFX.Error)
+pending_leaf : {} -> Parser.Decoder(_, OFX.Event, [InvalidOfx(OFX.Error)])
 pending_leaf = |_| {
 	pad = Str.repeat("X", 262144)
 	bytes = "<!--${pad}--><OFX><BANKMSGSRSV1><STMTTRNRS><TRNUID>0</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>001</BANKID><ACCTID>0001</ACCTID></BANKACCTFROM><BANKTRANLIST><DTSTART>20260101</DTSTART><DTEND>20260201</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260101</DTPOSTED><TRNAMT>-1.00</TRNAMT><FITID>1</FITID><NAME>unfinished field".to_utf8()
 	var $state = OFX.decoder({ max_token_bytes: 524288 })
 	var $at = 0.U64
 	while True {
-		next = $state.step(bytes.drop_first($at), More)
+		next = $state.step({ bytes: bytes.drop_first($at), end: More })
 		$state = next.state
 		$at = $at + next.consumed
 		match next.outcome {
@@ -101,7 +101,7 @@ pending_leaf = |_| {
 	}
 }
 
-finish_pending : Streaming.Decoder(_, OFX.Event, OFX.Error) -> Bool
+finish_pending : Parser.Decoder(_, OFX.Event, [InvalidOfx(OFX.Error)]) -> Bool
 finish_pending = |state| {
 	bytes = "</NAME></STMTTRN></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>".to_utf8()
 	var $state = state
@@ -109,7 +109,7 @@ finish_pending = |state| {
 	var $transactions = 0.U64
 	var $ended = False
 	while True {
-		next = $state.step(bytes.drop_first($at), Final)
+		next = $state.step({ bytes: bytes.drop_first($at), end: Final })
 		$state = next.state
 		$at = $at + next.consumed
 		match next.outcome {

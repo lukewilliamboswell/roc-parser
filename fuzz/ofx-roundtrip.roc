@@ -4,7 +4,7 @@ app [target] {
 }
 import fuzz.Fuzz
 import parser.OFX
-import parser.Streaming
+import parser.Parser
 import OfxGen
 
 test : List(U8) -> Fuzz.Outcome
@@ -15,15 +15,15 @@ test = |choices| {
 	}
 	for syntax in [Xml203, Sgml102] {
 		for encoding in [Utf8, Windows1252] {
-			encoded = OFX.to_bytes(generated.expected, { syntax, encoding }) ?? crash "valid OFX model rejected by writer"
+			encoded = OFX.encode(generated.expected, { syntax, encoding }) ?? crash "valid OFX model rejected by writer"
 			if OFX.parse_bytes(encoded, {}) != Ok(generated.expected) {
 				crash "OFX semantic roundtrip changed values"
 			}
 		}
-		events = OfxGen.values(Streaming.read_iter(OfxGen.chunks(generated.bytes, choices).iter(), OFX.decoder({})))
-		encoded_chunks = OfxGen.unwrap_bytes(Streaming.write_iter(events, OFX.encoder({ syntax: syntax }).with_chunk_bytes(7)))
-		decoded = Streaming.collect(Streaming.read_iter(encoded_chunks, OFX.decoder({}))) ?? crash "OFX pipeline reparse failed"
-		baseline = Streaming.collect(Streaming.read_iter([generated.bytes].iter(), OFX.decoder({}))) ?? crash "baseline rejected"
+		events = OfxGen.values((OFX.decoder({})).read_iter(OfxGen.chunks(generated.bytes, choices).iter()))
+		encoded_chunks = OfxGen.unwrap_bytes((OFX.encoder({ syntax: syntax, chunk_bytes: 7 })).write_iter(events))
+		decoded = (OFX.decoder({})).collect(encoded_chunks) ?? crash "OFX pipeline reparse failed"
+		baseline = (OFX.decoder({})).collect([generated.bytes].iter()) ?? crash "baseline rejected"
 		if decoded != baseline {
 			crash "incremental reader/writer pipeline changed events"
 		}

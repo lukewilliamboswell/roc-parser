@@ -5,15 +5,14 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.JsonValue
-import parser.JsonStream
-import parser.Streaming
+import parser.Parser
 
 ## Generate distinct records within the measured region. Keep no source list,
 ## parsed values, or output chunks after the current pull.
 payload : U64 -> Str
 payload = |index| Str.repeat(if (index % 2 == 0) "a" else "b", 512)
 
-source : U64, JsonStream.Format -> Iter(List(U8))
+source : U64, [Ndjson, Array] -> Iter(List(U8))
 source = |count, format| Iter.custom(
 	0.U64,
 	Err(Unknown),
@@ -49,12 +48,12 @@ values = |count| Iter.custom(
 	},
 )
 
-read : U64, JsonStream.Format -> U64
+read : U64, [Ndjson, Array] -> U64
 read = |count, format| {
 	var $checksum = 0.U64
 	var $records = 0.U64
 	var $finished = False
-	for result in Streaming.read_iter(source(count, format), JsonStream.decoder({ format: format })) {
+	for result in (JsonValue.record_decoder({ framing: format })).read_iter(source(count, format)) {
 		match result {
 			Ok(Value(value)) => {
 				index = match value.get("i") {
@@ -86,10 +85,10 @@ read = |count, format| {
 	$checksum
 }
 
-write : U64, JsonStream.Format -> U64
+write : U64, [Ndjson, Array] -> U64
 write = |count, format| {
 	var $bytes = 0.U64
-	for part in Streaming.write_iter(values(count), JsonStream.encoder({ format: format }).with_chunk_bytes(97)) {
+	for part in (JsonValue.record_encoder({ framing: format, chunk_bytes: 97 })).write_iter(values(count)) {
 		match part {
 			Ok(chunk) => {
 				if chunk.is_empty() or chunk.len() > 97 {
@@ -103,13 +102,12 @@ write = |count, format| {
 	$bytes
 }
 
-pipeline! : U64, JsonStream.Format => U64
+pipeline! : U64, [Ndjson, Array] => U64
 pipeline! = |count, format| {
 	input : Stream(Try(List(U8), [Injected]))
 	input = source(count, format).map(|chunk| Ok(chunk)).stream()
-	parsed = Streaming.read_stream(input, JsonStream.decoder({ format: format }))
 	var $bytes = 0.U64
-	for! part in Streaming.write_stream(Streaming.values_stream(parsed), JsonStream.encoder({ format: format }).with_chunk_bytes(97)) {
+	for! part in (JsonValue.record_encoder({ framing: format, chunk_bytes: 97 })).write_stream((JsonValue.record_decoder({ framing: format })).values_stream(input)) {
 		match part {
 			Ok(chunk) => {
 				if chunk.is_empty() or chunk.len() > 97 {
@@ -123,14 +121,14 @@ pipeline! = |count, format| {
 	$bytes
 }
 
-run! : U64, JsonStream.Format, U64 => U64
+run! : U64, [Ndjson, Array], U64 => U64
 run! = |count, format, operation| match operation {
 	0 => read(count, format)
 	1 => write(count, format)
 	_ => pipeline!(count, format)
 }
 
-expected : U64, JsonStream.Format, U64 -> U64
+expected : U64, [Ndjson, Array], U64 -> U64
 expected = |count, format, operation| {
 	if operation == 0 {
 		return count * 512 + count * count.minus_saturated(1) // 2
@@ -146,7 +144,7 @@ expected = |count, format, operation| {
 
 # A retained 32-byte string must keep only its own framed record, even when
 # it was read from a much larger source chunk that has since been drained.
-retain_sample : JsonStream.Format, U64 -> Str
+retain_sample : [Ndjson, Array], U64 -> Str
 retain_sample = |format, salt| {
 	chunks = Iter.custom(
 		0.U64,
@@ -165,7 +163,7 @@ retain_sample = |format, salt| {
 	)
 	var $retained = ""
 	var $finished = False
-	for result in Streaming.read_iter(chunks, JsonStream.decoder({ format: format })) {
+	for result in (JsonValue.record_decoder({ framing: format })).read_iter(chunks) {
 		match result {
 			Ok(Value(String(text))) => {
 				$retained = text
@@ -199,7 +197,7 @@ fragmented_sample = |size| {
 	)
 	var $length = 0.U64
 	var $finished = False
-	for result in Streaming.read_iter(chunks, JsonStream.decoder({ format: Array })) {
+	for result in (JsonValue.record_decoder({ framing: Array })).read_iter(chunks) {
 		match result {
 			Ok(Value(String(text))) => {
 				$length = $length + text.count_utf8_bytes()

@@ -1,5 +1,5 @@
 import parser.OFX
-import parser.Streaming
+import parser.Parser
 
 ## Specification-generated bank/card models and independent wire spellings.
 OfxGen :: [].{
@@ -52,7 +52,7 @@ OfxGen :: [].{
 	}
 
 	## A valid reader's events, consumed lazily by the actual OFX writer.
-	values : Iter(Try(Streaming.ReadEvent(OFX.Event, OFX.Error), Streaming.ReadError(OFX.Error))) -> Iter(OFX.Event)
+	values : Iter(Try(Parser.ReadEvent(OFX.Event, [InvalidOfx(OFX.Error)]), Parser.ReadError([InvalidOfx(OFX.Error)]))) -> Iter(OFX.Event)
 	values = |events| Iter.custom(
 		events,
 		Err(Unknown),

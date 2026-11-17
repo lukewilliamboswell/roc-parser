@@ -11,7 +11,7 @@ main! : List(OsStr) => Try({}, _)
 main! = |args| Bench.run!(
 	args,
 	|input| {
-		match HTTP.parse_requests(input.to_utf8()) {
+		match HTTP.parse_requests(input.to_utf8(), {}) {
 			Ok(requests) => Ok(requests.fold(0.U64, |sum, request| sum + request.headers.len() + request.body.len() + request.target.count_utf8_bytes()))
 			Err(_) => Err(1)
 		}

@@ -4,11 +4,12 @@ app [main!] {
 }
 import cli.Stdin
 import cli.Stdout
+import parser.Parser
 import parser.QIF
 import parser.JsonValue
 
 json : Str -> Str
-json = |text| JsonValue.to_str(String(text)) ?? "null"
+json = |text| JsonValue.encode(String(text), {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") ?? "null"
 
 row_json : QIF.Transaction -> Str
 row_json = |r| {
@@ -21,10 +22,10 @@ main! = |_| {
 	result = decode(bytes)
 	match result {
 		Ok((doc, rows)) => {
-			written = doc.to_str() ?? ""
+			written = doc.encode({}).map_ok(|encoded| Str.from_utf8(encoded) ?? crash "QIF encoding produced invalid UTF-8") ?? ""
 			Stdout.line!("{\"status\":\"ok\",\"rows\":[${Str.join_with(rows.map(row_json), ",")}],\"written\":${json(written)}}")?
 		}
-		Err(InvalidQif(error)) => Stdout.line!("{\"status\":\"error\",\"offset\":${error.offset.to_str()},\"message\":${json(Str.inspect(error.problem))}}")?
+		Err(InvalidQif(error)) => Stdout.line!("{\"status\":\"error\",\"offset\":${source_offset(error.location).to_str()},\"message\":${json(Str.inspect(error.problem))}}")?
 	}
 	Ok({})
 }
@@ -33,4 +34,11 @@ decode = |bytes| {
 	doc = QIF.parse_bytes(bytes, {})?
 	rows = doc.transactions({ date_order: DayFirst })?
 	Ok((doc, rows))
+}
+
+source_offset : Parser.Location -> U64
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
 }

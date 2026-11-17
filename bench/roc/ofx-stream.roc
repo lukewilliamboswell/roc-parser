@@ -3,7 +3,7 @@ app [main!] {
 	parser: "../../package/main.roc",
 }
 
-import parser.Streaming
+import parser.Parser
 import cli.OsStr
 import parser.OFX
 import Bench
@@ -29,7 +29,7 @@ parse = |input| {
 		},
 	)
 	var $sum = 0.U64
-	for event in Streaming.read_iter(chunks, OFX.decoder({ encoding: Utf8 })) {
+	for event in (OFX.decoder({ encoding: Utf8 })).read_iter(chunks) {
 		match event {
 			Ok(Value(Transaction(row))) => {
 				$sum = $sum + 1 + Bench.weighted_utf8(row.name) + Bench.weighted_utf8(row.memo)

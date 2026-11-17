@@ -5,6 +5,7 @@ app [main!] {
 import cli.OsStr
 import cli.Stdin
 import cli.Stdout
+import parser.Parser
 import parser.OFX
 import parser.JsonValue
 
@@ -12,16 +13,16 @@ main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	bytes = Stdin.read_to_end!()?
 	match OFX.parse_bytes(bytes, {}) {
-		Err(InvalidOfx(error)) => Stdout.line!(JsonValue.to_str(Object([{ key: "status", value: String("error") }, { key: "message", value: String(Str.inspect(error.problem)) }, { key: "offset", value: Number(error.offset.to_str()) }])) ?? "{}")?
+		Err(InvalidOfx(error)) => Stdout.line!(JsonValue.encode(Object([{ key: "status", value: String("error") }, { key: "message", value: String(Str.inspect(error.problem)) }, { key: "offset", value: Number(source_offset(error.location).to_str()) }]), {}).map_ok(|encoded| Str.from_utf8(encoded) ?? crash "JSON encoding produced invalid UTF-8") ?? "{}")?
 		Ok(document) => {
 			mode = args.first().map_ok(OsStr.display) ?? "json"
 			if mode == "xml" or mode == "sgml" {
-				encoded = OFX.to_bytes(document, { syntax: if (mode == "sgml") Sgml102 else Xml203 })?
+				encoded = OFX.encode(document, { syntax: if (mode == "sgml") Sgml102 else Xml203 })?
 				Stdout.write!(Str.from_utf8(encoded) ?? "")?
 			} else {
 				value : JsonValue
 				value = Object([{ key: "status", value: String("ok") }, { key: "statements", value: Array(document.statements.map(statement_json)) }])
-				Stdout.line!(JsonValue.to_str(value) ?? "{}")?
+				Stdout.line!(JsonValue.encode(value, {}).map_ok(|encoded| Str.from_utf8(encoded) ?? crash "JSON encoding produced invalid UTF-8") ?? "{}")?
 			}
 		}
 	}
@@ -53,4 +54,11 @@ balance_json : Try(OFX.Balance, [Missing]) -> JsonValue
 balance_json = |balance| match balance {
 	Ok(value) => obj([("amount", value.amount), ("as_of", value.as_of)])
 	Err(_) => Null
+}
+
+source_offset : Parser.Location -> U64
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
 }

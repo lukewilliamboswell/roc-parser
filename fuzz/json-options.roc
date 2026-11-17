@@ -6,9 +6,8 @@ app [target] {
 import fuzz.Fuzz
 import parser.JsonValue
 import parser.Parser
-import parser.Utf8
 
-## Arbitrary documents under every JsonValue.Options field.
+## Arbitrary documents under every JsonValue.Props field.
 ##
 ## The first two bytes choose the options and the rest is the document:
 ## - byte 0, one bit per relaxation: comments (1), trailing_commas (2),
@@ -32,10 +31,10 @@ import parser.Utf8
 ## - Reject is the strictest duplicate mode: if T accepts with v, S accepts
 ##   with v; if S uses CollapseIdentical and accepts with v, T accepts with v
 ##   or fails with a duplicate key;
-## - every error is located inside the document, and JsonValue.parser_with
-##   agrees with JsonValue.parse_with under S.
+## - every error is located inside the document, and JsonValue.parser
+##   agrees with JsonValue.parse_str under S.
 
-is_duplicate : Parser.Problem(JsonValue.Problem) -> Bool
+is_duplicate : JsonValue.Problem -> Bool
 is_duplicate = |problem| match problem {
 	DuplicateKey(_) => True
 	_ => False
@@ -119,7 +118,7 @@ generate = |bytes| {
 	{ choice, document: bytes.drop_first(2) }
 }
 
-options_of : Choice -> JsonValue.Options
+options_of : Choice -> JsonValue.Props
 options_of = |choice| {
 	max_depth: choice.limits.max_depth,
 	max_items: choice.limits.max_items,
@@ -170,27 +169,30 @@ test = |input| {
 		}
 		Ok(text) => {
 			chosen = input.choice
-			parse = |choice| JsonValue.parse_with(text, options_of(choice))
+			parse = |choice| JsonValue.parse_str(text, options_of(choice))
 			result = parse(chosen)
 			size = text.count_utf8_bytes()
-			if JsonValue.parse_with(text, { ..options_of(chosen), max_bytes: size }) != result {
+			if JsonValue.parse_str(text, { ..options_of(chosen), max_bytes: size }) != result {
 				crash "an exact document byte budget changed parsing"
 			}
-			if size > 0 and JsonValue.parse_with(text, { ..options_of(chosen), max_bytes: size - 1 }).is_ok() {
+			if size > 0 and JsonValue.parse_str(text, { ..options_of(chosen), max_bytes: size - 1 }).is_ok() {
 				crash "parsing exceeded the document byte budget"
 			}
 			match result {
 				Ok(value) => for indent in [0, 2] {
-					options : JsonValue.WriteOptions
+					options : JsonValue.WriteProps
 					options = { indent, sort_keys: True }
-					match JsonValue.to_str_with(value, options) {
+					match JsonValue.encode(value, options).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") {
 						Ok(written) => {
 							length = written.count_utf8_bytes()
-							if JsonValue.to_str_with(value, { ..options, max_bytes: length }) != Ok(written) {
+							if JsonValue.encode(value, { ..options, max_bytes: length }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(written) {
 								crash "an exact output byte budget changed serialization"
 							}
-							if length > 0 and JsonValue.to_str_with(value, { ..options, max_bytes: length - 1 }) != Err(TooLarge(length - 1)) {
-								crash "serialization exceeded the output byte budget"
+							if length > 0 {
+								match JsonValue.encode(value, { ..options, max_bytes: length - 1 }) {
+									Err(InvalidJsonValue({ problem: LimitExceeded({ resource: DocumentBytes, max, observed: AtLeast(observed) }), location: Unavailable(GeneratedValue), .. })) if max == length - 1 and observed == length => {}
+									_ => crash "serialization exceeded or misreported the output byte budget"
+								}
 							}
 						}
 						Err(_) => {}
@@ -205,7 +207,7 @@ test = |input| {
 			base = without_relaxations(chosen)
 			base_result = if (has_relaxations(chosen)) parse(base) else result
 			check_location(input, base, base_result)
-			if base == strict and JsonValue.parse_str(text) != base_result {
+			if base == strict and JsonValue.parse_str(text, {}) != base_result {
 				crash "parse_with(text, {}) differs from parse_str(text)"
 			}
 			match base_result {
@@ -296,15 +298,15 @@ check_location = |input, choice, result| {
 		Ok(_) => {}
 		Err(InvalidJsonValue(error)) => {
 			context = "${show_result(result)}\n${show_choice(choice)}"
-			if error.line == 0 or error.column == 0 {
+			if source_position(error.location).line == 0 or source_position(error.location).column == 0 {
 				crash "JSON error locations must be one-based: ${context}"
 			}
 			lengths = line_lengths(input.document)
-			match lengths.get(error.line - 1) {
-				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${context}"
+			match lengths.get(source_position(error.location).line - 1) {
+				Err(_) => crash "error line ${source_position(error.location).line.to_str()} is past the last line (${lengths.len().to_str()}): ${context}"
 				Ok(length) =>
-					if error.column > length + 1 {
-						crash "error column ${error.column.to_str()} is past the end of line ${error.line.to_str()} (${length.to_str()} bytes): ${context}"
+					if source_position(error.location).column > length + 1 {
+						crash "error column ${source_position(error.location).column.to_str()} is past the end of line ${source_position(error.location).line.to_str()} (${length.to_str()} bytes): ${context}"
 					}
 			}
 		}
@@ -313,44 +315,49 @@ check_location = |input, choice, result| {
 
 ## Combinator agreement
 
-## Bytes that are not UTF-8: parser_with must not crash (it may read strings
+## Bytes that are not UTF-8: parser(props) must not crash (it may read strings
 ## in such input lossily) and must stay inside the input.
 check_bytes : Input -> {}
 check_bytes = |input| {
 	bytes = input.document
-	match Utf8.parse_bytes_partial(JsonValue.parser_with(options_of(input.choice)), bytes) {
+	match (JsonValue.parser(options_of(input.choice))).run(bytes) {
 		Ok({ value: _, rest }) =>
 			if rest.len() > bytes.len() {
 				crash "JsonValue.parser_with returned more input than it was given\n${show_choice(input.choice)}"
 			}
-		Err(ParseError({ problem, offset })) =>
+		Err(ParseError(diagnostic)) => {
+			problem = diagnostic.problem
+			offset = source_offset(diagnostic.location)
 			if offset > bytes.len() {
 				crash "JsonValue.parser_with failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}\n${show_choice(input.choice)}"
 			}
+		}
 	}
 }
 
-unexpected_content : Parser.Problem(JsonValue.Problem)
+unexpected_content : JsonValue.Problem
 unexpected_content = UnexpectedContent
 
 check_combinator : Input, Parsed -> {}
 check_combinator = |input, result| {
 	bytes = input.document
 	options = options_of(input.choice)
-	combinator = Utf8.parse_bytes_partial(JsonValue.parser_with(options), bytes)
+	combinator = (JsonValue.parser(options)).run(bytes)
 	consistent =
 		match (result, combinator) {
 			(Ok(value), Ok({ value: other, rest })) => rest.is_empty() and value == other
 			(Err(InvalidJsonValue(error)), Ok({ value: other, rest })) => {
 				consumed = bytes.len() - rest.len()
 				location = line_column(bytes, consumed)
-				same_place = location.line == error.line and location.column == error.column
+				same_place = location.line == source_position(error.location).line and location.column == source_position(error.location).column
 				prefix = Str.from_utf8(bytes.sublist({ start: 0, len: consumed })) ?? ""
-				!rest.is_empty() and same_place and error.problem == unexpected_content and JsonValue.parse_with(prefix, options) == Ok(other)
+				!rest.is_empty() and same_place and error.problem == unexpected_content and JsonValue.parse_str(prefix, options) == Ok(other)
 			}
-			(Err(InvalidJsonValue(error)), Err(ParseError({ problem, offset }))) => {
+			(Err(InvalidJsonValue(error)), Err(ParseError(diagnostic))) => {
+				problem = diagnostic.problem
+				offset = source_offset(diagnostic.location)
 				location = line_column(bytes, offset)
-				location.line == error.line and location.column == error.column and problem == error.problem
+				location.line == source_position(error.location).line and location.column == source_position(error.location).column and problem == parser_problem(error.problem)
 			}
 			_ => False
 		}
@@ -365,7 +372,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidJsonValue(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -432,3 +439,20 @@ target = Fuzz.target_with({
 	test,
 	show,
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+source_offset : Parser.Location -> U64
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
+}
+
+parser_problem : JsonValue.Problem -> Parser.Problem(JsonValue.Problem)
+parser_problem = |problem| problem

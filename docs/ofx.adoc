@@ -8,14 +8,14 @@
 
 == Choose whole-document or incremental reading
 
-`OFX.parse_str(text)` reads already decoded UTF-8. `OFX.parse_bytes(bytes,
+`OFX.parse_str(text, props)` reads already decoded UTF-8. `OFX.parse_bytes(bytes,
 props)` detects declarations and accepts UTF-8, ASCII, and Windows-1252.
 An explicit `Props.encoding` must agree with a declaration. Undefined
 Windows-1252 bytes, unsupported encodings, and contradictory headers fail.
 A leading UTF-8 BOM is accepted, including when split across chunks.
 
-`Streaming.read_iter(chunks, OFX.decoder(props))` consumes an `Iter(List(U8))` lazily.
-`Streaming.read_stream(chunks, OFX.decoder(props))` accepts a `Stream(Try(List(U8), source_error))`.
+`OFX.decoder(props).read_iter(chunks)` consumes an `Iter(List(U8))` lazily.
+`OFX.decoder(props).read_stream(chunks)` accepts a `Stream(Try(List(U8), source_error))`.
 The source owns file and network I/O; the package never opens a connection.
 Byte boundaries may split tags, CRLF, references, and encoded characters.
 Empty chunks are ordinary input. Source exhaustion alone finalizes the parser.
@@ -28,7 +28,7 @@ consume the shared `Finished(report)` event to establish successful EOF.
 The report counts emitted logical items and rejected transactions.
 
 Decoder error handling defaults to `FailFast`. Configure it with
-`.with_errors({ error_policy: ReportInvalidRecords })`. `SkipInvalidRecords` and
+`errors: { policy: ReportInvalidRecords }` in its constructor props. `SkipInvalidRecords` and
 `ReportInvalidRecords` recover only semantic failures in a fully delimited
 `STMTTRN`. Report mode also emits `Rejected(error)`. Syntax, encoding,
 context, source, and resource-limit failures remain terminal. The error budget
@@ -36,7 +36,7 @@ allows 1,000 rejected transactions by default; the next is terminal and includes
 its diagnostic. Zero stops on the first rejected transaction.
 
 Whole-document `parse_bytes` uses fail-fast handling. Use
-`Streaming.collect_report` on the configured reader to collect events,
+`decoder.collect_report(chunks)` to collect events,
 diagnostics, and the completion report under a selected policy. The executable example is
 `docs/examples/ofx-guide.roc`.
 
@@ -64,15 +64,15 @@ constructs are rejected rather than silently interpreted as another format.
 
 == Write bounded output
 
-`OFX.encoder(props)` configures contextual writing for `Streaming.write_iter`
-and `Streaming.write_stream`. Each item is validated before bytes are emitted;
+`OFX.encoder(props)` configures contextual writing through `.write_iter(events)`
+and `.write_stream(source)`. Each item is validated before bytes are emitted;
 an invalid transaction cannot leave a partial record. Successful source completion
 closes the document, while an unfinished statement fails.
 
-Use `.with_chunk_bytes(size)` on the encoder to bound output fragments. A zero
+Set `chunk_bytes` in the encoder props to bound output fragments. A zero
 chunk size fails. The effectful writer preserves source errors and does not
 finish a failed source. Windows-1252 writing rejects unrepresentable characters.
-`OFX.to_bytes(document, props)` collects the same encoding for callers who need
+`document.encode(props)` collects the same encoding for callers who need
 a complete output buffer.
 
 The reader retains one unfinished record and its stack. Defaults bound tokens
@@ -112,3 +112,9 @@ be released: only the retained string remains live after the drain. This checks
 retention by returned values separately from the discard-all parser-state test.
 
 The conformance review uses the shared <<correctness-oracle-cache,correctness oracle cache>>.
+
+Errors use `{ problem, location, path }`. Source failures retain original byte
+coordinates; detached values explicitly identify unavailable locations. Limits
+carry a typed `resource`, `max`, and `observed: Exact(count)` or `AtLeast(count)`.
+Writer failures use `Unavailable(GeneratedValue)`. Logical paths identify records
+or fields where available. Large offending values use bounded excerpts with their original size.

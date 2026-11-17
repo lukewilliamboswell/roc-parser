@@ -6,9 +6,8 @@ app [target] {
 import fuzz.Fuzz
 import parser.JsonValue
 import parser.Parser
-import parser.Utf8
 
-## Round-trip property: fuzzer bytes choose a JSON value, a JsonValue.Options
+## Round-trip property: fuzzer bytes choose a JSON value, a JsonValue.Props
 ## set, and how to write the value: whitespace, comments, string escapes
 ## (short escapes, `\u` with lower, upper or mixed case hex, surrogate
 ## pairs), number lexemes (sign, zero, fraction, `e`/`E` exponents with `+`
@@ -19,9 +18,9 @@ import parser.Utf8
 ## The expected value is built alongside the text, never by calling the
 ## parser, as are the compact and indented (Python `json.dumps(indent=2)`)
 ## texts the writer must produce:
-## - parse_with and parser_with give exactly the expected value;
+## - parse_str(source, props) and parser(props) give exactly the expected value;
 ## - strict parse_str fails exactly when relaxed syntax was written;
-## - to_str and to_str_with give the expected texts, or InvalidNumber when the
+## - encode({}) and encode(props) give the expected texts, or InvalidNumber when the
 ##   value holds NaN or Infinity;
 ## - get, at, get_path, keys and the as_* accessors agree with a direct walk;
 ## - with limits set to the value's own depth, item count, string length and
@@ -60,9 +59,9 @@ Choice : {
 	limits : Limits,
 }
 
-## What parse_with must return: a value, or an error at a byte offset whose
+## What parse_str(source, props) must return: a value, or an error at a byte offset whose
 ## problem is the expected structured failure.
-Expectation : [Value(JsonValue), Failure({ offset : U64, problem : Parser.Problem(JsonValue.Problem) })]
+Expectation : [Value(JsonValue), Failure({ offset : U64, problem : JsonValue.Problem })]
 
 Input : {
 	choice : Choice,
@@ -94,7 +93,7 @@ strict = {
 	limits: no_limits,
 }
 
-options_of : Choice -> JsonValue.Options
+options_of : Choice -> JsonValue.Props
 options_of = |choice| {
 	max_depth: choice.limits.max_depth,
 	max_items: choice.limits.max_items,
@@ -822,8 +821,8 @@ line_column = |bytes, offset| {
 test : Input -> Fuzz.Outcome
 test = |input| {
 	options = options_of(input.choice)
-	actual = JsonValue.parse_with(input.text, options)
-	combinator = Utf8.parse_str(JsonValue.parser_with(options), input.text)
+	actual = JsonValue.parse_str(input.text, options)
+	combinator = (JsonValue.parser(options)).parse_str(input.text)
 	match input.expected {
 		Value(expected) => {
 			if actual != Ok(expected) {
@@ -841,16 +840,16 @@ test = |input| {
 		Failure({ offset, problem: expected_problem }) => {
 			location = line_column(input.text.to_utf8(), offset)
 			match actual {
-				Err(InvalidJsonValue(error)) if error.line == location.line and error.column == location.column and error.problem == expected_problem => {}
+				Err(InvalidJsonValue(error)) if source_position(error.location).line == location.line and source_position(error.location).column == location.column and error.problem == expected_problem => {}
 				_ => crash "expected an error at ${location.line.to_str()}:${location.column.to_str()}\n${describe(input)}\n--- actual ---\n${show_result(actual)}"
 			}
 			match combinator {
-				Err(ParseError(problem)) if problem.offset == offset and problem.problem == expected_problem => {}
+				Err(ParseError(problem)) if source_offset(problem.location) == offset and problem.problem == parser_problem(expected_problem) => {}
 				_ => crash "JsonValue.parser_with must fail at offset ${offset.to_str()}: ${Str.inspect(combinator)}\n${describe(input)}"
 			}
 		}
 	}
-	strict_result = JsonValue.parse_str(input.text)
+	strict_result = JsonValue.parse_str(input.text, {})
 	if strict_result.is_ok() == input.relaxed {
 		crash "strict parse_str must fail exactly when relaxed syntax was written (written: ${Str.inspect(input.relaxed)}): ${show_result(strict_result)}\n${describe(input)}"
 	}
@@ -860,22 +859,22 @@ test = |input| {
 check_writer : Input, JsonValue -> {}
 check_writer = |input, expected| {
 	if input.non_finite {
-		for written in [JsonValue.to_str(expected), JsonValue.to_str_with(expected, { indent: 2 })] {
+		for written in [JsonValue.encode(expected, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"), JsonValue.encode(expected, { indent: 2 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8")] {
 			match written {
-				Err(InvalidNumber(_)) => {}
+				Err(InvalidJsonValue({ problem: InvalidNumber(_), .. })) => {}
 				_ => crash "writing NaN or Infinity must fail with InvalidNumber: ${Str.inspect(written)}\n${describe(input)}"
 			}
 		}
 	} else {
-		if JsonValue.to_str(expected) != Ok(input.canonical) {
-			crash "to_str mismatch\n--- expected ---\n${Str.inspect(input.canonical)}\n--- actual ---\n${Str.inspect(JsonValue.to_str(expected))}"
+		if JsonValue.encode(expected, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(input.canonical) {
+			crash "to_str mismatch\n--- expected ---\n${Str.inspect(input.canonical)}\n--- actual ---\n${Str.inspect(JsonValue.encode(expected, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"))}"
 		}
-		if JsonValue.to_str_with(expected, { indent: 2 }) != Ok(input.pretty) {
-			crash "to_str_with indent 2 mismatch\n--- expected ---\n${Str.inspect(input.pretty)}\n--- actual ---\n${Str.inspect(JsonValue.to_str_with(expected, { indent: 2 }))}"
+		if JsonValue.encode(expected, { indent: 2 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(input.pretty) {
+			crash "to_str_with indent 2 mismatch\n--- expected ---\n${Str.inspect(input.pretty)}\n--- actual ---\n${Str.inspect(JsonValue.encode(expected, { indent: 2 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"))}"
 		}
 		sorted = compact(sort_keys(expected))
-		if JsonValue.to_str_with(expected, { sort_keys: True }) != Ok(sorted) {
-			crash "to_str_with sort_keys mismatch\n--- expected ---\n${Str.inspect(sorted)}\n--- actual ---\n${Str.inspect(JsonValue.to_str_with(expected, { sort_keys: True }))}"
+		if JsonValue.encode(expected, { sort_keys: True }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(sorted) {
+			crash "to_str_with sort_keys mismatch\n--- expected ---\n${Str.inspect(sorted)}\n--- actual ---\n${Str.inspect(JsonValue.encode(expected, { sort_keys: True }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"))}"
 		}
 	}
 }
@@ -886,23 +885,23 @@ check_one_past : Input, JsonValue -> {}
 check_one_past = |input, expected| {
 	limits = input.choice.limits
 	lowered = |name, changed, accepted|
-		match JsonValue.parse_with(input.text, options_of({ ..input.choice, limits: changed })) {
+		match JsonValue.parse_str(input.text, options_of({ ..input.choice, limits: changed })) {
 			Err(InvalidJsonValue(error)) if accepted.contains(error.problem) => {}
 			other => crash "lowering ${name} by one must fail with ${Str.inspect(accepted)}: ${show_result(other)}\n${describe(input)}"
 		}
 	if limits.max_depth > 0 {
 		less = limits.max_depth - 1
-		lowered("max_depth", { ..limits, max_depth: less }, [LimitExceeded({ limit: Nesting, max: less })])
+		lowered("max_depth", { ..limits, max_depth: less }, [LimitExceeded({ resource: Nesting, max: less, observed: AtLeast(less + 1) })])
 	}
 	if limits.max_items > 0 {
 		less = limits.max_items - 1
-		lowered("max_items", { ..limits, max_items: less }, [LimitExceeded({ limit: ArrayItems, max: less }), LimitExceeded({ limit: ObjectMembers, max: less })])
+		lowered("max_items", { ..limits, max_items: less }, [LimitExceeded({ resource: ArrayItems, max: less, observed: AtLeast(less + 1) }), LimitExceeded({ resource: ObjectMembers, max: less, observed: AtLeast(less + 1) })])
 	}
 	if limits.max_string_bytes > 0 {
-		lowered("max_string_bytes", { ..limits, max_string_bytes: limits.max_string_bytes - 1 }, [LimitExceeded({ limit: StringBytes, max: limits.max_string_bytes - 1 })])
+		lowered("max_string_bytes", { ..limits, max_string_bytes: limits.max_string_bytes - 1 }, [LimitExceeded({ resource: StringBytes, max: limits.max_string_bytes - 1, observed: AtLeast(limits.max_string_bytes - 1 + 1) })])
 	}
 	if limits.max_number_digits > 0 and limits.max_number_digits < U64.highest {
-		lowered("max_number_digits", { ..limits, max_number_digits: limits.max_number_digits - 1 }, [LimitExceeded({ limit: NumberCharacters, max: limits.max_number_digits - 1 })])
+		lowered("max_number_digits", { ..limits, max_number_digits: limits.max_number_digits - 1 }, [LimitExceeded({ resource: NumberCharacters, max: limits.max_number_digits - 1, observed: AtLeast(limits.max_number_digits - 1 + 1) })])
 	}
 	stricter =
 		match expected {
@@ -912,7 +911,7 @@ check_one_past = |input, expected| {
 		}
 	match stricter {
 		Ok(top_level) =>
-			if JsonValue.parse_with(input.text, options_of({ ..input.choice, top_level })).is_ok() {
+			if JsonValue.parse_str(input.text, options_of({ ..input.choice, top_level })).is_ok() {
 				crash "a stricter top_level must fail\n${describe(input)}"
 			}
 		Err(AlreadyStrictest) => {}
@@ -1099,7 +1098,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidJsonValue(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -1170,3 +1169,20 @@ target = Fuzz.target_with({
 	test: |bytes| test(generate(bytes)),
 	show: |bytes| show(generate(bytes)),
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+source_offset : Parser.Location -> U64
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
+}
+
+parser_problem : JsonValue.Problem -> Parser.Problem(JsonValue.Problem)
+parser_problem = |problem| problem

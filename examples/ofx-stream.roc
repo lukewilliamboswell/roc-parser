@@ -6,14 +6,14 @@ import cli.Stdin
 import cli.Stdout
 import cli.OsStr
 import parser.OFX
-import parser.Streaming
+import parser.Parser
 
 ## Canonicalize stdin incrementally; pass sgml to write OFX 1.02 instead of XML.
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	syntax = if (args.first().map_ok(OsStr.display) == Ok("sgml")) Sgml102 else Xml203
-	parsed = Streaming.read_stream(Stdin.chunks(), OFX.decoder({}))
-	for! bytes in Streaming.write_stream(Streaming.values_stream(parsed), OFX.encoder({ syntax: syntax }).with_chunk_bytes(65_536)) {
+
+	for! bytes in (OFX.encoder({ syntax: syntax, chunk_bytes: 65_536 })).write_stream((OFX.decoder({})).values_stream(Stdin.chunks())) {
 		Stdout.write_bytes!(bytes?)?
 	}
 	Ok({})

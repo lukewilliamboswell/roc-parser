@@ -2,7 +2,7 @@ app [target] {
 	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.6.2/3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
 	parser: "../package/main.roc",
 }
-import parser.Streaming
+import parser.Parser
 import fuzz.Fuzz
 import parser.QIF
 
@@ -25,7 +25,7 @@ drain = |n| {
 		},
 	)
 	var $count = 0.U64
-	for result in Streaming.read_iter(chunks, QIF.decoder({})) {
+	for result in (QIF.decoder({})).read_iter(chunks) {
 		match result {
 			Ok(Value(Record(_))) => {
 				$count = $count + 1
@@ -53,7 +53,7 @@ retain_pending = |shape| {
 	var $state = QIF.decoder({ max_line_bytes: 524288, max_context_bytes: 524288 })
 	var $position = 0
 	while True {
-		result = $state.step(bytes.drop_first($position), More)
+		result = $state.step({ bytes: bytes.drop_first($position), end: More })
 		$state = result.state
 		$position = $position + result.consumed
 		match result.outcome {
@@ -73,14 +73,17 @@ test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	if bytes.get(1) == Ok(255) {
 		shape = (bytes.get(2) ?? 0) % 3
-		retained = Fuzz.measure!("qif-pending-retention", || retain_pending(shape))
-		if retained.stats.exit_live_bytes > retained.stats.entry_live_bytes + 4096 {
+		# Keep the executable decoder local across the retained-state measurement.
+		measurement = Fuzz.start_measure!("qif-pending-retention")
+		decoder = retain_pending(shape)
+		stats = measurement.finish!()
+		if stats.exit_live_bytes > stats.entry_live_bytes + 4096 {
 			crash "small pending QIF state retained discarded source allocation"
 		}
-		if retained.stats.peak_live_bytes > retained.stats.entry_live_bytes + 2097152 {
+		if stats.peak_live_bytes > stats.entry_live_bytes + 2097152 {
 			crash "QIF retention audit exceeded bounded source peak"
 		}
-		finished = retained.value.step("^\n".to_utf8(), Final)
+		finished = decoder.step({ bytes: "^\n".to_utf8(), end: Final })
 		match finished.outcome {
 			Item(Record(record)) => {
 				section = if (shape == 0) "LongSectionNameBeyondShortStringStorage" else if (shape == 1) "Account" else "Bank"
@@ -90,7 +93,7 @@ test! = |bytes| {
 					crash "pending QIF retention audit changed fields or context"
 				}
 			}
-			_ => crash "pending QIF record did not complete"
+			_ => crash "pending QIF record did not complete: ${Str.inspect(finished.outcome)}"
 		}
 		return Fuzz.keep
 	}

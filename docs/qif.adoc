@@ -9,28 +9,27 @@ available through raw parsing and rejected by typed decoding.
 
 == Read chunks
 
-Use `Streaming.read_iter(chunks, QIF.decoder(props))` for raw events and
-`QIF.transaction_decoder(props)` for typed transactions. `Streaming.read_stream`
+Use `QIF.decoder(props).read_iter(chunks)` for raw events and
+`QIF.transaction_decoder(props)` for typed transactions. `decoder.read_stream(chunks)`
 accepts an effectful source of fallible byte chunks. The package remains platform-independent. The complete program in
 `examples/qif-stream.roc` connects basic-cli stdin chunks to the incremental
 parser and writer; it never collects the document.
 
 Use `QIF.Decoder` or `QIF.TransactionDecoder` when annotating the configured
-decoder's type. Both support the common `Streaming` operations; scanner state
+decoder's type. Both support the common reader operations; scanner state
 remains opaque.
 
-Results use `Streaming`'s `Value`, `Rejected` and `Finished` events. Default
+Results use the shared `Value`, `Rejected` and `Finished` events. Default
 handling stops on the first error. Configure the decoder with
-`.with_errors({ error_policy: ReportInvalidRecords })` to receive diagnostics for fully framed records, or use
+`errors: { policy: ReportInvalidRecords }` in its constructor props to receive diagnostics for fully framed records, or use
 `SkipInvalidRecords` to omit them. Both modes count rejected records and stop
 when the configured error budget is exceeded. Missing terminators, invalid
 encoding, resource limits and malformed account context remain terminal.
 Consume through `Finished` to validate the entire document.
 
-`QIF.parse_str` collects raw events into a document; `doc.transactions(props)`
-decodes its transactions with fail-fast handling. Use `Streaming.collect_report`
-on a configured reader to collect events, diagnostics, and completion counts.
-`QIF.parser` composes complete raw parsing with other byte parsers. Quotations
+`QIF.parse_str(source, props)` collects raw events into a document; `doc.transactions(props)`
+decodes its transactions with fail-fast handling. Use `decoder.collect_report(chunks)` to collect events, diagnostics, and completion counts.
+`QIF.parser(props)` composes complete raw parsing with other byte parsers. Quotations
 and `QIF.validate` use the same grammar and options.
 
 == Decode dates and amounts
@@ -48,14 +47,14 @@ Identifiers such as check numbers remain strings, including leading zeroes.
 
 == Write incrementally
 
-`Streaming.write_iter(events, QIF.encoder(props))` and `Streaming.write_stream`
+`QIF.encoder(props).write_iter(events)` and `.write_stream(source)`
 validate each raw event before emitting its bytes. Configure output fragments
-with `.with_chunk_bytes(size)` on the encoder. Supply ordered headers and records, as produced by raw
+with `chunk_bytes` in the encoder props. Supply ordered headers and records, as produced by raw
 parsing. A zero chunk size is an error. Default output uses CRLF and UTF-8;
 `line_ending` also accepts `Lf` or `Cr`, and `encoding` accepts `Windows1252`.
 Unsupported Windows-1252 characters fail without replacement.
 
-`QIF.to_bytes` and `QIF.to_str` collect the same canonical output. Field order,
+`doc.encode(props)` collect the same canonical output. Field order,
 unknown fields and repeated values survive semantic round trips; source locations
 and original line endings need not. A leading UTF-8 BOM is accepted and omitted from canonical output. Every record requires a terminating `^`,
 including the last. NUL and embedded record/header line breaks are rejected.
@@ -80,3 +79,9 @@ The conformance review uses the shared <<correctness-oracle-cache,correctness or
 For complete numeric dates with four-digit years, the reference cache is
 independent of the clock. Partial and two-digit dates also include dateutil's
 implicit local-date and timezone defaults in the cache identity.
+
+Errors use `{ problem, location, path }`. Source failures retain original byte
+coordinates; detached values explicitly identify unavailable locations. Limits
+carry a typed `resource`, `max`, and `observed: Exact(count)` or `AtLeast(count)`.
+Writer failures use `Unavailable(GeneratedValue)`. Logical paths identify records
+or fields where available. Large offending values use bounded excerpts with their original size.

@@ -5,7 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import parser.QIF
-import parser.Streaming
+import parser.Parser
 import Bench
 
 ## Parse-only consumption: Bench preloads input; 64 KiB chunks are decoded
@@ -29,7 +29,7 @@ parse = |input| {
 		},
 	)
 	var $sum = 0.U64
-	for event in Streaming.read_iter(chunks, QIF.transaction_decoder({ encoding: Utf8, date_order: DayFirst })) {
+	for event in (QIF.transaction_decoder({ encoding: Utf8, date_order: DayFirst })).read_iter(chunks) {
 		match event {
 			Ok(Value(Transaction(row))) => {
 				$sum = $sum + 1 + Bench.weighted_utf8(row.payee) + Bench.weighted_utf8(row.memo)

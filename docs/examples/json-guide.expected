@@ -33,10 +33,10 @@ KeepLast: {"extension":{"a":1}}
 1:1: TopLevelRequired(Object)
 Number("NaN")
 Err(OutOfRange)
-Err(InvalidNumber("NaN"))
+Err(InvalidJsonValue({ location: Unavailable(GeneratedValue), path: [], problem: InvalidNumber({ bytes: [78, 97, 78], total_bytes: 3 }) }))
 {"ids":[1,2,3]}
 1:8: NonInteroperableNumber({ reason: UnsafeInteger, text: "9007199254740993" })
-1:7: LimitExceeded({ limit: StringBytes, max: 4096 })
+1:7: LimitExceeded({ max: 4096, observed: AtLeast(4097), resource: StringBytes })
 1:1: TopLevelRequired(Object)
 {"name":"roc-parser \"JSON\" café","version":"2.2.0","sizes":[1.50,2E3],"draft":false,"assets":{}}
 {
@@ -49,11 +49,11 @@ Err(InvalidNumber("NaN"))
   ],
   "version": "2.2.0"
 }
-Err(InvalidNumber("0x10"))
-Err(DuplicateKey("a"))
+Err(InvalidJsonValue({ location: Unavailable(GeneratedValue), path: [], problem: InvalidNumber({ bytes: [48, 120, 49, 48], total_bytes: 4 }) }))
+Err(InvalidJsonValue({ location: Unavailable(GeneratedValue), path: [], problem: DuplicateKey("a") }))
 Ok(Number("340282366920938463463374607431768211455"))
 Ok(String("café \u(1F600)"))
 Ok(Bool(True))
-Err(BadQuotedBytes("list.json:1:9: JSON: TrailingComma"))
+Err(InvalidJsonValue({ location: Text({ column: 9, line: 1, offset: 8 }), path: [Source("list.json")], problem: TrailingComma }))
 Ok([Object([{ key: "event", value: String("start") }]), Object([{ key: "event", value: String("stop") }])])
-Err(ParseError({ offset: 29, problem: ExpectedValue }))
+Err(ParseError({ location: Text({ column: 11, line: 2, offset: 29 }), path: [], problem: ExpectedValue }))

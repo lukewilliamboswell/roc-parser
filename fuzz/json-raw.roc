@@ -6,14 +6,13 @@ app [target] {
 import fuzz.Fuzz
 import parser.JsonValue
 import parser.Parser
-import parser.Utf8
 
 ## Arbitrary bytes under the default, strict RFC 8259 options.
 ##
-## Bytes that are not UTF-8 go to JsonValue.parser, which must not crash and
+## Bytes that are not UTF-8 go to JsonValue.parser({}), which must not crash and
 ## must stay inside the input. For UTF-8 input:
 ## - errors point at a real one-based line and byte column with a typed problem;
-## - JsonValue.parser agrees with JsonValue.parse_str: content after the value
+## - JsonValue.parser({}) agrees with JsonValue.parse_str: content after the value
 ##   is the parser's unconsumed rest, and other errors match exactly;
 ## - an accepted value writes back out (compact, indented and sorted) to text
 ##   that reads back as the same value, or its key-sorted copy, and writing
@@ -44,7 +43,7 @@ test = |bytes| {
 					Fuzz.keep
 				}
 				Ok(input) => {
-					result = JsonValue.parse_str(input)
+					result = JsonValue.parse_str(input, {})
 					check_location(bytes, result)
 					check_combinator(bytes, result)
 					if !Str.starts_with(input, "\u(FEFF)") {
@@ -114,15 +113,15 @@ check_location = |bytes, result| {
 	match result {
 		Ok(_) => {}
 		Err(InvalidJsonValue(error)) => {
-			if error.line == 0 or error.column == 0 {
+			if source_position(error.location).line == 0 or source_position(error.location).column == 0 {
 				crash "JSON error locations must be one-based: ${show_result(result)}"
 			}
 			lengths = line_lengths(bytes)
-			match lengths.get(error.line - 1) {
-				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${show_result(result)}"
+			match lengths.get(source_position(error.location).line - 1) {
+				Err(_) => crash "error line ${source_position(error.location).line.to_str()} is past the last line (${lengths.len().to_str()}): ${show_result(result)}"
 				Ok(length) =>
-					if error.column > length + 1 {
-						crash "error column ${error.column.to_str()} is past the end of line ${error.line.to_str()} (${length.to_str()} bytes): ${show_result(result)}"
+					if source_position(error.location).column > length + 1 {
+						crash "error column ${source_position(error.location).column.to_str()} is past the end of line ${source_position(error.location).line.to_str()} (${length.to_str()} bytes): ${show_result(result)}"
 					}
 			}
 		}
@@ -132,46 +131,51 @@ check_location = |bytes, result| {
 ## Combinator agreement
 
 ## Bytes that are not UTF-8: the parser's contract is only that it does not
-## crash (like Xml.parser, it may read strings in such input lossily), so
+## crash (like Xml.parser, it must reject malformed UTF-8), so
 ## this checks that it stays inside the input.
 check_bytes : List(U8) -> {}
 check_bytes = |bytes| {
-	match Utf8.parse_bytes_partial(JsonValue.parser, bytes) {
+	match (JsonValue.parser({})).run(bytes) {
 		Ok({ value: _, rest }) =>
 			if rest.len() > bytes.len() {
-				crash "JsonValue.parser returned more input than it was given"
+				crash "JsonValue.parser({}) returned more input than it was given"
 			}
-		Err(ParseError({ problem, offset })) =>
+		Err(ParseError(diagnostic)) => {
+			problem = diagnostic.problem
+			offset = source_offset(diagnostic.location)
 			if offset > bytes.len() {
-				crash "JsonValue.parser failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}"
+				crash "JsonValue.parser({}) failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}"
 			}
+		}
 	}
 }
 
-unexpected_content : Parser.Problem(JsonValue.Problem)
+unexpected_content : JsonValue.Problem
 unexpected_content = UnexpectedContent
 
 check_combinator : List(U8), Parsed -> {}
 check_combinator = |bytes, result| {
-	combinator = Utf8.parse_bytes_partial(JsonValue.parser, bytes)
+	combinator = (JsonValue.parser({})).run(bytes)
 	consistent =
 		match (result, combinator) {
 			(Ok(value), Ok({ value: other, rest })) => rest.is_empty() and value == other
 			(Err(InvalidJsonValue(error)), Ok({ value: other, rest })) => {
 				consumed = bytes.len() - rest.len()
 				location = line_column(bytes, consumed)
-				same_place = location.line == error.line and location.column == error.column
+				same_place = location.line == source_position(error.location).line and location.column == source_position(error.location).column
 				prefix = Str.from_utf8(bytes.sublist({ start: 0, len: consumed })) ?? ""
-				!rest.is_empty() and same_place and error.problem == unexpected_content and JsonValue.parse_str(prefix) == Ok(other)
+				!rest.is_empty() and same_place and error.problem == unexpected_content and JsonValue.parse_str(prefix, {}) == Ok(other)
 			}
-			(Err(InvalidJsonValue(error)), Err(ParseError({ problem, offset }))) => {
+			(Err(InvalidJsonValue(error)), Err(ParseError(diagnostic))) => {
+				problem = diagnostic.problem
+				offset = source_offset(diagnostic.location)
 				location = line_column(bytes, offset)
-				location.line == error.line and location.column == error.column and problem == error.problem
+				location.line == source_position(error.location).line and location.column == source_position(error.location).column and problem == parser_problem(error.problem)
 			}
 			_ => False
 		}
 	if !consistent {
-		crash "JsonValue.parser disagrees with JsonValue.parse_str\nparse_str: ${show_result(result)}\nparser: ${Str.inspect(combinator)}"
+		crash "JsonValue.parser({}) disagrees with JsonValue.parse_str\nparse_str: ${show_result(result)}\nparser: ${Str.inspect(combinator)}"
 	}
 }
 
@@ -179,12 +183,12 @@ check_combinator = |bytes, result| {
 
 check_leading_newline : Str, Parsed -> {}
 check_leading_newline = |input, result| {
-	shifted = JsonValue.parse_str("\n${input}")
+	shifted = JsonValue.parse_str("\n${input}", {})
 	consistent =
 		match (result, shifted) {
 			(Ok(plain), Ok(with_newline)) => plain == with_newline
 			(Err(InvalidJsonValue(plain)), Err(InvalidJsonValue(with_newline))) =>
-				plain.line + 1 == with_newline.line and plain.column == with_newline.column and plain.problem == with_newline.problem
+				source_position(plain.location).line + 1 == source_position(with_newline.location).line and source_position(plain.location).column == source_position(with_newline.location).column and plain.problem == with_newline.problem
 			_ => False
 		}
 	if !consistent {
@@ -194,8 +198,8 @@ check_leading_newline = |input, result| {
 
 check_wrapping : Str, JsonValue -> {}
 check_wrapping = |input, value| {
-	array = JsonValue.parse_str("[${input}]")
-	object = JsonValue.parse_str("{\"k\":${input}}")
+	array = JsonValue.parse_str("[${input}]", {})
+	object = JsonValue.parse_str("{\"k\":${input}}", {})
 	if depth_of(value) < default_depth {
 		if array != Ok(Array([value])) {
 			crash "wrapping in [x] gave ${show_result(array)}"
@@ -213,7 +217,7 @@ check_wrapping = |input, value| {
 is_nesting_error : Parsed, U64 -> Bool
 is_nesting_error = |result, limit| {
 	match result {
-		Err(InvalidJsonValue(error)) => error.problem == LimitExceeded({ limit: Nesting, max: limit })
+		Err(InvalidJsonValue(error)) => error.problem == LimitExceeded({ resource: Nesting, max: limit, observed: AtLeast(limit + 1) })
 		Ok(_) => False
 	}
 }
@@ -236,20 +240,20 @@ larger = |a, b| if (a > b) a else b
 check_writer : JsonValue -> {}
 check_writer = |value| {
 	compact =
-		match JsonValue.to_str(value) {
+		match JsonValue.encode(value, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") {
 			Ok(text) => text
 			Err(problem) => crash "to_str refused a parsed value: ${Str.inspect(problem)}\n${Str.inspect(value)}"
 		}
-	if JsonValue.parse_str(compact) != Ok(value) {
+	if JsonValue.parse_str(compact, {}) != Ok(value) {
 		crash "to_str output does not read back as the same value: ${Str.inspect(compact)}"
 	}
 	if strip_insignificant(compact) != compact {
 		crash "to_str output has whitespace outside strings: ${Str.inspect(compact)}"
 	}
 
-	match JsonValue.to_str_with(value, { indent: 2 }) {
+	match JsonValue.encode(value, { indent: 2 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") {
 		Ok(pretty) => {
-			if JsonValue.parse_str(pretty) != Ok(value) {
+			if JsonValue.parse_str(pretty, {}) != Ok(value) {
 				crash "indented output does not read back as the same value: ${Str.inspect(pretty)}"
 			}
 			if strip_insignificant(pretty) != compact {
@@ -260,15 +264,15 @@ check_writer = |value| {
 	}
 
 	sorted = sort_keys(value)
-	match JsonValue.to_str_with(value, { sort_keys: True }) {
+	match JsonValue.encode(value, { sort_keys: True }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") {
 		Ok(text) => {
-			if JsonValue.parse_str(text) != Ok(sorted) {
+			if JsonValue.parse_str(text, {}) != Ok(sorted) {
 				crash "sorted output does not read back as the key-sorted value: ${Str.inspect(text)}"
 			}
-			if JsonValue.to_str(sorted) != Ok(text) or JsonValue.to_str_with(sorted, { sort_keys: True }) != Ok(text) {
+			if JsonValue.encode(sorted, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(text) or JsonValue.encode(sorted, { sort_keys: True }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(text) {
 				crash "writing sorted output again changed it: ${Str.inspect(text)}"
 			}
-			match JsonValue.to_str_with(value, { sort_keys: True, indent: 2 }) {
+			match JsonValue.encode(value, { sort_keys: True, indent: 2 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") {
 				Ok(sorted_pretty) =>
 					if strip_insignificant(sorted_pretty) != text {
 						crash "sorted indented output differs from sorted compact output\ncompact: ${Str.inspect(text)}\npretty:  ${Str.inspect(sorted_pretty)}"
@@ -410,16 +414,16 @@ depth_boundary = |limit, arrays| {
 	past = nested(limit + 1, arrays)
 	{ at_limit, past_limit } =
 		if limit == default_depth {
-			{ at_limit: JsonValue.parse_str(at.text), past_limit: JsonValue.parse_str(past.text) }
+			{ at_limit: JsonValue.parse_str(at.text, {}), past_limit: JsonValue.parse_str(past.text, {}) }
 		} else {
-			{ at_limit: JsonValue.parse_with(at.text, { max_depth: limit }), past_limit: JsonValue.parse_with(past.text, { max_depth: limit }) }
+			{ at_limit: JsonValue.parse_str(at.text, { max_depth: limit }), past_limit: JsonValue.parse_str(past.text, { max_depth: limit }) }
 		}
 	if at_limit != Ok(at.value) {
 		crash "nesting of ${limit.to_str()} with max_depth ${limit.to_str()} gave ${show_result(at_limit)}"
 	}
 	column = limit * past.open_width + 1
 	match past_limit {
-		Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and is_nesting_error(past_limit, limit) => {}
+		Err(InvalidJsonValue(error)) if source_position(error.location).line == 1 and source_position(error.location).column == column and is_nesting_error(past_limit, limit) => {}
 		_ => crash "nesting of ${(limit + 1).to_str()} with max_depth ${limit.to_str()} must fail at 1:${column.to_str()}, but gave ${show_result(past_limit)}"
 	}
 }
@@ -445,7 +449,7 @@ items_boundary = |limit, choice| {
 		"${open}${Str.join_with(pieces, separator)}${close}"
 	}
 
-	at_limit = JsonValue.parse_with(text_of(limit), { max_items: limit })
+	at_limit = JsonValue.parse_str(text_of(limit), { max_items: limit })
 	if at_limit != Ok(value_of(limit)) {
 		crash "${limit.to_str()} items with max_items ${limit.to_str()} gave ${show_result(at_limit)}"
 	}
@@ -453,10 +457,10 @@ items_boundary = |limit, choice| {
 	# The first excess item starts after the first `limit` items and their separators.
 	before_excess = if (limit == 0) open else "${open}${Str.join_with(indexes_below(limit).map(item), separator)}${separator}"
 	column = Str.count_utf8_bytes(before_excess) + 1
-	expected_problem = LimitExceeded({ limit: if (arrays) ArrayItems else ObjectMembers, max: limit })
-	past_limit = JsonValue.parse_with(text_of(limit + 1), { max_items: limit })
+	expected_problem = LimitExceeded({ resource: if (arrays) ArrayItems else ObjectMembers, max: limit, observed: AtLeast(limit + 1) })
+	past_limit = JsonValue.parse_str(text_of(limit + 1), { max_items: limit })
 	match past_limit {
-		Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.problem == expected_problem => {}
+		Err(InvalidJsonValue(error)) if source_position(error.location).line == 1 and source_position(error.location).column == column and error.problem == expected_problem => {}
 		_ => crash "${(limit + 1).to_str()} items with max_items ${limit.to_str()} must fail at 1:${column.to_str()} with ${Str.inspect(expected_problem)}, but gave ${show_result(past_limit)}"
 	}
 }
@@ -482,7 +486,7 @@ duplicate_after_keys = |count, choice| {
 
 	expect_error = |result, expected_problem, mode| {
 		match result {
-			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.problem == expected_problem => {}
+			Err(InvalidJsonValue(error)) if source_position(error.location).line == 1 and source_position(error.location).column == column and error.problem == expected_problem => {}
 			_ => crash "a repeated key with ${mode} must fail at 1:${column.to_str()} with ${Str.inspect(expected_problem)}, but gave ${show_result(result)}\n${Str.inspect(text)}"
 		}
 	}
@@ -492,18 +496,18 @@ duplicate_after_keys = |count, choice| {
 		}
 	}
 
-	expect_error(JsonValue.parse_str(text), DuplicateKey(key), "the default options")
-	collapsed = JsonValue.parse_with(text, { duplicates: CollapseIdentical })
+	expect_error(JsonValue.parse_str(text, {}), DuplicateKey(key), "the default options")
+	collapsed = JsonValue.parse_str(text, { duplicates: CollapseIdentical })
 	if same_value {
 		expect_value(collapsed, first, "CollapseIdentical and an equal value")
 	} else {
 		expect_error(collapsed, ConflictingDuplicateKey(key), "CollapseIdentical")
 	}
-	expect_value(JsonValue.parse_with(text, { duplicates: KeepFirst }), first, "KeepFirst")
-	expect_value(JsonValue.parse_with(text, { duplicates: KeepLast }), last, "KeepLast")
+	expect_value(JsonValue.parse_str(text, { duplicates: KeepFirst }), first, "KeepFirst")
+	expect_value(JsonValue.parse_str(text, { duplicates: KeepLast }), last, "KeepLast")
 }
 
-## Many members, and many items, each holding `[]`; to_str writes the same
+## Many members, and many items, each holding `[]`; encode({}) writes the same
 ## compact text back.
 many_empty_members : U64 -> {}
 many_empty_members = |count| {
@@ -513,11 +517,11 @@ many_empty_members = |count| {
 	array_text = "[${Str.join_with(List.repeat("[]", count), ",")}]"
 	array = Array(List.repeat(Array([]), count))
 	for { text, expected } in [{ text: object_text, expected: object }, { text: array_text, expected: array }] {
-		parsed = JsonValue.parse_str(text)
+		parsed = JsonValue.parse_str(text, {})
 		if parsed != Ok(expected) {
 			crash "${count.to_str()} members holding [] parsed wrongly: ${show_result(parsed)}"
 		}
-		if JsonValue.to_str(expected) != Ok(text) {
+		if JsonValue.encode(expected, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok(text) {
 			crash "${count.to_str()} members holding [] were written back differently"
 		}
 	}
@@ -532,11 +536,11 @@ escape_heavy = |count| {
 	written = "\\nA\\\"\\\\/😀é\\t\\u001f"
 	text = "\"${Str.repeat(escaped, count)}\""
 	expected = String(Str.repeat(decoded, count))
-	parsed = JsonValue.parse_str(text)
+	parsed = JsonValue.parse_str(text, {})
 	if parsed != Ok(expected) {
 		crash "${count.to_str()} escape groups parsed wrongly"
 	}
-	if JsonValue.to_str(expected) != Ok("\"${Str.repeat(written, count)}\"") {
+	if JsonValue.encode(expected, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") != Ok("\"${Str.repeat(written, count)}\"") {
 		crash "${count.to_str()} escape groups were written back wrongly"
 	}
 }
@@ -547,17 +551,17 @@ unclosed : U64, Bool -> {}
 unclosed = |count, arrays| {
 	open = if (arrays) "[" else "{\"a\":"
 	width = Str.count_utf8_bytes(open)
-	result = JsonValue.parse_str(Str.repeat(open, count))
+	result = JsonValue.parse_str(Str.repeat(open, count), {})
 	if count <= default_depth {
 		column = count * width + 1
 		match result {
-			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.problem == ExpectedValue => {}
+			Err(InvalidJsonValue(error)) if source_position(error.location).line == 1 and source_position(error.location).column == column and error.problem == ExpectedValue => {}
 			_ => crash "${count.to_str()} unclosed ${open} must fail at 1:${column.to_str()} with \"expected a JSON value\", but gave ${show_result(result)}"
 		}
 	} else {
 		column = default_depth * width + 1
 		match result {
-			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and is_nesting_error(result, default_depth) => {}
+			Err(InvalidJsonValue(error)) if source_position(error.location).line == 1 and source_position(error.location).column == column and is_nesting_error(result, default_depth) => {}
 			_ => crash "${count.to_str()} unclosed ${open} must fail at the depth limit 1:${column.to_str()}, but gave ${show_result(result)}"
 		}
 	}
@@ -569,7 +573,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidJsonValue(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -599,3 +603,20 @@ target = Fuzz.target_with({
 	test,
 	show,
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+source_offset : Parser.Location -> U64
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
+}
+
+parser_problem : JsonValue.Problem -> Parser.Problem(JsonValue.Problem)
+parser_problem = |problem| problem

@@ -5,8 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import parser.JsonValue
-import parser.JsonStream
-import parser.Streaming
+import parser.Parser
 import Bench
 
 ## Parse-only driver: json-stream array|ndjson CHUNK_BYTES ITERATIONS.
@@ -19,7 +18,7 @@ main! = |args| {
 	Bench.run!(args, |input| parse(input, format, width))
 }
 
-parse : Str, JsonStream.Format, U64 -> Try(U64, U64)
+parse : Str, [Ndjson, Array], U64 -> Try(U64, U64)
 parse = |input, format, width| {
 	bytes = input.to_utf8()
 	chunks = Iter.custom(
@@ -36,7 +35,7 @@ parse = |input, format, width| {
 		},
 	)
 	var $checksum = if (format == Array) 6.U64 else 0
-	for result in Streaming.read_iter(chunks, JsonStream.decoder({ format: format })) {
+	for result in (JsonValue.record_decoder({ framing: format })).read_iter(chunks) {
 		match result {
 			Ok(Value(value)) => {
 				$checksum = $checksum + consume(value)

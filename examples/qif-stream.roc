@@ -5,14 +5,13 @@ app [main!] {
 import cli.Stdin
 import cli.Stdout
 import parser.QIF
-import parser.Streaming
+import parser.Parser
 
 ## Canonicalize QIF from stdin to stdout without retaining the document.
 ## Full success requires consuming the parser's Finished event.
 
 main! = |_| {
-	parsed = Streaming.read_stream(Stdin.chunks(), QIF.decoder({}))
-	for! chunk in Streaming.write_stream(Streaming.values_stream(parsed), QIF.encoder({})) {
+	for! chunk in (QIF.encoder({})).write_stream((QIF.decoder({})).values_stream(Stdin.chunks())) {
 		Stdout.write_bytes!(chunk?)?
 	}
 	Ok({})

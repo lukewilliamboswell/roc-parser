@@ -4,8 +4,7 @@ app [target] {
 }
 import fuzz.Fuzz
 import parser.HTTP
-import parser.Streaming
-
+import parser.Parser
 Observation : [Event(HTTP.Event), Finished, Error(HTTP.Error), SourceError]
 
 normalize : List(Observation) -> List(Observation)
@@ -43,7 +42,7 @@ methods = [Get, Head, Connect, Post]
 
 read : List(List(U8)), Bool, HTTP.ReadProps -> List(Observation)
 read = |chunks, responses, props| {
-	reader = if (responses) Streaming.read_iter(chunks.iter(), HTTP.response_decoder(methods.iter(), props)) else Streaming.read_iter(chunks.iter(), HTTP.request_decoder(props))
+	reader = if (responses) (HTTP.Response.decoder({ methods: methods.iter(), reader: { max_head_bytes: props.max_head_bytes, max_trailer_bytes: props.max_trailer_bytes, max_line_bytes: props.max_line_bytes, max_headers: props.max_headers, max_trailers: props.max_trailers, max_body_chunk_bytes: props.max_body_chunk_bytes }, errors: props.errors })).read_iter(chunks.iter()) else (HTTP.Request.decoder(props)).read_iter(chunks.iter())
 	var $out = []
 	var $count = 0.U64
 	for result in reader {
@@ -62,7 +61,7 @@ read = |chunks, responses, props| {
 				}
 				$out = $out.append(Finished)
 			}
-			Err(ParseErr(error)) => {
+			Err(InvalidHttp(error)) => {
 				$out = $out.append(Error(error))
 			}
 			_ => crash "HTTP produced recovery or decoder protocol error"
@@ -75,11 +74,11 @@ read = |chunks, responses, props| {
 # finalize a truncated message or complete a close-delimited response.
 prefix : List(U8), Bool, HTTP.ReadProps -> List(Observation)
 prefix = |bytes, responses, props| {
-	var $decoder = if (responses) HTTP.response_decoder(methods.iter(), props) else HTTP.request_decoder(props)
+	var $decoder = if (responses) HTTP.Response.decoder({ methods: methods.iter(), reader: { max_head_bytes: props.max_head_bytes, max_trailer_bytes: props.max_trailer_bytes, max_line_bytes: props.max_line_bytes, max_headers: props.max_headers, max_trailers: props.max_trailers, max_body_chunk_bytes: props.max_body_chunk_bytes }, errors: props.errors }) else HTTP.Request.decoder(props)
 	var $used = 0.U64
 	var $out = []
 	while True {
-		next = $decoder.step(bytes.drop_first($used), More)
+		next = $decoder.step({ bytes: bytes.drop_first($used), end: More })
 		if next.consumed > bytes.len() - $used {
 			crash "HTTP consumed beyond input"
 		}
@@ -89,7 +88,7 @@ prefix = |bytes, responses, props| {
 			Item(event) => {
 				$out = $out.append(Event(event))
 			}
-			Failed(error) => return normalize($out.append(Error(error)))
+			Failed(InvalidHttp(error)) => return normalize($out.append(Error(error)))
 			NeedInput => {
 				if $used != bytes.len() {
 					crash "HTTP requested input with bytes remaining"
@@ -105,14 +104,14 @@ check_source! : List(U8), Bool, HTTP.ReadProps => {}
 check_source! = |bytes, responses, props| {
 	source : Stream(Try(List(U8), [Injected]))
 	source = [Ok(bytes), Err(Injected), Ok("unread".to_utf8())].iter().stream()
-	reader = if (responses) Streaming.read_stream(source, HTTP.response_decoder(methods.iter(), props)) else Streaming.read_stream(source, HTTP.request_decoder(props))
+	reader = if (responses) (HTTP.Response.decoder({ methods: methods.iter(), reader: { max_head_bytes: props.max_head_bytes, max_trailer_bytes: props.max_trailer_bytes, max_line_bytes: props.max_line_bytes, max_headers: props.max_headers, max_trailers: props.max_trailers, max_body_chunk_bytes: props.max_body_chunk_bytes }, errors: props.errors })).read_stream(source) else (HTTP.Request.decoder(props)).read_stream(source)
 	var $out = []
 	for! result in reader {
 		match result {
 			Ok(Value(event)) => {
 				$out = $out.append(Event(event))
 			}
-			Err(ParseErr(error)) => {
+			Err(InvalidHttp(error)) => {
 				$out = $out.append(Error(error))
 			}
 			Err(SourceErr(Injected)) => {

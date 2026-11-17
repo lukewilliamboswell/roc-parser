@@ -6,10 +6,7 @@ app [main!] {
 import cli.OsStr
 import cli.Stdout
 import parser.JsonValue
-import parser.Literal
 import parser.Parser
-import parser.Utf8
-
 # tag::document[]
 sbom_text =
 	\\{
@@ -50,7 +47,7 @@ licence = |component| {
 ## One line per component of a CycloneDX document.
 components : Str -> Try(List(Str), [InvalidJsonValue(JsonValue.Error), Missing, WrongType])
 components = |text| {
-	bom = JsonValue.parse_str(text)?
+	bom = JsonValue.parse_str(text, {})?
 	found = bom.get("components")?
 	list = found.as_list()?
 	Ok(
@@ -99,9 +96,9 @@ strings = |value, path| {
 # tag::errors[]
 report : Str -> Str
 report = |text| {
-	match JsonValue.parse_str(text) {
+	match JsonValue.parse_str(text, {}) {
 		Ok(_) => "valid"
-		Err(InvalidJsonValue({ line, column, problem })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
+		Err(InvalidJsonValue(error)) => "${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()}: ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -125,7 +122,7 @@ convert = |value| {
 ## Read `text` with each duplicate mode, and write what each one kept.
 modes : Str -> List(Str)
 modes = |text| {
-	options : List((Str, JsonValue.Options))
+	options : List((Str, JsonValue.Props))
 	options = [
 		("Reject", {}),
 		("CollapseIdentical", { duplicates: CollapseIdentical }),
@@ -134,9 +131,9 @@ modes = |text| {
 	]
 	options.map(
 		|(name, chosen)| {
-			match JsonValue.parse_with(text, chosen) {
-				Ok(value) => "${name}: ${JsonValue.to_str(value) ?? "?"}"
-				Err(InvalidJsonValue({ line, column, problem })) => "${name}: ${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
+			match JsonValue.parse_str(text, chosen) {
+				Ok(value) => "${name}: ${JsonValue.encode(value, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") ?? "?"}"
+				Err(InvalidJsonValue(error)) => "${name}: ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()}: ${Str.inspect(error.problem)}"
 			}
 		},
 	)
@@ -157,7 +154,7 @@ tsconfig_text =
 
 ## JSON with comments, as in `tsconfig.json` and editor settings.
 read_jsonc : Str -> Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
-read_jsonc = |text| JsonValue.parse_with(text, { comments: True, trailing_commas: True })
+read_jsonc = |text| JsonValue.parse_str(text, { comments: True, trailing_commas: True })
 
 # end::jsonc[]
 
@@ -165,7 +162,7 @@ read_jsonc = |text| JsonValue.parse_with(text, { comments: True, trailing_commas
 ## A configuration file that may start with a byte order mark, as files
 ## saved by some Windows editors do, and must hold an object.
 read_config : Str -> Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
-read_config = |text| JsonValue.parse_with(text, { bom: True, top_level: Object })
+read_config = |text| JsonValue.parse_str(text, { bom: True, top_level: Object })
 
 # end::bom[]
 
@@ -174,12 +171,12 @@ read_config = |text| JsonValue.parse_with(text, { bom: True, top_level: Object }
 ## `Infinity` for floats that JSON cannot express.
 print_loss! : Str => Try({}, _)
 print_loss! = |text| {
-	match JsonValue.parse_with(text, { non_finite: True }) {
+	match JsonValue.parse_str(text, { non_finite: True }) {
 		Ok(metrics) => {
 			loss = metrics.get("loss") ?? Null
 			Stdout.line!(Str.inspect(loss))?
 			Stdout.line!(Str.inspect(loss.as_dec()))?
-			Stdout.line!(Str.inspect(JsonValue.to_str(metrics)))?
+			Stdout.line!(Str.inspect(JsonValue.encode(metrics, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8")))?
 		}
 
 		Err(_) => Stdout.line!("invalid JSON")?
@@ -191,7 +188,7 @@ print_loss! = |text| {
 
 # tag::limits[]
 ## Options for documents from an untrusted source.
-untrusted : JsonValue.Options
+untrusted : JsonValue.Props
 untrusted = {
 	max_depth: 32,
 	max_items: 1000,
@@ -228,7 +225,7 @@ lock =
 import "assets/json-guide-settings.jsonc" as settings_text : Str
 
 settings : JsonValue
-settings = Literal.require(
+settings = Parser.Quotation.require(
 	JsonValue.validate({
 		source: settings_text,
 		name: "json-guide-settings.jsonc",
@@ -240,8 +237,8 @@ settings = Literal.require(
 
 # tag::compose[]
 ## Every value of a JSON Lines (newline-delimited JSON) log.
-json_lines : Str -> Try(List(JsonValue), [ParseError({ problem : Parser.Problem(JsonValue.Problem), offset : U64 })])
-json_lines = |text| Utf8.parse_str(Parser.many(JsonValue.parser), text)
+json_lines : Str -> Try(List(JsonValue), [ParseError(Parser.Diagnostic(Parser.Problem(JsonValue.Problem)))])
+json_lines = |text| (Parser.many(JsonValue.parser({}))).parse_str(text)
 
 # end::compose[]
 
@@ -264,7 +261,7 @@ print_components! = |text| {
 
 print_refs! : Str => Try({}, _)
 print_refs! = |text| {
-	match JsonValue.parse_str(text) {
+	match JsonValue.parse_str(text, {}) {
 		Ok(bom) => print_lines!(strings(bom, "").keep_if(|line| line.contains("bom-ref")))?
 		Err(_) => Stdout.line!("invalid JSON")?
 	}
@@ -274,8 +271,8 @@ print_refs! = |text| {
 show! : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)]) => Try({}, _)
 show! = |parsed| {
 	match parsed {
-		Ok(value) => Stdout.line!(JsonValue.to_str(value) ?? "not writable")?
-		Err(InvalidJsonValue({ line, column, problem })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}")?
+		Ok(value) => Stdout.line!(JsonValue.encode(value, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") ?? "not writable")?
+		Err(InvalidJsonValue(error)) => Stdout.line!("${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()}: ${Str.inspect(error.problem)}")?
 	}
 	Ok({})
 }
@@ -284,7 +281,7 @@ main! : List(OsStr) => Try({}, _)
 main! = |_args| {
 	# tag::walk-run[]
 	print_components!(sbom_text)?
-	Stdout.line!(Str.inspect(JsonValue.parse_str(sbom_text).map_ok(JsonValue.keys)))?
+	Stdout.line!(Str.inspect(JsonValue.parse_str(sbom_text, {}).map_ok(JsonValue.keys)))?
 	# end::walk-run[]
 
 	# tag::match-run[]
@@ -303,9 +300,9 @@ main! = |_args| {
 
 	# tag::numbers-run[]
 	for text in ["42", "-0", "1.50", "1e3", "18446744073709551616", "1e400"] {
-		Stdout.line!(convert(JsonValue.parse_str(text) ?? Null))?
+		Stdout.line!(convert(JsonValue.parse_str(text, {}) ?? Null))?
 	}
-	Stdout.line!(Str.inspect(JsonValue.parse_str("1.50") == JsonValue.parse_str("1.5")))?
+	Stdout.line!(Str.inspect(JsonValue.parse_str("1.50", {}) == JsonValue.parse_str("1.5", {})))?
 	Stdout.line!(Str.inspect(F64.from_str("1.50")))?
 	# end::numbers-run[]
 
@@ -316,12 +313,12 @@ main! = |_args| {
 
 	# tag::jsonc-run[]
 	show!(read_jsonc(tsconfig_text))?
-	show!(JsonValue.parse_str(tsconfig_text))?
+	show!(JsonValue.parse_str(tsconfig_text, {}))?
 	# end::jsonc-run[]
 
 	# tag::bom-run[]
 	show!(read_config("\u(FEFF){\"port\": 8080}"))?
-	show!(JsonValue.parse_str("\u(FEFF){\"port\": 8080}"))?
+	show!(JsonValue.parse_str("\u(FEFF){\"port\": 8080}", {}))?
 	show!(read_config("[8080]"))?
 	# end::bom-run[]
 
@@ -330,17 +327,17 @@ main! = |_args| {
 	# end::non-finite-run[]
 
 	# tag::limits-run[]
-	show!(JsonValue.parse_with("{\"ids\": [1, 2, 3]}", untrusted))?
-	show!(JsonValue.parse_with("{\"id\": 9007199254740993}", untrusted))?
-	show!(JsonValue.parse_with("{\"a\": \"${Str.repeat("x", 5000)}\"}", untrusted))?
-	show!(JsonValue.parse_with("[1, 2, 3]", untrusted))?
+	show!(JsonValue.parse_str("{\"ids\": [1, 2, 3]}", untrusted))?
+	show!(JsonValue.parse_str("{\"id\": 9007199254740993}", untrusted))?
+	show!(JsonValue.parse_str("{\"a\": \"${Str.repeat("x", 5000)}\"}", untrusted))?
+	show!(JsonValue.parse_str("[1, 2, 3]", untrusted))?
 	# end::limits-run[]
 
 	# tag::write-run[]
-	Stdout.line!(JsonValue.to_str(release) ?? "not writable")?
-	Stdout.line!(JsonValue.to_str_with(release, { indent: 2, sort_keys: True }) ?? "not writable")?
-	Stdout.line!(Str.inspect(JsonValue.to_str(Array([Number("0x10")]))))?
-	Stdout.line!(Str.inspect(JsonValue.to_str(Object([{ key: "a", value: Null }, { key: "a", value: Null }]))))?
+	Stdout.line!(JsonValue.encode(release, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") ?? "not writable")?
+	Stdout.line!(JsonValue.encode(release, { indent: 2, sort_keys: True }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") ?? "not writable")?
+	Stdout.line!(Str.inspect(JsonValue.encode(Array([Number("0x10")]), {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8")))?
+	Stdout.line!(Str.inspect(JsonValue.encode(Object([{ key: "a", value: Null }, { key: "a", value: Null }]), {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8")))?
 	# end::write-run[]
 
 	# tag::compile-time-run[]
@@ -362,7 +359,12 @@ main! = |_args| {
 expect lock.get("greeting") == Ok(String("café \u(1F600)"))
 
 # tag::byte-limits[]
-expect JsonValue.parse_with("null", { max_bytes: 4 }) == Ok(Null)
-expect JsonValue.to_str_with(String("é"), { max_bytes: 4 }) == Ok("\"é\"")
-expect JsonValue.to_str_with(String("é"), { max_bytes: 3 }) == Err(TooLarge(3))
+expect JsonValue.parse_str("null", { max_bytes: 4 }) == Ok(Null)
+expect JsonValue.encode(String("é"), { max_bytes: 4 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") == Ok("\"é\"")
+expect JsonValue.encode(String("é"), { max_bytes: 3 }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") == Err(InvalidJsonValue(Parser.Diagnostic.{ problem: LimitExceeded({ resource: DocumentBytes, max: 3, observed: AtLeast(4) }), location: Unavailable(GeneratedValue), path: [] }))
 # end::byte-limits[]
+
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	_ => crash "expected source text coordinates"
+}
