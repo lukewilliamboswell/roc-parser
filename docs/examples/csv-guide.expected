@@ -1,7 +1,7 @@
 bolt: 250 at 0.15
 nut: 40 at 0.05
 no column named quantity
-line 3, column 1: WidthMismatch({ expected: 3, found: 2 })
+Text({ column: 1, line: 3, offset: 34 }): WidthMismatch({ expected: 3, found: 2 })
 Ada (no email column, 36, active)
 Alan (no email column, age not given, inactive)
 Ok([("home", -33.87, 151.21), ("work", -33.86, 151.2)])
@@ -11,10 +11,10 @@ empty |
 sku, count; 2 rows
 size | 6" pipe
 count | 
-not valid CSV at 1:6: Syntax(UnterminatedQuotedField)
+not valid CSV at Text({ column: 6, line: 1, offset: 5 }): Syntax(UnterminatedQuotedField)
 empty input: Ok([])
 1 movies
-record 2, field 2 (line 2, column 12): ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ bytes: [115, 111, 111, 110], expected: U64 }) }))
-record 1, field 4 (line 1, column 28): UnreadFields({ found: 4, read: 3 })
+Text({ column: 12, line: 2, offset: 38 }), [Record(2), Field(2)]: ExpectedValue({ expected: U64, source: { bytes: [115, 111, 111, 110], total_bytes: 4 } })
+Text({ column: 28, line: 1, offset: 27 }), [Record(1), Field(4)]: UnreadFields({ found: 4, read: 3 })
 name | note
 Ada | said "hello"

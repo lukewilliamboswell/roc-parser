@@ -6,8 +6,6 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
-import parser.Streaming
-import parser.Utf8
 
 ## Independent whole-buffer and incremental scanners must agree on arbitrary
 ## bytes. A second pass writes accepted byte records with another dialect,
@@ -34,21 +32,21 @@ test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
 	match Str.from_utf8(bytes) {
 		Ok(text) => {
-			expected_text = CSV.parse_records(text).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy)))
-			generic_agrees = match (CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text), expected_text) {
+			expected_text = CSV.parse_str(text, {}).map_ok(|document| document.records).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy)))
+			generic_agrees = match (CSV.rows_parser({ row: Parser.many(CSV.field(CSV.string({}))) }).parse_str(text), expected_text) {
 				(Ok(actual), Ok(wanted)) => actual == wanted
-				(Err(InvalidCsv(actual)), Err(InvalidCsv(wanted))) => actual == wanted
+				(Err(ParseError({ problem: InvalidCsv(actual), .. })), Err(InvalidCsv(wanted))) => actual == wanted
 				_ => False
 			}
-			if CSV.parse_string_records(text) != expected_text or !generic_agrees {
+			if CSV.parse_string_records(text, {}) != expected_text or !generic_agrees {
 				crash "direct, raw, and generic CSV text collection disagree"
 			}
 		}
 		Err(_) => {}
 	}
 	width = (bytes.first() ?? 0).to_u64() % 31 + 1
-	expected = Utf8.parse_bytes(CSV.parser({}), bytes)
-	actual = Streaming.collect(Streaming.read_iter(chunks(bytes, width), CSV.decoder({})))
+	expected = CSV.parse_bytes(bytes, {}).map_ok(|document| document.records)
+	actual = (CSV.decoder({})).collect(chunks(bytes, width))
 	match (expected, actual) {
 		(Ok(rows), Ok(found)) => {
 			if rows != found {
@@ -64,7 +62,7 @@ test = |bytes| {
 				},
 			}
 			var $encoded = []
-			for part in Streaming.write_iter(rows.iter(), CSV.encoder(props).with_chunk_bytes(width)) {
+			for part in (CSV.encoder({ ..props, chunk_bytes: width })).write_iter(rows.iter()) {
 				match part {
 					Ok(chunk) => {
 						if chunk.len() > width {
@@ -75,16 +73,21 @@ test = |bytes| {
 					Err(_) => crash "accepted CSV records failed to encode"
 				}
 			}
-			if Streaming.collect(Streaming.read_iter(chunks($encoded, 1), CSV.decoder({}))) != Ok(rows) {
+			if (CSV.decoder({})).collect(chunks($encoded, 1)) != Ok(rows) {
 				crash "streaming byte CSV round trip changed records"
 			}
 			match Str.from_utf8($encoded) {
-				Ok(text) if CSV.parse_string_records(text) != Ok(rows.map(|row| row.map(Str.from_utf8_lossy))) => crash "direct text CSV round trip changed records"
+				Ok(text) if CSV.parse_string_records(text, {}) != Ok(rows.map(|row| row.map(Str.from_utf8_lossy))) => crash "direct text CSV round trip changed records"
 				_ => {}
 			}
 		}
-		(Err(_), Err(ReadFailed(ParseErr(problem)))) => {
-			if problem.record == 0 or problem.field == 0 or problem.line == 0 or problem.column == 0 {
+		(Err(InvalidCsv(wanted)), Err(InvalidCsv(problem))) => {
+			if wanted != problem {
+				crash "whole-buffer and streaming CSV diagnostic disagree"
+			}
+			logical = logical_position(problem.path)
+			at = source_position(problem.location)
+			if logical.record == 0 or logical.field == 0 or at.line == 0 or at.column == 0 {
 				crash "invalid streaming CSV diagnostic"
 			}
 		}
@@ -100,3 +103,20 @@ target = Fuzz.target_with({
 	test,
 	show: Str.inspect,
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+logical_position : List(Parser.PathSegment) -> { record : U64, field : U64 }
+logical_position = |path| path.fold(
+	{ record: 0.U64, field: 0.U64 },
+	|position, segment| match segment {
+		Record(index) => { ..position, record: index }
+		Field(index) => { ..position, field: index }
+		_ => position
+	},
+)

@@ -111,29 +111,25 @@ available.
 `Planet` is the record type each row becomes. The first line of the input is
 a header row, and each field of `Planet` reads the column with the same name.
 
-`planets` calls `CSV.parse`, which splits the text into rows and decodes each
-row into a record. `CSV.parse` does not take the row type as an argument: the
+`planets` calls `CSV.decode_str`, which splits the text into rows and decodes each
+row into a record. `CSV.decode_str` does not take the row type as an argument: the
 compiler infers it from the type annotation on `planets`, and finds the
 decoding code through the static dispatch method `parser_for`, which every
 record type has. Change the annotation and the same call decodes a different
 record.
 
-The result is `Ok` with a list of `Planet` records, or `Err` with one of two
-tags:
+The result is `Ok` with a list of `Planet` records, or
+`Err(InvalidCsv(error))`. The diagnostic's `problem` distinguishes syntax,
+cell conversion, and missing-column failures. Its `location` identifies the
+source position when one exists, and `path` names the logical record, field,
+or missing key. A missing column has the `MissingRequiredField(name)` problem.
 
-* `InvalidCsv(error)` when the text is not valid CSV or a cell does not fit
-  its field. `error` says which record and field failed, where it starts in
-  the text, and why.
-* `MissingRequiredField(name)` when the header has no column for a field.
-  The compiler adds this tag to the error type of every type-directed
-  decoder, so the annotation must name it.
-
-`describe` handles all three cases with a `match`. Nothing is printed until
-every row has been read successfully.
+`describe` matches the problem tags to present a missing column separately.
+Nothing is printed until every row has been read successfully.
 
 To see the error path, change `Mars,2` to `Mars,two` and run the program
 again. It reports line 4 and an `ExpectedValue` problem containing the expected
-`U64` type and the original cell bytes. Rename the `moons`
+`U64` type and a bounded excerpt of the original cell bytes. Rename the `moons`
 column and it prints `no moons column`. <<errors>> shows how to report every
 kind of failure, and <<csv>> shows optional columns, empty cells and
 hand-built row parsers that match columns by position.

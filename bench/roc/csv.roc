@@ -13,7 +13,7 @@ main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
-	match CSV.parse_string_records(input) {
+	match CSV.parse_string_records(input, {}) {
 		Ok(rows) => Ok(rows.fold(0, |total, row| row.fold(total + 1, |sum, field| sum + Bench.weighted_utf8(field))))
 		Err(_) => Err(1)
 	}

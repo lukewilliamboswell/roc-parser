@@ -10,7 +10,7 @@ import cli.Path
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
-import parser.Streaming
+import parser.Parser
 import Bench
 
 ## Read a real file (argument 1), or stdin, with bounded source buffers.
@@ -38,7 +38,7 @@ consume! = |chunks, start| {
 	var $first_item_ns = 0.U64
 	var $seen = False
 	var $sum = 0.U64
-	for! event in Streaming.read_stream(chunks, CSV.decoder({})) {
+	for! event in (CSV.decoder({})).read_stream(chunks) {
 		match event? {
 			Value(row) => {
 				if !$seen {

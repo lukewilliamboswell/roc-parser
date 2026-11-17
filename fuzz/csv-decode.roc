@@ -6,18 +6,17 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
-import parser.Streaming
 
 ## Typed decoding properties: fuzzer bytes choose rows of (U64, F64, Str)
 ## values, how each number is spelled, how each field is quoted, and possibly
 ## one defect per row (a malformed number, an extra field, a missing field).
 ##
-## - Positional: CSV.parse_with with the record(...).keep(field(u64))...
+## - Positional: CSV.rows_parser with the record(...).keep(field(u64))...
 ##   decoder must return exactly those values, or fail on the first defective
 ##   row with an error naming its record and field.
 ## - By name (parser_for): the same table written with a header row, its
 ##   columns in a chosen order and possibly an extra column no field names,
-##   must decode through CSV.parse into the `Row` record type to the same
+##   must decode through CSV.decode_str into the `Row` record type to the same
 ##   values, or fail on the first defective row with its record and field.
 ##
 ## The number grammar is Rust's `u64::from_str` / `f64::from_str` (a mature,
@@ -289,18 +288,21 @@ named_error = |input, index, defect| {
 	{ record: index + 2, field }
 }
 
-error_location : CSV.Located(p) -> { record : U64, field : U64, line : U64, column : U64 }
-error_location = |error| { record: error.record, field: error.field, line: error.line, column: error.column }
+error_location : Parser.Diagnostic(p) -> { record : U64, field : U64, line : U64, column : U64 }
+error_location = |error| {
+	logical = logical_position(error.path)
+	at = source_position(error.location)
+	{ record: logical.record, field: logical.field, line: at.line, column: at.column }
+}
 
-native_at : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)]) -> Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+native_at : Try(List(Row), [InvalidCsv(CSV.Error)]) -> Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 })])
 native_at = |result| result.map_err(
 	|error| match error {
 		InvalidCsv(problem) => InvalidAt(error_location(problem))
-		MissingRequiredField(name) => MissingRequiredField(name)
 	},
 )
 
-check : Str, Str, Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)]), Try(Expected, [AllValid]), List(Row) -> {}
+check : Str, Str, Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 })]), Try(Expected, [AllValid]), List(Row) -> {}
 check = |label, csv, result, expected, rows| {
 	context = "${label}\n--- csv ---\n${Str.inspect(csv)}"
 	match (expected, result) {
@@ -314,41 +316,37 @@ check = |label, csv, result, expected, rows| {
 			if problem.record != wanted.record or problem.field != wanted.field or problem.line == 0 or problem.column == 0 {
 				crash "wrong error position: ${context}\n--- expected ---\n${Str.inspect(wanted)}\n--- actual ---\n${Str.inspect(problem)}"
 			}
-		(Ok(_), Err(MissingRequiredField(name))) => crash "every column is present, but ${name} was reported missing: ${context}"
 	}
 }
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	positional : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+	positional : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 })])
 	positional =
-		match CSV.parse_with(decoder, input.csv) {
+		match CSV.rows_parser({ row: decoder }).parse_str(input.csv) {
 			Ok(rows) => Ok(rows)
-			Err(InvalidCsv(problem)) => Err(InvalidAt(error_location(problem)))
-			Err(InvalidRow(problem)) => Err(InvalidAt(error_location(problem)))
+			Err(ParseError({ problem: InvalidCsv(problem), .. })) => Err(InvalidAt(error_location(problem)))
+			Err(ParseError({ problem: InvalidRow(problem), .. })) => Err(InvalidAt(error_location(problem)))
+			Err(_) => crash "unexpected generic parser failure"
 		}
 	check("positional", input.csv, positional, input.first_bad.map_ok(|{ index, defect }| positional_error(index, defect)), input.rows)
-	named : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
-	named = native_at(CSV.parse(input.with_header))
+	named : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 })])
+	named = native_at(CSV.decode_str(input.with_header, {}))
 	check("by header name", input.with_header, named, input.first_bad.map_ok(|{ index, defect }| named_error(input, index, defect)), input.rows)
-	streaming_named : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+	streaming_named : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 })])
 	streaming_named = native_at(
-		match Streaming.collect(Streaming.read_iter(input.with_header.to_utf8().map(|byte| [byte]).iter(), CSV.typed_decoder(Exact, {}))) {
+		match (CSV.typed_decoder({})).collect(input.with_header.to_utf8().map(|byte| [byte]).iter()) {
 			Ok(values) => Ok(values)
-			Err(ReadFailed(ParseErr(error))) => Err(error)
+			Err(InvalidCsv(error)) => Err(InvalidCsv(error))
 			Err(_) => crash "typed streaming CSV protocol failure"
 		},
 	)
 	check("streaming by header", input.with_header, streaming_named, input.first_bad.map_ok(|{ index, defect }| named_error(input, index, defect)), input.rows)
-	streaming_positional : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
-	streaming_positional = match Streaming.collect(Streaming.read_iter(input.csv.to_utf8().map(|byte| [byte]).iter(), CSV.positional_decoder(decoder, {}))) {
+	streaming_positional : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 })])
+	streaming_positional = match (CSV.positional_decoder({ row: decoder })).collect(input.csv.to_utf8().map(|byte| [byte]).iter()) {
 		Ok(values) => Ok(values)
-		Err(ReadFailed(ParseErr(error))) => Err(
-			match error {
-				InvalidCsv(problem) => InvalidAt(error_location(problem))
-				InvalidRow(problem) => InvalidAt(error_location(problem))
-			},
-		)
+		Err(InvalidCsv(problem)) => Err(InvalidAt(error_location(problem)))
+		Err(InvalidRow(problem)) => Err(InvalidAt(error_location(problem)))
 		Err(_) => crash "positional streaming CSV protocol failure"
 	}
 	check("streaming positional", input.csv, streaming_positional, input.first_bad.map_ok(|{ index, defect }| positional_error(index, defect)), input.rows)
@@ -366,3 +364,20 @@ target = Fuzz.target_with({
 		"csv: ${Str.inspect(input.csv)}\nwith header: ${Str.inspect(input.with_header)}"
 	},
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+logical_position : List(Parser.PathSegment) -> { record : U64, field : U64 }
+logical_position = |path| path.fold(
+	{ record: 0.U64, field: 0.U64 },
+	|position, segment| match segment {
+		Record(index) => { ..position, record: index }
+		Field(index) => { ..position, field: index }
+		_ => position
+	},
+)

@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.CSV
-import parser.Streaming
+import parser.Parser
 
 ## Generate chunks inside the measured region and discard every completed
 ## record. Shape 2 retains one early tiny field while later large chunks pass.
@@ -24,7 +24,7 @@ drain = |records, field_bytes, retain| {
 		},
 	)
 	var $retained = []
-	for event in Streaming.read_iter(chunks, CSV.decoder({})) {
+	for event in (CSV.decoder({})).read_iter(chunks) {
 		match event {
 			Ok(Value(row)) => {
 				if retain and $retained.is_empty() {
@@ -43,15 +43,15 @@ drain = |records, field_bytes, retain| {
 retain_error : U64, Bool -> CSV.Error
 retain_error = |size, unknown_tag| {
 	if unknown_tag {
-		result : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-		result = CSV.parse("status\n${Str.repeat("x", size)}")
+		result : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error)])
+		result = CSV.decode_str("status\n${Str.repeat("x", size)}", {})
 		match result {
 			Err(InvalidCsv(error)) => error
 			_ => crash "invalid tag did not yield a CSV error"
 		}
 	} else {
-		result : Try(List({ count : U64 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-		result = CSV.parse("count\n${Str.repeat("x", size)}")
+		result : Try(List({ count : U64 }), [InvalidCsv(CSV.Error)])
+		result = CSV.decode_str("count\n${Str.repeat("x", size)}", {})
 		match result {
 			Err(InvalidCsv(error)) => error
 			_ => crash "invalid number did not yield a CSV error"
@@ -66,8 +66,8 @@ test! = |bytes| {
 		for unknown_tag in [False, True] {
 			measured = Fuzz.measure!(if (unknown_tag) "csv-unknown-tag-retained" else "csv-expected-value-retained", || retain_error(262_144 + choice, unknown_tag))
 			valid = match measured.value.problem {
-				ExpectedValue({ expected: U64, bytes: excerpt }) => !unknown_tag and excerpt == Str.repeat("x", 40).to_utf8()
-				UnknownTag(excerpt) => unknown_tag and excerpt == Str.repeat("x", 40).to_utf8()
+				ExpectedValue({ expected: U64, source }) => !unknown_tag and source.bytes == Str.repeat("x", 40).to_utf8() and source.total_bytes == 262_144 + choice
+				UnknownTag(source) => unknown_tag and source.bytes == Str.repeat("x", 40).to_utf8() and source.total_bytes == 262_144 + choice
 				_ => False
 			}
 			if !valid {

@@ -17,15 +17,17 @@ input =
 	\\Earth,1
 	\\Mars,2
 
-planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-planets = |text| CSV.parse(text)
+planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error)])
+planets = |text| CSV.decode_str(text, {})
 
 describe : Str -> Str
 describe = |text| {
 	match planets(text) {
 		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if (p.moons == 1) "moon" else "moons"}"), "\n")
-		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${Str.inspect(error.problem)}"
-		Err(MissingRequiredField(name)) => "no ${name} column"
+		Err(InvalidCsv(error)) => match error.problem {
+			MissingRequiredField(name) => "no ${name} column"
+			_ => "${Str.inspect(error.location)}: ${Str.inspect(error.problem)}"
+		}
 	}
 }
 

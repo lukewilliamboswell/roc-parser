@@ -7,13 +7,11 @@ import cli.OsStr
 import cli.Stdout
 import parser.CSV
 import parser.Parser
-import parser.Utf8
-
 # tag::typed[]
 Product : { name : Str, quantity : U64, price : Dec }
 
-products : Str -> Try(List(Product), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-products = |text| CSV.parse(text)
+products : Str -> Try(List(Product), [InvalidCsv(CSV.Error)])
+products = |text| CSV.decode_str(text, {})
 
 # end::typed[]
 
@@ -26,11 +24,11 @@ print_products! = |text| {
 				Stdout.line!("${p.name}: ${p.quantity.to_str()} at ${p.price.to_str()}")?
 			}
 
-		Err(InvalidCsv({ line, column, problem, record: _, field: _ })) =>
-			Stdout.line!("line ${line.to_str()}, column ${column.to_str()}: ${Str.inspect(problem)}")?
+		Err(InvalidCsv(error)) => match error.problem {
+			MissingRequiredField(name) => Stdout.line!("no column named ${name}")?
+			_ => Stdout.line!("${Str.inspect(error.location)}: ${Str.inspect(error.problem)}")?
+		}
 
-		Err(MissingRequiredField(name)) =>
-			Stdout.line!("no column named ${name}")?
 	}
 	Ok({})
 }
@@ -45,8 +43,8 @@ Contact : {
 	status : [Active, Inactive],
 }
 
-contacts : Str -> Try(List(Contact), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-contacts = |text| CSV.parse_normalized(text)
+contacts : Str -> Try(List(Contact), [InvalidCsv(CSV.Error)])
+contacts = |text| CSV.decode_str(text, { header: Normalized })
 
 describe_contact : Contact -> Str
 describe_contact = |{ name, email, age, status }| {
@@ -71,20 +69,20 @@ describe_contact = |{ name, email, age, status }| {
 # end::optional[]
 
 # tag::headerless[]
-points : Str -> Try(List((Str, F64, F64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-points = |text| CSV.parse_headerless(text)
+points : Str -> Try(List((Str, F64, F64)), [InvalidCsv(CSV.Error)])
+points = |text| CSV.decode_str(text, { header: Absent })
 
 # end::headerless[]
 
 # tag::raw[]
 raw_records : Str -> Str
 raw_records = |text| {
-	match CSV.parse_records(text) {
+	match CSV.parse_str(text, {}).map_ok(|document| document.records) {
 		Ok(records) =>
 			Str.join_with(records.map(|fields| Str.join_with(fields.map(Str.from_utf8_lossy), " | ")), "\n")
 
-		Err(InvalidCsv({ problem, line, column, record: _, field: _ })) =>
-			"not valid CSV at ${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
+		Err(InvalidCsv(error)) =>
+			"not valid CSV at ${Str.inspect(error.location)}: ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -93,9 +91,9 @@ raw_records = |text| {
 # tag::header[]
 column_names : Str -> Str
 column_names = |text| {
-	match CSV.parse_records(text) {
+	match CSV.parse_str(text, {}).map_ok(|document| document.records) {
 		Ok(records) => {
-			{ header, rows } = CSV.split_header(records)
+			{ header, rows } = CSV.{ records }.split_header()
 			"${Str.join_with(header, ", ")}; ${rows.len().to_str()} rows"
 		}
 
@@ -108,7 +106,7 @@ column_names = |text| {
 # tag::combinators[]
 Movie : { title : Str, year : U64, cast : List(Str) }
 
-cast : Parser(Utf8.Bytes, List(Str), _)
+cast : Parser(Parser.Utf8.Bytes, List(Str), _)
 cast = CSV.string({}).map(|text| Str.split_on(text, ";"))
 
 movie : Parser(CSV.Record, Movie, _)
@@ -123,12 +121,17 @@ movie =
 # tag::errors[]
 describe : Str -> Str
 describe = |text| {
-	match CSV.parse_with(movie, text) {
+	match CSV.rows_parser({ row: movie }).parse_str(text) {
 		Ok(movies) => "${movies.len().to_str()} movies"
-		Err(InvalidCsv({ record, field, line, column, problem })) =>
-			"record ${record.to_str()}, field ${field.to_str()} (line ${line.to_str()}, column ${column.to_str()}): ${Str.inspect(problem)}"
-		Err(InvalidRow({ record, field, line, column, problem })) =>
-			"record ${record.to_str()}, field ${field.to_str()} (line ${line.to_str()}, column ${column.to_str()}): ${Str.inspect(problem)}"
+		Err(ParseError({ problem: InvalidRow(error), .. })) => {
+			problem = match error.problem {
+				ParserFailure(FieldProblem(field)) => Str.inspect(field.problem)
+				other => Str.inspect(other)
+			}
+			"${Str.inspect(error.location)}, ${Str.inspect(error.path)}: ${problem}"
+		}
+		Err(ParseError(error)) =>
+			"${Str.inspect(error.location)}, ${Str.inspect(error.path)}: ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -164,7 +167,7 @@ main! = |_args| {
 	# tag::dialect-run[]
 	Stdout.line!(raw_records("size,6\" pipe\rcount,"))?
 	Stdout.line!(raw_records("bolt,\"250"))?
-	Stdout.line!("empty input: ${Str.inspect(CSV.parse_records(""))}")?
+	Stdout.line!("empty input: ${Str.inspect(CSV.parse_str("", {}).map_ok(|document| document.records))}")?
 	# end::dialect-run[]
 
 	# tag::errors-run[]
@@ -174,7 +177,7 @@ main! = |_args| {
 	# end::errors-run[]
 
 	# tag::text-run[]
-	text_rows = CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n")?
+	text_rows = CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n", {})?
 	for row in text_rows {
 		Stdout.line!(Str.join_with(row, " | "))?
 	}

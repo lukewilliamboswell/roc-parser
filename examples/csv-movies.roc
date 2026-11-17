@@ -8,8 +8,6 @@ import cli.Stderr
 import cli.Stdout
 import parser.CSV
 import parser.Parser
-import parser.Utf8
-
 input =
 	\\Airplane!,1980,\"Robert Hays,Julie Hagerty\"
 	\\Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
@@ -20,7 +18,7 @@ main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	csv_input = args.get(1).map_ok(OsStr.display) ?? input
 
-	match CSV.parse_with(movie_info_parser, csv_input) {
+	match CSV.rows_parser({ row: movie_info_parser }).parse_str(csv_input) {
 		Ok(movies) => {
 			movies_string =
 				movies
@@ -32,12 +30,10 @@ main! = |args| {
 			Stdout.line!("${n_movies} movies were found:\n\n${movies_string}\n\nParse success!\n")?
 		}
 
-		Err(InvalidCsv({ record, field, line, column, problem })) => {
-			Stderr.line!("Invalid CSV at line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}")?
+		Err(ParseError(error)) => {
+			Stderr.line!("Invalid CSV at ${Str.inspect(error.location)}, ${Str.inspect(error.path)}: ${Str.inspect(error.problem)}")?
 		}
-		Err(InvalidRow({ record, field, line, column, problem })) => {
-			Stderr.line!("Invalid CSV at line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}")?
-		}
+
 	}
 
 	Ok({})
@@ -54,7 +50,7 @@ movie_info_parser =
 		.keep(CSV.field(CSV.u64({})))
 		.keep(CSV.field(actors_parser))
 
-actors_parser : Parser(Utf8.Bytes, List(Str), _)
+actors_parser : Parser(Parser.Utf8.Bytes, List(Str), _)
 actors_parser = CSV.string({}).map(
 	|val| {
 		val.split_on(",")

@@ -9,7 +9,7 @@ import cli.Path
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
-import parser.Streaming
+import parser.Parser
 
 ## Canonicalize stdin to stdout, or write a destination from stdin/a file.
 ## Usage: roc csv-streaming.roc [output.csv [input.csv]]
@@ -46,6 +46,5 @@ write! = |destination, chunks| File.with_writer!(destination, Truncate, {}, |wri
 
 encode_chunks : Stream(Try(List(U8), source_error)) -> Stream(Try(List(U8), _))
 encode_chunks = |chunks| {
-	events = Streaming.read_stream(chunks, CSV.decoder({}))
-	Streaming.write_stream(Streaming.values_stream(events), CSV.encoder({}))
+	(CSV.encoder({})).write_stream((CSV.decoder({})).values_stream(chunks))
 }

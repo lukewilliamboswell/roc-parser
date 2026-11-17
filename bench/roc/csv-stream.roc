@@ -5,7 +5,6 @@ app [main!] {
 
 import cli.OsStr
 import parser.CSV
-import parser.Streaming
 import parser.Parser
 import Bench
 
@@ -30,7 +29,7 @@ parse = |input| {
 		},
 	)
 	var $sum = 0.U64
-	for event in Streaming.read_iter(chunks, CSV.positional_decoder(Parser.many(CSV.field(CSV.string({}))), {})) {
+	for event in (CSV.positional_decoder({ row: Parser.many(CSV.field(CSV.string({}))) })).read_iter(chunks) {
 		match event {
 			Ok(Value(row)) => {
 				$sum = row.fold($sum + 1, |total, field| total + Bench.weighted_utf8(field))

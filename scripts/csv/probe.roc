@@ -7,9 +7,10 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
+import parser.Parser
 
 ## Reads CSV text on stdin and prints one JSON line describing the parse
-## through the public CSV.parse_records API:
+## through the public CSV.parse_str API:
 ## {"status":"ok","records":[["field",...],...]} or {"status":"error",...}.
 main! : List(OsStr) => Try({}, _)
 main! = |_| {
@@ -17,12 +18,15 @@ main! = |_| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(input) => {
-			match CSV.parse_records(input) {
+			match CSV.parse_str(input, {}).map_ok(|document| document.records) {
 				Ok(records) => {
 					rows = records.map(|fields| "[${fields.map(json_bytes) |> Str.join_with(",")}]") |> Str.join_with(",")
 					Stdout.line!("{\"status\":\"ok\",\"records\":[${rows}]}")?
 				}
-				Err(InvalidCsv({ record, field, line, column, problem })) => {
+				Err(InvalidCsv(error)) => {
+					{ record, field } = logical_position(error.path)
+					{ line, column } = source_position(error.location)
+					problem = error.problem
 					location = "\"record\":${record.to_str()},\"field\":${field.to_str()},\"line\":${line.to_str()},\"column\":${column.to_str()}"
 					Stdout.line!("{\"status\":\"error\",\"message\":${json_bytes(Str.inspect(problem).to_utf8())},${location}}")?
 				}
@@ -50,3 +54,20 @@ escape_json = |bytes, out| {
 		[byte, .. as rest] => escape_json(rest, out.append(byte))
 	}
 }
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+logical_position : List(Parser.PathSegment) -> { record : U64, field : U64 }
+logical_position = |path| path.fold(
+	{ record: 0.U64, field: 0.U64 },
+	|position, segment| match segment {
+		Record(index) => { ..position, record: index }
+		Field(index) => { ..position, field: index }
+		_ => position
+	},
+)

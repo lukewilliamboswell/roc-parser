@@ -19,11 +19,11 @@ is for Roc programmers who have added `parser` to their app's dependencies.
 
 Every example on this page comes from
 link:{src}/docs/examples/csv-guide.roc[`docs/examples/csv-guide.roc`], which
-CI runs, and imports `parser.CSV`, `parser.Parser` and `parser.Utf8`.
+CI runs, and imports `parser.CSV` and `parser.Parser`.
 
 == Decode rows into records
 
-When the first row names the columns, `CSV.parse` decodes every other row
+When the first row names the columns, `CSV.decode_str` decodes every other row
 into the record type you annotate. Each field reads the column whose header
 is exactly its name, so the column order does not matter:
 
@@ -51,10 +51,12 @@ include::examples/csv-guide.roc[tag=typed-run,indent=0]
 include::examples/csv-guide.expected[lines=1..4]
 ----
 
-`MissingRequiredField(name)` is not declared by `CSV.parse`: the compiler adds
-it to the error type of any decoder whose record has required fields, so
-include it in your annotation. Columns that no field names are ignored, and
-when two columns share a name the last one wins.
+Missing required columns produce `InvalidCsv(error)` with
+`error.problem == MissingRequiredField(name)` and `Key(name)` in the diagnostic
+path. Native decoding errors share this envelope. Columns that no field names
+are ignored, and when two columns share a name the last one wins. Select
+`validation: Checked({})` with `header: Exact` or `Normalized` when parsing raw
+CSV to reject duplicate or empty header names before decoding.
 
 A cell decodes according to its field's type:
 
@@ -94,7 +96,7 @@ error, because a CSV cell cannot hold one.
 
 A field of type `Try(a, [Missing])` is `Err(Missing)` when the file has no
 such column. A field of type `Try(a, [Null])` is `Err(Null)` when its cell is
-empty. `CSV.parse_normalized` matches header names after trimming spaces,
+empty. `CSV.decode_str(text, { header: Normalized })` matches header names after trimming spaces,
 lowercasing ASCII letters and turning runs of spaces, `-` and `_` into one
 `_`, so `First Name`, `first-name` and `FIRST_NAME` all fill `first_name`:
 
@@ -120,7 +122,7 @@ columns. A header with no data rows, and empty input, decode to an empty list.
 
 == Files without a header
 
-`CSV.parse_headerless` decodes every row into a tuple, one element per
+`CSV.decode_str(text, { header: Absent })` decodes every row into a tuple, one element per
 column, with the same cell rules. Every row must have as many fields as the
 tuple has elements:
 
@@ -153,14 +155,16 @@ include::examples/csv-guide.expected[lines=19..20]
 ----
 
 It accepts the same dialect and reports the same syntax errors as
-`CSV.parse_records`. Empty input gives no rows; a blank line gives one empty
-field. Use `CSV.parse` when a header should select typed record fields, or
-`CSV.parse_with` when a column needs a custom parser.
+`CSV.parse_str`. Empty input gives no rows; a blank line gives one empty
+field. Use `CSV.decode_str` when a header should select typed record fields, or
+`CSV.rows_parser({ row: parser }).parse_str(text)` when a column needs a custom parser.
 
 == Read every field as raw bytes
 
-Use `CSV.parse_records` when the columns vary or you want to inspect rows
-yourself. It returns one `CSV.Record`, a `List(List(U8))`, per row:
+Use `CSV.parse_str` when the columns vary or you want to inspect rows
+yourself. It returns a `CSV` document whose `.records` contains one
+`CSV.Record`, a `List(List(U8))`, per row. `CSV.parse_bytes(bytes, {})` accepts
+arbitrary field bytes without imposing UTF-8:
 
 [source,roc]
 ----
@@ -181,7 +185,7 @@ include::examples/csv-guide.roc[tag=raw-run,indent=0]
 include::examples/csv-guide.expected[lines=8..10]
 ----
 
-`CSV.split_header` separates the first record as column names:
+`document.split_header()` separates the first record as column names:
 
 [source,roc]
 ----
@@ -194,15 +198,16 @@ include::examples/csv-guide.roc[tag=header,indent=0]
 include::examples/csv-guide.expected[lines=11]
 ----
 
-`CSV.parser({})` is the same reader as a `Parser(Utf8.Bytes, List(CSV.Record), CSV.Problem([]))`,
-for use inside larger parsers. It accepts any bytes.
+`CSV.parser({})` constructs a `Parser(Parser.Utf8.Bytes, CSV, [InvalidCsv(CSV.Error)])`
+for use inside larger parsers. It accepts any bytes. Its `.parse` and `.run`
+methods use the shared `ParseError(diagnostic)` envelope.
 
 == Hand-built record parsers
 
 When a column needs custom handling, such as a list stored in one cell,
 describe one row with `CSV.record`, giving it a function that takes one
 argument per column, then add one `.keep(CSV.field(...))` per column in
-order. A field parser is any `Parser(Utf8.Bytes, a, problem)`; `CSV.string({})`,
+order. A field parser is any `Parser(Parser.Utf8.Bytes, a, problem)`; `CSV.string({})`,
 `CSV.u64({})` and `CSV.f64({})` read cells with the rules above:
 
 [source,roc]
@@ -210,52 +215,57 @@ order. A field parser is any `Parser(Utf8.Bytes, a, problem)`; `CSV.string({})`,
 include::examples/csv-guide.roc[tag=combinators,indent=0]
 ----
 
-Run it on text with `CSV.parse_with`, or on records you already have with
-`CSV.decode`. Columns are matched by position, and the record parser must
+Run it on text with `CSV.rows_parser({ row: parser }).parse_str(text)`, or on an existing document with
+`document.decode_rows({ row: parser })`. Columns are matched by position, and the record parser must
 read every field in the row: a row with more fields than `.keep` calls fails,
 and so does a row with fewer.
 
 [#csv-streaming]
 == Read and write large files
 
-Pass `CSV.decoder(limits)` to `Streaming.read_iter(chunks, decoder)` for an
-`Iter(List(U8))`, or to `Streaming.read_stream(chunks, decoder)` for an effectful
-`Stream(Try(List(U8), source_error))`. Readers yield `Value(record)`, recoverable
-`Rejected(error)` events when configured, and `Finished(report)` after complete
-validation. Consume through `Finished`; stopping early validates only a prefix.
-Source failures remain distinct from CSV failures.
+Construct `CSV.decoder({})`, then call `.read_iter(chunks)` for an
+`Iter(List(U8))` or `.read_stream(chunks)` for an effectful
+`Stream(Try(List(U8), source_error))`. These methods yield `Value(record)`,
+recoverable `Rejected(error)` events when configured, and `Finished(report)`
+after complete validation. Consume through `Finished`; stopping early validates
+only a prefix. Source failures keep the original typed failure inside `SourceErr`.
 
 Chunks may end inside UTF-8 characters, quoted multiline fields, doubled quotes,
 or CRLF. Empty chunks do not end the document. For manual backpressure call
-`decoder.step(bytes, More | Final)` and retain the returned state.
+`decoder.step({ bytes, end: More })`, or `end: Final` for the last input, and
+retain the returned state.
 
-`CSV.positional_decoder(parser, limits)` applies a custom record parser.
-`CSV.typed_decoder(header_mode, limits)` infers the row type; header modes are
-`Exact`, `Normalized`, or `Absent`. Headers are retained once; completed rows
-leave the decoder. Default limits are 16 MiB per field, 64 MiB per unfinished
-record, and 65,536 fields. Set `CSV.ReaderProps` for larger individual records.
+`CSV.positional_decoder({ row: parser })` applies a custom record parser.
+`CSV.typed_decoder({})` infers the row type; select `header: Exact`, `Normalized`,
+or `Absent`. Headers are retained once; completed rows leave the decoder.
+Default limits are 16 MiB per field, 64 MiB per unfinished record, and 65,536
+fields. The raw decoder takes these limits directly. Typed and positional
+constructors place them in `reader: { max_field_bytes, max_record_bytes,
+max_fields }`.
 
-Configure recovery with `decoder.with_errors({ error_policy: ReportInvalidRecords })`.
-The default `Streaming.ReadProps` stops on the first error. `SkipInvalidRecords`
+All reader constructors accept the same outer `errors` props. The default
+`errors: { policy: FailFast }` stops on the first failure. `SkipInvalidRecords`
 counts and skips a row that fails typed decoding; `ReportInvalidRecords` also
 emits its `Rejected` diagnostic. Both allow at most `max_errors` rejected
 records (1,000 by default). The next rejection is terminal and retains its
-triggering diagnostic. Malformed CSV syntax and resource limits are terminal
-in every mode because their record boundaries cannot safely be guessed.
+triggering diagnostic under `RecoveryLimitExceeded`. Malformed CSV syntax and
+resource limits are terminal in every mode because their record boundaries
+cannot safely be guessed.
 
-`Streaming.collect` fails on a rejection, skipped records, or a missing
-completion event. Use `Streaming.collect_report` to explicitly collect the
-values, reported diagnostics, and completion counts. Collecting retains all
-output; ordinary iteration or folding keeps parser memory bounded by the
-current chunk, unfinished record, header, and consumer-retained values.
+`decoder.collect(chunks)` fails on a rejection, skipped records, or a missing
+completion event. Use `.collect_report(chunks)` to explicitly collect values,
+reported diagnostics, and completion counts. Collecting retains all output;
+ordinary iteration or folding keeps parser memory bounded by the current chunk,
+unfinished record, header, and consumer-retained values.
 
-`Streaming.write_iter(records, CSV.encoder(options))` and its `write_stream`
-counterpart validate each complete record before emitting its bytes.
-Set output bounds with `CSV.encoder(options).with_chunk_bytes(bytes)`; the
-default is 64 KiB and zero is rejected.
-`CSV.WriteProps` defaults to necessary quoting and CRLF. Set `quoting: Always`
-or `line_ending: Lf`/`Cr` for another output dialect. A record must contain at
-least one field; a lone empty field is quoted so it survives a round trip.
+`CSV.encoder({}).write_iter(records)` and its `.write_stream(records)`
+counterpart validate each complete record before emitting its bytes. Set
+`chunk_bytes` in the constructor props; the default is 64 KiB and zero is
+rejected with `InvalidChunkSize`. `CSV.WriteProps` defaults to necessary quoting
+and CRLF. Set `quoting: Always` or `line_ending: Lf`/`Cr` for another dialect.
+A record must contain at least one field; a lone empty field is quoted so it
+survives a round trip. For an already collected document,
+`document.encode({})` returns all encoded bytes.
 
 The complete https://github.com/lukewilliamboswell/roc-parser/blob/main/examples/csv-streaming.roc[streaming example]
 connects basic-cli's file or stdin chunks to CSV parsing and a bounded file
@@ -273,27 +283,34 @@ decoding failures in the order their records are encountered.
 
 == Report which row failed
 
-Native CSV failures return `InvalidCsv(error)`. Custom positional parser failures
-return `InvalidRow(error)`, preserving their own typed problem under `ParserFailure`.
-The `CSV.Error` record says where the problem is:
+Native CSV operations return `InvalidCsv(error)`. Custom positional decoding
+returns `InvalidRow(error)`, preserving its typed problem under `ParserFailure`.
+A generic `CSV.rows_parser(...).parse_str(text)` wraps these native tagged
+failures inside `ParseError(diagnostic)` like every shared parser.
+
+Each diagnostic contains:
 
 [cols="1,3",options="header"]
 |===
 |Field |Meaning
 
-|`record`, `field`
-|The one-based record and field numbers. Records count every record of the
-input, including the header row and blank lines.
-
-|`line`, `column`
-|The one-based line and byte column where the field (or, when the field
-does not exist, the record) starts. They are `0` from `CSV.decode`, which
-does not see the text.
-
 |`problem`
 |A descriptive tagged failure with structured limits, expected scalar type,
-widths or offending source bytes. Native cell payloads retain at most 40 bytes.
-Match tags to classify errors; render them at the application boundary.
+widths or offending source data. `ExpectedValue` and `UnknownTag` retain an
+excerpt of at most 40 owned bytes together with the original `total_bytes`.
+Match tags to classify errors; render text at the application boundary.
+
+|`location`
+|`Text({ offset, line, column })` identifies the byte offset and one-based line
+and byte column in retained source. Decoding an existing document uses
+`Unavailable(NotRetained)` because the source was not retained. Missing schema
+fields have no physical source location. A nested field parser diagnostic
+identifies positions in the decoded field bytes separately.
+
+|`path`
+|Logical `Record(number)` and `Field(number)` segments use one-based indexes.
+Records include the header and blank lines. A missing schema field uses
+`Key(name)` instead of inventing a field index.
 |===
 
 [source,roc]

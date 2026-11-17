@@ -6,7 +6,6 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
-import parser.Utf8
 
 ## Arbitrary UTF-8 must parse or fail cleanly, and every accepted input obeys:
 ## - every record has at least one field;
@@ -21,8 +20,8 @@ import parser.Utf8
 ## - every record also parses alone, serialized with no line break.
 ##
 ## Every input, UTF-8 or not, also goes through the byte-level CSV.parser({}) and
-## CSV.decode with string and number field parsers, which must not crash on
-## fields that are not UTF-8 and must agree with CSV.parse_records on text.
+## CSV.decode_rows with string and number field parsers, which must not crash on
+## fields that are not UTF-8 and must agree with CSV.parse_str on text.
 ## Direct text collection also matches raw and generic string decoding,
 ## including complete syntax diagnostics for rejected CSV text.
 ## An input starting with byte 0x01 has its 0xC3 bytes removed first, so that
@@ -38,7 +37,7 @@ Rows : List(List(List(U8)))
 
 parse : Str -> Try(Rows, [Rejected])
 parse = |text| {
-	match CSV.parse_records(text) {
+	match CSV.parse_str(text, {}).map_ok(|document| document.records) {
 		Ok(rows) => Ok(rows)
 		Err(InvalidCsv(_)) => Err(Rejected)
 	}
@@ -46,13 +45,13 @@ parse = |text| {
 
 check_text_records : Str -> {}
 check_text_records = |text| {
-	expected = CSV.parse_records(text).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy)))
-	generic_agrees = match (CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text), expected) {
+	expected = CSV.parse_str(text, {}).map_ok(|document| document.records).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy)))
+	generic_agrees = match (CSV.rows_parser({ row: Parser.many(CSV.field(CSV.string({}))) }).parse_str(text), expected) {
 		(Ok(actual), Ok(wanted)) => actual == wanted
-		(Err(InvalidCsv(actual)), Err(InvalidCsv(wanted))) => actual == wanted
+		(Err(ParseError({ problem: InvalidCsv(actual), .. })), Err(InvalidCsv(wanted))) => actual == wanted
 		_ => False
 	}
-	if CSV.parse_string_records(text) != expected or !generic_agrees {
+	if CSV.parse_string_records(text, {}) != expected or !generic_agrees {
 		crash "CSV text, raw, and generic collection disagree\n${Str.inspect(text)}"
 	}
 	{}
@@ -62,22 +61,24 @@ check_text_records = |text| {
 ## fail on any field. Nothing may crash, and source payloads stay bounded.
 check_bytes : List(U8) -> {}
 check_bytes = |bytes| {
-	match Utf8.parse_bytes(CSV.parser({}), bytes) {
-		Err(ParseError({ problem: _, offset })) if offset > bytes.len() => crash "offset beyond the input"
+	match (CSV.parser({})).parse(bytes) {
+		Err(ParseError({ location: Text(at), .. })) if at.offset > bytes.len() => crash "offset beyond the input"
+		Err(ParseError({ location: ByteOffset(offset), .. })) if offset > bytes.len() => crash "offset beyond the input"
 		Err(_) => {}
-		Ok(rows) => {
+		Ok(document) => {
+			rows = document.records
 			when_text = |text| {
 				match parse(text) {
 					Ok(again) if again == rows => {}
-					_ => crash "CSV.parser({}) and parse_records disagree\n${Str.inspect(text)}"
+					_ => crash "CSV.parser({}) and parse_str disagree\n${Str.inspect(text)}"
 				}
 			}
 			match Str.from_utf8(bytes) {
 				Ok(text) => when_text(text)
 				Err(_) => {}
 			}
-			strings = CSV.decode(Parser.many(CSV.field(CSV.string({}))), rows)
-			numbers = CSV.decode(Parser.many(CSV.field(CSV.u64({}))).skip(Parser.many(CSV.field(CSV.f64({})))), rows)
+			strings = CSV.{ records: rows }.decode_rows({ row: Parser.many(CSV.field(CSV.string({}))) })
+			numbers = CSV.{ records: rows }.decode_rows({ row: Parser.many(CSV.field(CSV.u64({}))).skip(Parser.many(CSV.field(CSV.f64({})))) })
 			_ = [bounded(strings), bounded(numbers)]
 			{}
 		}
@@ -86,8 +87,8 @@ check_bytes = |bytes| {
 
 bounded : Try(a, [InvalidCsv(CSV.Error), InvalidRow(CSV.RowError(p))]) -> {}
 bounded = |result| match result {
-	Err(InvalidCsv({ record: 0, .. })) => crash "unnumbered CSV error"
-	Err(InvalidRow({ record: 0, .. })) => crash "unnumbered row error"
+	Err(InvalidCsv(error)) => if (logical_position(error.path).record == 0) crash "unnumbered CSV error" else {}
+	Err(InvalidRow(error)) => if (logical_position(error.path).record == 0) crash "unnumbered row error" else {}
 	_ => {}
 }
 
@@ -257,3 +258,13 @@ target = Fuzz.target_with({
 	test,
 	show: |bytes| if (bytes.len() == 3 and bytes.first() == Ok(0xFF)) "pathological ${Str.inspect(bytes.sublist({ start: 0, len: 3 }))}" else Str.inspect(Str.from_utf8(bytes) ?? "<invalid utf8>"),
 })
+
+logical_position : List(Parser.PathSegment) -> { record : U64, field : U64 }
+logical_position = |path| path.fold(
+	{ record: 0.U64, field: 0.U64 },
+	|position, segment| match segment {
+		Record(index) => { ..position, record: index }
+		Field(index) => { ..position, field: index }
+		_ => position
+	},
+)

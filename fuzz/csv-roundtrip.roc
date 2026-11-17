@@ -6,8 +6,6 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
-import parser.Utf8
-import parser.Streaming
 
 ## Round-trip property: fuzzer bytes choose a table of arbitrary UTF-8 fields
 ## (ragged rows allowed) *and* how to write it: which fields to quote beyond
@@ -120,22 +118,22 @@ show_rows = |rows| Str.inspect(rows)
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	match CSV.parse_with(all_fields, input.csv) {
+	match CSV.rows_parser({ row: all_fields }).parse_str(input.csv) {
 		Ok(rows) if rows == input.expected => {}
 		Ok(rows) => crash "round trip mismatch\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- actual ---\n${show_rows(rows)}"
 		Err(problem) => crash "round trip rejected\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- error ---\n${Str.inspect(problem)}"
 	}
-	match CSV.parse_records(input.csv) {
+	match CSV.parse_str(input.csv, {}).map_ok(|document| document.records) {
 		Ok(records) if records.map(|fields| fields.map(Str.from_utf8_lossy)) == input.expected => {}
-		_ => crash "parse_records disagrees with parse_with\n${Str.inspect(input.csv)}"
+		_ => crash "raw parsing disagrees with positional parsing\n${Str.inspect(input.csv)}"
 	}
 	chunks = input.csv.to_utf8().map(|byte| [byte]).iter()
 	expected_bytes = input.expected.map(|row| row.map(Str.to_utf8))
-	if Streaming.collect(Streaming.read_iter(chunks, CSV.decoder({}))) != Ok(expected_bytes) {
+	if (CSV.decoder({})).collect(chunks) != Ok(expected_bytes) {
 		crash "generated streaming CSV differs from independent model"
 	}
 	var $encoded = []
-	for part in Streaming.write_iter(expected_bytes.iter(), CSV.encoder({}).with_chunk_bytes(3)) {
+	for part in (CSV.encoder({ chunk_bytes: 3 })).write_iter(expected_bytes.iter()) {
 		match part {
 			Ok(bytes) => {
 				$encoded = $encoded.concat(bytes)
@@ -143,7 +141,7 @@ test = |input| {
 			Err(_) => crash "generated model did not encode"
 		}
 	}
-	if Streaming.collect(Streaming.read_iter($encoded.map(|byte| [byte]).iter(), CSV.decoder({}))) != Ok(expected_bytes) {
+	if (CSV.decoder({})).collect($encoded.map(|byte| [byte]).iter()) != Ok(expected_bytes) {
 		crash "generated streaming writer round trip differs from model"
 	}
 
