@@ -480,6 +480,9 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	Encoder(state, item, problem) : Streaming.Encoder(state, item, problem)
 	ReadEvent(item, problem) : Streaming.ReadEvent(item, problem)
 	ReadError(problem) : Streaming.ReadError(problem)
+	ProtocolProblem : Streaming.ProtocolProblem
+	RecoveryProblem(problem) : Streaming.RecoveryProblem(problem)
+	ChunkSizeProblem : Streaming.ChunkSizeProblem
 	Report : Streaming.Report
 	TextEncoding : Streaming.TextEncoding
 	EncodingError : Streaming.EncodingError

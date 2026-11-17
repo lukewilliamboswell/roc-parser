@@ -1,3 +1,5 @@
+import Diagnostic as DiagnosticCore
+
 ## Shared pull adapters for incremental document decoders.
 ##
 ## A decoder consumes byte chunks and returns one item, a safely framed record
@@ -25,10 +27,16 @@ Streaming :: [].{
 	ReadEvent(item, problem) : [Value(item), Rejected([..problem]), Finished(Report)]
 
 	## Terminal decoding failure, including the rejection exceeding the budget.
-	ReadError(problem) : [ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(ProtocolProblem), ..problem]
+	ReadError(problem) : [RecoveryLimitExceeded(DiagnosticCore(RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(ProtocolProblem)), ..problem]
+
+	## Rejected-record count and original native error at recovery exhaustion.
+	RecoveryProblem(problem) : [RejectedRecords({ max : U64, observed : DiagnosticCore.Observed, cause : [..problem] })]
+
+	## Output chunk sizes must permit at least one byte.
+	ChunkSizeProblem : [BelowMinimum({ minimum : U64, actual : U64 })]
 
 	## A decoder violated the shared progress or EOF contract.
-	ProtocolProblem : [ConsumedBeyondInput({ consumed : U64, available : U64 }), NeedInputAfterFinal, UnconsumedInput({ remaining : U64 }), PrematureDone({ final : Bool, remaining : U64 })]
+	ProtocolProblem : [ConsumedBeyondInput({ consumed : U64, available : U64 }), NeedInputAfterFinal, UnconsumedInput({ remaining : U64 }), PrematureDone({ end : InputEnd, remaining : U64 })]
 
 	## One pure step. `consumed` counts bytes of this call's input only.
 	Step(state, item, problem) : {
@@ -49,19 +57,19 @@ Streaming :: [].{
 		read_iter = |current, chunks| read_chunks(chunks, current.inner, current.advance, current.handling)
 
 		## Consume an effectful source without converting source failure into EOF.
-		read_stream : Decoder(state, item, problem), Stream(Try(Bytes, source_error)) -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(ProtocolProblem), ..problem]))
+		read_stream : Decoder(state, item, problem), Stream(Try(Bytes, source_error)) -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), RecoveryLimitExceeded(DiagnosticCore(RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(ProtocolProblem)), ..problem]))
 		read_stream = |current, chunks| read_source(chunks, current.inner, current.advance, current.handling)
 
 		## Collect the complete document, rejecting skipped or reported failures.
-		collect : Decoder(state, item, problem), Iter(Bytes) -> Try(List(item), [MissingFinished, SkippedRecords(Report), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(ProtocolProblem), ..problem])
+		collect : Decoder(state, item, problem), Iter(Bytes) -> Try(List(item), [MissingFinished, SkippedRecords(Report), RecoveryLimitExceeded(DiagnosticCore(RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(ProtocolProblem)), ..problem])
 		collect = |current, chunks| collect_events(current.read_iter(chunks))
 
 		## Collect both values and the bounded rejected-record diagnostics.
-		collect_report : Decoder(state, item, problem), Iter(Bytes) -> Try({ values : List(item), errors : List([..problem]), report : Report }, [MissingFinished, ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(ProtocolProblem), ..problem])
+		collect_report : Decoder(state, item, problem), Iter(Bytes) -> Try({ values : List(item), errors : List([..problem]), report : Report }, [MissingFinished, RecoveryLimitExceeded(DiagnosticCore(RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(ProtocolProblem)), ..problem])
 		collect_report = |current, chunks| collect_event_report(current.read_iter(chunks))
 
 		## Extract fail-fast values from an effectful byte source.
-		values_stream : Decoder(state, item, problem), Stream(Try(Bytes, source_error)) -> Stream(Try(item, [SourceErr(source_error), MissingFinished, SkippedRecords(Report), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(ProtocolProblem), ..problem]))
+		values_stream : Decoder(state, item, problem), Stream(Try(Bytes, source_error)) -> Stream(Try(item, [SourceErr(source_error), MissingFinished, SkippedRecords(Report), RecoveryLimitExceeded(DiagnosticCore(RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(ProtocolProblem)), ..problem]))
 		values_stream = |current, chunks| value_events(current.read_stream(chunks))
 
 		## Inspect only the metadata deliberately provided by this format's state.
@@ -108,11 +116,11 @@ Streaming :: [].{
 	}.{
 
 		## Encode records lazily with a bounded final suffix.
-		write_iter : Encoder(state, item, problem), Iter(item) -> Iter(Try(Bytes, [InvalidChunkSize, ..problem]))
+		write_iter : Encoder(state, item, problem), Iter(item) -> Iter(Try(Bytes, [InvalidChunkSize(DiagnosticCore(ChunkSizeProblem)), ..problem]))
 		write_iter = |current, items| write_items(items, current.inner, current.encode, current.finish, current.chunk_bytes)
 
 		## Encode an effectful source without collecting it.
-		write_stream : Encoder(state, item, problem), Stream(Try(item, source_error)) -> Stream(Try(Bytes, [SourceErr(source_error), InvalidChunkSize, ..problem]))
+		write_stream : Encoder(state, item, problem), Stream(Try(item, source_error)) -> Stream(Try(Bytes, [SourceErr(source_error), InvalidChunkSize(DiagnosticCore(ChunkSizeProblem)), ..problem]))
 		write_stream = |current, items| write_source(items, current.inner, current.encode, current.finish, current.chunk_bytes)
 	}
 
@@ -186,7 +194,7 @@ Streaming :: [].{
 }
 
 ## Collect values, failing rather than silently dropping rejected records.
-collect_events : Iter(Try(Streaming.ReadEvent(item, problem), Streaming.ReadError(problem))) -> Try(List(item), [MissingFinished, SkippedRecords(Streaming.Report), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem])
+collect_events : Iter(Try(Streaming.ReadEvent(item, problem), Streaming.ReadError(problem))) -> Try(List(item), [MissingFinished, SkippedRecords(Streaming.Report), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem])
 collect_events = |events| {
 	var $values = []
 	for event in events {
@@ -209,7 +217,7 @@ collect_events = |events| {
 }
 
 ## Explicitly collect successful values and bounded reported rejections.
-collect_event_report : Iter(Try(Streaming.ReadEvent(item, problem), Streaming.ReadError(problem))) -> Try({ values : List(item), errors : List([..problem]), report : Streaming.Report }, [MissingFinished, ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem])
+collect_event_report : Iter(Try(Streaming.ReadEvent(item, problem), Streaming.ReadError(problem))) -> Try({ values : List(item), errors : List([..problem]), report : Streaming.Report }, [MissingFinished, RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem])
 collect_event_report = |events| {
 	var $values = []
 	var $errors = []
@@ -233,7 +241,7 @@ collect_event_report = |events| {
 
 ## Extract successful stream values, requiring explicit successful completion.
 ## Rejected or skipped records are failures; use a custom loop for recovery.
-value_events : Stream(Try(Streaming.ReadEvent(item, problem), [SourceErr(source_error), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem])) -> Stream(Try(item, [SourceErr(source_error), MissingFinished, SkippedRecords(Streaming.Report), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem]))
+value_events : Stream(Try(Streaming.ReadEvent(item, problem), [SourceErr(source_error), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem])) -> Stream(Try(item, [SourceErr(source_error), MissingFinished, SkippedRecords(Streaming.Report), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem]))
 value_events = |events| Stream.custom(
 	Reading(events),
 	Err(Unknown),
@@ -288,7 +296,7 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 				} else {
 					next = step($cursor.decoder, $cursor.buffer.drop_first($cursor.index), if ($cursor.final) Final else More)
 					if next.consumed > $cursor.buffer.len() - $cursor.index {
-						return Ok((Err(DecoderProtocol(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
+						return Ok((Err(protocol_error(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
 					}
 					$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
 					match next.outcome {
@@ -301,7 +309,7 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 								return Ok((read_failure(error), Stopped))
 							}
 							if $cursor.report.rejected_records >= props.max_errors {
-								return Ok((Err(ErrorLimitExceeded({ max: props.max_errors, error })), Stopped))
+								return Ok((Err(recovery_error({ max: props.max_errors, rejected: $cursor.report.rejected_records + 1, cause: error })), Stopped))
 							}
 							$cursor = { ..$cursor, report: { ..$cursor.report, rejected_records: $cursor.report.rejected_records + 1 } }
 							if props.policy == ReportInvalidRecords {
@@ -310,16 +318,16 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 						}
 						NeedInput => {
 							if $cursor.final {
-								return Ok((Err(DecoderProtocol(NeedInputAfterFinal)), Stopped))
+								return Ok((Err(protocol_error(NeedInputAfterFinal)), Stopped))
 							}
 							if $cursor.index != $cursor.buffer.len() {
-								return Ok((Err(DecoderProtocol(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
+								return Ok((Err(protocol_error(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 							}
 							$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
 						}
 						Done => {
 							if !$cursor.final or $cursor.index != $cursor.buffer.len() {
-								return Ok((Err(DecoderProtocol(PrematureDone({ final: $cursor.final, remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
+								return Ok((Err(protocol_error(PrematureDone({ end: if ($cursor.final) Final else More, remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 							}
 							return Ok((Ok(Finished($cursor.report)), Stopped))
 						}
@@ -332,7 +340,7 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 )
 
 ## Lazily decode an effectful source. Source errors stop without finalizing.
-read_source : Stream(Try(Streaming.Bytes, source_error)), state, (state, Streaming.Bytes, Streaming.InputEnd -> Streaming.Step(state, item, [..problem])), Streaming.RecoveryProps -> Stream(Try(Streaming.ReadEvent(item, problem), [SourceErr(source_error), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem]))
+read_source : Stream(Try(Streaming.Bytes, source_error)), state, (state, Streaming.Bytes, Streaming.InputEnd -> Streaming.Step(state, item, [..problem])), Streaming.RecoveryProps -> Stream(Try(Streaming.ReadEvent(item, problem), [SourceErr(source_error), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem]))
 read_source = |chunks, initial, step, props| Stream.custom(
 	Reading({ chunks, buffer: [], index: 0, final: False, need_input: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
 	Err(Unknown),
@@ -357,7 +365,7 @@ read_source = |chunks, initial, step, props| Stream.custom(
 				} else {
 					next = step($cursor.decoder, $cursor.buffer.drop_first($cursor.index), if ($cursor.final) Final else More)
 					if next.consumed > $cursor.buffer.len() - $cursor.index {
-						return Ok((Err(DecoderProtocol(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
+						return Ok((Err(protocol_error(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
 					}
 					$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
 					match next.outcome {
@@ -370,7 +378,7 @@ read_source = |chunks, initial, step, props| Stream.custom(
 								return Ok((source_failure(error), Stopped))
 							}
 							if $cursor.report.rejected_records >= props.max_errors {
-								return Ok((Err(ErrorLimitExceeded({ max: props.max_errors, error })), Stopped))
+								return Ok((Err(recovery_error({ max: props.max_errors, rejected: $cursor.report.rejected_records + 1, cause: error })), Stopped))
 							}
 							$cursor = { ..$cursor, report: { ..$cursor.report, rejected_records: $cursor.report.rejected_records + 1 } }
 							if props.policy == ReportInvalidRecords {
@@ -379,16 +387,16 @@ read_source = |chunks, initial, step, props| Stream.custom(
 						}
 						NeedInput => {
 							if $cursor.final {
-								return Ok((Err(DecoderProtocol(NeedInputAfterFinal)), Stopped))
+								return Ok((Err(protocol_error(NeedInputAfterFinal)), Stopped))
 							}
 							if $cursor.index != $cursor.buffer.len() {
-								return Ok((Err(DecoderProtocol(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
+								return Ok((Err(protocol_error(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 							}
 							$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
 						}
 						Done => {
 							if !$cursor.final or $cursor.index != $cursor.buffer.len() {
-								return Ok((Err(DecoderProtocol(PrematureDone({ final: $cursor.final, remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
+								return Ok((Err(protocol_error(PrematureDone({ end: if ($cursor.final) Final else More, remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 							}
 							return Ok((Ok(Finished($cursor.report)), Stopped))
 						}
@@ -401,7 +409,7 @@ read_source = |chunks, initial, step, props| Stream.custom(
 )
 
 ## Encode contextual records and validate document completion on source EOF.
-write_items : Iter(item), state, (state, item -> Try({ state : state, bytes : Streaming.Bytes }, [..problem])), (state -> Try(Streaming.Bytes, [..problem])), U64 -> Iter(Try(Streaming.Bytes, [InvalidChunkSize, ..problem]))
+write_items : Iter(item), state, (state, item -> Try({ state : state, bytes : Streaming.Bytes }, [..problem])), (state -> Try(Streaming.Bytes, [..problem])), U64 -> Iter(Try(Streaming.Bytes, [InvalidChunkSize(DiagnosticCore(Streaming.ChunkSizeProblem)), ..problem]))
 write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 	Reading({ items, writer: initial, buffer: [], index: 0, finishing: False }),
 	Err(Unknown),
@@ -409,7 +417,7 @@ write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 		Stopped => Err(NoMore)
 		Reading(start) => {
 			if chunk_bytes == 0 {
-				return Ok((Err(InvalidChunkSize), Stopped))
+				return Ok((Err(chunk_size_error(chunk_bytes)), Stopped))
 			}
 			var $cursor = start
 			while True {
@@ -445,7 +453,7 @@ write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 )
 
 ## Effectful contextual writer. Source failure never finalizes the writer.
-write_source : Stream(Try(item, source_error)), state, (state, item -> Try({ state : state, bytes : Streaming.Bytes }, [..problem])), (state -> Try(Streaming.Bytes, [..problem])), U64 -> Stream(Try(Streaming.Bytes, [SourceErr(source_error), InvalidChunkSize, ..problem]))
+write_source : Stream(Try(item, source_error)), state, (state, item -> Try({ state : state, bytes : Streaming.Bytes }, [..problem])), (state -> Try(Streaming.Bytes, [..problem])), U64 -> Stream(Try(Streaming.Bytes, [SourceErr(source_error), InvalidChunkSize(DiagnosticCore(Streaming.ChunkSizeProblem)), ..problem]))
 write_source = |items, initial, write, finish, chunk_bytes| Stream.custom(
 	Reading({ items, writer: initial, buffer: [], index: 0, finishing: False }),
 	Err(Unknown),
@@ -453,7 +461,7 @@ write_source = |items, initial, write, finish, chunk_bytes| Stream.custom(
 		Stopped => Err(NoMore)
 		Reading(start) => {
 			if chunk_bytes == 0 {
-				return Ok((Err(InvalidChunkSize), Stopped))
+				return Ok((Err(chunk_size_error(chunk_bytes)), Stopped))
 			}
 			var $cursor = start
 			while True {
@@ -496,13 +504,13 @@ read_failure = |error| {
 	Ok(value)
 }
 
-source_failure : [..problem] -> Try(a, [SourceErr(source_error), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem])
+source_failure : [..problem] -> Try(a, [SourceErr(source_error), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem])
 source_failure = |error| {
 	value = Err(error)?
 	Ok(value)
 }
 
-value_failure : [..problem] -> Try(a, [SourceErr(source_error), MissingFinished, SkippedRecords(Streaming.Report), ErrorLimitExceeded({ max : U64, error : [..problem] }), DecoderProtocol(Streaming.ProtocolProblem), ..problem])
+value_failure : [..problem] -> Try(a, [SourceErr(source_error), MissingFinished, SkippedRecords(Streaming.Report), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem])
 value_failure = |error| {
 	value = Err(error)?
 	Ok(value)
@@ -514,17 +522,26 @@ terminal_value_failure = |error| {
 	Ok(value)
 }
 
-write_failure : [..problem] -> Try(a, [InvalidChunkSize, ..problem])
+write_failure : [..problem] -> Try(a, [InvalidChunkSize(DiagnosticCore(Streaming.ChunkSizeProblem)), ..problem])
 write_failure = |error| {
 	value = Err(error)?
 	Ok(value)
 }
 
-write_source_failure : [..problem] -> Try(a, [SourceErr(source_error), InvalidChunkSize, ..problem])
+write_source_failure : [..problem] -> Try(a, [SourceErr(source_error), InvalidChunkSize(DiagnosticCore(Streaming.ChunkSizeProblem)), ..problem])
 write_source_failure = |error| {
 	value = Err(error)?
 	Ok(value)
 }
+
+protocol_error : Streaming.ProtocolProblem -> [DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem))]
+protocol_error = |problem| DecoderProtocol(DiagnosticCore.{ problem, location: Unavailable(NotApplicable), path: [] })
+
+recovery_error : { max : U64, rejected : U64, cause : [..problem] } -> [RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem)))]
+recovery_error = |detail| RecoveryLimitExceeded(DiagnosticCore.{ problem: RejectedRecords({ max: detail.max, observed: Exact(detail.rejected), cause: detail.cause }), location: Unavailable(NotApplicable), path: [] })
+
+chunk_size_error : U64 -> [InvalidChunkSize(DiagnosticCore(Streaming.ChunkSizeProblem))]
+chunk_size_error = |actual| InvalidChunkSize(DiagnosticCore.{ problem: BelowMinimum({ minimum: 1, actual }), location: Unavailable(NotApplicable), path: [Key("chunk_bytes")] })
 
 expect Streaming.decode_text([0x80, 0xE9], Windows1252) == Ok("€é")
 expect Streaming.decode_text([0x81], Windows1252).is_err()
@@ -549,7 +566,7 @@ expect List.from_iter(test_decoder({}).read_iter([[1.U8, 0, 2]].iter())) == [Ok(
 expect List.from_iter(test_decoder({ policy: SkipInvalidRecords }).read_iter([[1.U8, 0, 2]].iter())) == [Ok(Value(1)), Ok(Value(2)), Ok(Finished({ emitted_items: 2, rejected_records: 1 }))]
 
 ## A recovery allowance permits exactly that many rejects and retains the triggering error.
-expect List.from_iter(test_decoder({ policy: ReportInvalidRecords, max_errors: 1 }).read_iter([[0.U8, 0]].iter())) == [Ok(Rejected(ZeroByte)), Err(ErrorLimitExceeded({ max: 1, error: ZeroByte }))]
+expect List.from_iter(test_decoder({ policy: ReportInvalidRecords, max_errors: 1 }).read_iter([[0.U8, 0]].iter())) == [Ok(Rejected(ZeroByte)), Err(RecoveryLimitExceeded(DiagnosticCore.{ problem: RejectedRecords({ max: 1, observed: Exact(2), cause: ZeroByte }), location: Unavailable(NotApplicable), path: [] }))]
 
 ## Collection retains values and a bounded diagnostic report.
 expect test_decoder({ policy: ReportInvalidRecords }).collect_report([[1.U8, 0, 2]].iter()) == Ok({ values: [1, 2], errors: [ZeroByte], report: { emitted_items: 2, rejected_records: 1 } })
@@ -567,7 +584,7 @@ expect test_decoder({ policy: SkipInvalidRecords }).collect([[1.U8, 0]].iter()) 
 expect collect_events([Ok(Value(1.U64))].iter()) == Err(MissingFinished)
 
 ## A zero chunk bound fails before pulling or encoding any item.
-expect List.from_iter(Streaming.encoder({ initial_state: {}, encode: |state, text| Ok({ state, bytes: text.to_utf8() }), finish: |_| Ok([]), chunk_bytes: 0 }).write_iter(["abc"].iter())) == [Err(InvalidChunkSize)]
+expect List.from_iter(Streaming.encoder({ initial_state: {}, encode: |state, text| Ok({ state, bytes: text.to_utf8() }), finish: |_| Ok([]), chunk_bytes: 0 }).write_iter(["abc"].iter())) == [Err(InvalidChunkSize(DiagnosticCore.{ problem: BelowMinimum({ minimum: 1, actual: 0 }), location: Unavailable(NotApplicable), path: [Key("chunk_bytes")] }))]
 
 ## The encoder chunks records and its completion suffix without changing bytes.
 expect List.from_iter(Streaming.encoder({ initial_state: 0.U64, encode: |state, text| Ok({ state: state + 1, bytes: text.to_utf8() }), finish: |state| Ok(state.to_str().to_utf8()), chunk_bytes: 1 }).write_iter(["ab", "cd"].iter())) == [Ok("a".to_utf8()), Ok("b".to_utf8()), Ok("c".to_utf8()), Ok("d".to_utf8()), Ok("2".to_utf8())]
@@ -591,16 +608,16 @@ expect {
 }
 
 ## A decoder must not request bytes after source exhaustion.
-expect List.from_iter(Streaming.decoder({ initial_state: 0.U64, step: |state, _, _| { state, consumed: 0, outcome: NeedInput } }).read_iter([].iter())) == [Err(DecoderProtocol(NeedInputAfterFinal))]
+expect List.from_iter(Streaming.decoder({ initial_state: 0.U64, step: |state, _, _| { state, consumed: 0, outcome: NeedInput } }).read_iter([].iter())) == [Err(DecoderProtocol(DiagnosticCore.{ problem: NeedInputAfterFinal, location: Unavailable(NotApplicable), path: [] }))]
 
 ## A decoder must not consume bytes beyond the current input.
-expect List.from_iter(Streaming.decoder({ initial_state: {}, step: |state, _, _| { state, consumed: 1, outcome: NeedInput } }).read_iter([].iter())) == [Err(DecoderProtocol(ConsumedBeyondInput({ consumed: 1, available: 0 })))]
+expect List.from_iter(Streaming.decoder({ initial_state: {}, step: |state, _, _| { state, consumed: 1, outcome: NeedInput } }).read_iter([].iter())) == [Err(DecoderProtocol(DiagnosticCore.{ problem: ConsumedBeyondInput({ consumed: 1, available: 0 }), location: Unavailable(NotApplicable), path: [] }))]
 
 ## A decoder must consume the current buffer before requesting more bytes.
-expect List.from_iter(Streaming.decoder({ initial_state: {}, step: |state, _, _| { state, consumed: 0, outcome: NeedInput } }).read_iter([[1.U8, 2]].iter())) == [Err(DecoderProtocol(UnconsumedInput({ remaining: 2 })))]
+expect List.from_iter(Streaming.decoder({ initial_state: {}, step: |state, _, _| { state, consumed: 0, outcome: NeedInput } }).read_iter([[1.U8, 2]].iter())) == [Err(DecoderProtocol(DiagnosticCore.{ problem: UnconsumedInput({ remaining: 2 }), location: Unavailable(NotApplicable), path: [] }))]
 
 ## Done before Final is a protocol violation even for an empty buffer.
-expect List.from_iter(Streaming.decoder({ initial_state: {}, step: |state, _, _| { state, consumed: 0, outcome: Done } }).read_iter([].iter())) == [Err(DecoderProtocol(PrematureDone({ final: False, remaining: 0 })))]
+expect List.from_iter(Streaming.decoder({ initial_state: {}, step: |state, _, _| { state, consumed: 0, outcome: Done } }).read_iter([].iter())) == [Err(DecoderProtocol(DiagnosticCore.{ problem: PrematureDone({ end: More, remaining: 0 }), location: Unavailable(NotApplicable), path: [] }))]
 
 ## Manual stepping keeps the configured descriptor and consumes only this call's bytes.
 expect {
