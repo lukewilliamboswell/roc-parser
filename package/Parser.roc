@@ -604,19 +604,28 @@ step = |{ fun }, input| {
 
 # Repeat `parser` from `input`, whose length is `len`, collecting `values`.
 # The no-progress check compares lengths, so each iteration is O(1).
+# Keep repetition in one loop so element parsers can inline across iterations.
 many_help : Parser(input, a), List(a), input, U64, Failure -> Step(input, List(a)) where [input.len : input -> U64]
 many_help = |parser, values, input, len, furthest| {
-	match step(parser, input) {
-		Err(failure) =>
-			Ok({ value: values, rest: input, furthest: further(furthest, failure) })
+	var $values = values
+	var $input = input
+	var $len = len
+	var $furthest = furthest
+	while True {
+		match step(parser, $input) {
+			Err(failure) =>
+				return Ok({ value: $values, rest: $input, furthest: further($furthest, failure) })
 
-		Ok(next) => {
-			next_len = next.rest.len()
-			if next_len == len {
-				# No progress: repeating would loop forever on the same input.
-				Ok({ value: values, rest: input, furthest: further(furthest, next.furthest) })
-			} else {
-				many_help(parser, values.append(next.value), next.rest, next_len, further(furthest, next.furthest))
+			Ok(next) => {
+				next_len = next.rest.len()
+				if next_len == $len {
+					# No progress: repeating would loop forever on the same input.
+					return Ok({ value: $values, rest: $input, furthest: further($furthest, next.furthest) })
+				}
+				$values = $values.append(next.value)
+				$input = next.rest
+				$len = next_len
+				$furthest = further($furthest, next.furthest)
 			}
 		}
 	}
@@ -649,6 +658,26 @@ expect {
 expect {
 	result = Parser.run(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
 	result == { value: [['a', 'a']], rest: ['b'] }
+}
+
+# A repeated element can inspect further than the bytes it accepts. Keep the
+# failure of the stopping element, including after earlier successful items.
+expect {
+	element = Parser.custom(
+		|input| match input {
+			['a', .. as rest] => Ok({ value: 'a', rest })
+			_ => Err(ParseError({ message: "the repeated element looked ahead", offset: 1 }))
+		},
+	)
+	Parser.parse(Parser.many(element), "abc".to_utf8()) == Err(ParseError({ message: "the repeated element looked ahead", offset: 2 }))
+}
+
+# A successful fallback that consumes nothing still carries the earlier
+# alternative's failure, but contributes no value to the repetition.
+expect {
+	lookahead = Parser.custom(|_| Err(ParseError({ message: "looked past the fallback", offset: 1 })))
+	element = lookahead.alt(Parser.const('x'))
+	Parser.parse(Parser.many(element), "ab".to_utf8()) == Err(ParseError({ message: "looked past the fallback", offset: 1 }))
 }
 
 # Separated repetition stops when separator and element consume nothing.
