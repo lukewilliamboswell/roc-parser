@@ -820,7 +820,14 @@ close_tag = |state, name, text, parsed| {
 # A whole UTF-8 XML document is lexed once. The same logical handlers validate
 # its hierarchy and values; only the current captured record needs XML nodes.
 # Any refusal falls back to the byte reader, which owns public diagnostics.
-Whole : { reader : State, nodes : List(Xml.Node), marks : List(U64), current : Box(OFX.Statement), statements : List(OFX.Statement) }
+CurrentInfo : { context : OFX.Context, ledger_balance : Try(OFX.Balance, [Missing]), available_balance : Try(OFX.Balance, [Missing]) }
+
+Current : { info : Box(CurrentInfo), transactions : List(OFX.Transaction) }
+
+Whole : { reader : State, nodes : List(Xml.Node), marks : List(U64), current : Current, statements : List(OFX.Statement) }
+
+current_statement : OFX.Context -> Current
+current_statement = |context| { info: Box.box({ context, ledger_balance: Err(Missing), available_balance: Err(Missing) }), transactions: [] }
 
 xml_whole : List(U8), OFX.Props -> Try(OFX, [UseStreaming])
 xml_whole = |bytes, props| {
@@ -828,7 +835,7 @@ xml_whole = |bytes, props| {
 		return Err(UseStreaming)
 	}
 	source = Str.from_utf8(bytes).map_err(|_| UseStreaming)?
-	opened = { reader: initial(props), nodes: [], marks: [], current: Box.box(empty_statement(empty_context)), statements: [] }
+	opened = { reader: initial(props), nodes: [], marks: [], current: current_statement(empty_context), statements: [] }
 	match Xml.fold_source(source, { max_depth: props.max_depth, max_elements: 18446744073709551615, max_attributes: 0 }, opened, |state, event| whole_event(bytes, state, event)) {
 		Folded(value) => {
 			if !value.reader.root_closed or value.reader.in_statement or !value.reader.stack.is_empty() or !value.marks.is_empty() {
@@ -1027,14 +1034,19 @@ whole_action = |input, action| {
 		Emitted(event) => {
 			{ reader, nodes, marks, current, statements } = input
 			match event {
-				StatementStart(context) => Ok({ reader, nodes, marks, current: Box.box(empty_statement(context)), statements })
+				StatementStart(context) => Ok({ reader, nodes, marks, current: current_statement(context), statements })
 				Transaction(value) => {
-					prior = Box.unbox(current)
-					Ok({ reader, nodes, marks, current: Box.box({ ..prior, transactions: prior.transactions.append(value) }), statements })
+					# Keep the growing list outside its metadata box: unboxing a
+					# statement must not leave a second owner during append.
+					{ info, transactions } = current
+					Ok({ reader, nodes, marks, current: { info, transactions: transactions.append(value) }, statements })
 				}
-				LedgerBalance(value) => Ok({ reader, nodes, marks, current: Box.box({ ..Box.unbox(current), ledger_balance: Ok(value) }), statements })
-				AvailableBalance(value) => Ok({ reader, nodes, marks, current: Box.box({ ..Box.unbox(current), available_balance: Ok(value) }), statements })
-				StatementEnd => Ok({ reader, nodes, marks, current: Box.box(empty_statement(empty_context)), statements: statements.append(Box.unbox(current)) })
+				LedgerBalance(value) => Ok({ reader, nodes, marks, current: { info: Box.box({ ..Box.unbox(current.info), ledger_balance: Ok(value) }), transactions: current.transactions }, statements })
+				AvailableBalance(value) => Ok({ reader, nodes, marks, current: { info: Box.box({ ..Box.unbox(current.info), available_balance: Ok(value) }), transactions: current.transactions }, statements })
+				StatementEnd => {
+					{ info, transactions } = current
+					Ok({ reader, nodes, marks, current: current_statement(empty_context), statements: statements.append({ ..Box.unbox(info), transactions }) })
+				}
 			}
 		}
 	}
@@ -1067,6 +1079,22 @@ children = |node| match node {
 field : Xml.Node, Str -> Str
 field = |node, name| node.children_named(name).first().map_ok(|child| child.text().trim()) ?? ""
 
+has_element_children : Xml.Node -> Bool
+has_element_children = |node| match node {
+	Text(_) => False
+	Element(element) => {
+		var $at = 0.U64
+		while $at < element.children.len() {
+			match element.children.get($at) {
+				Ok(Element(_)) => return True
+				_ => {}
+			}
+			$at = $at + 1
+		}
+		False
+	}
+}
+
 unique : Xml.Node -> Try({}, Str)
 unique = |node| {
 	var $names = []
@@ -1088,17 +1116,81 @@ account_from = |node| {
 }
 
 transaction : Xml.Node -> Try(OFX.Transaction, Str)
-transaction = |node| {
-	unique(node)?
-	if !aggregate_whitespace(node) {
-		return Err("unexpected text between transaction fields")
+transaction = |node| match node {
+	Text(_) => Err("unexpected text between transaction fields")
+	Element(element) => {
+		var $names = []
+		var $aggregate_ok = element.attributes.is_empty()
+		var $nested = False
+		var $type = ""
+		var $posted = ""
+		var $amount = ""
+		var $id = ""
+		var $name = ""
+		var $memo = ""
+		var $check_number = ""
+		var $extensions = []
+		var $at = 0.U64
+		while $at < element.children.len() {
+			match element.children.get($at) {
+				Ok(Text(value)) => {
+					if !value.trim().is_empty() {
+						$aggregate_ok = False
+					}
+				}
+				Ok(child) => {
+					name = child.name() ?? ""
+					if $names.contains(name) {
+						return Err("duplicate OFX field ${Str.from_utf8_lossy(name.to_utf8().take_first(64))}")
+					}
+					$names = $names.append(name)
+					if leaf_tag(name) and has_element_children(child) {
+						$nested = True
+					}
+					match name {
+						"TRNTYPE" => {
+							$type = child.text().trim()
+						}
+						"DTPOSTED" => {
+							$posted = child.text().trim()
+						}
+						"TRNAMT" => {
+							$amount = child.text().trim()
+						}
+						"FITID" => {
+							$id = child.text().trim()
+						}
+						"NAME" => {
+							$name = child.text().trim()
+						}
+						"MEMO" => {
+							$memo = child.text().trim()
+						}
+						"CHECKNUM" => {
+							$check_number = child.text().trim()
+						}
+						_ => {
+							$extensions = $extensions.append(child)
+						}
+					}
+				}
+				Err(_) => {}
+			}
+			$at = $at + 1
+		}
+		# Match the existing diagnostic precedence even though these checks are
+		# gathered in one pass: duplicates, aggregate text, nested scalars, values.
+		if !$aggregate_ok {
+			return Err("unexpected text between transaction fields")
+		}
+		if $nested {
+			return Err("nested content in scalar transaction field")
+		}
+		value = { type: $type, posted: $posted, amount: $amount, id: $id, name: $name, memo: $memo, check_number: $check_number, extensions: $extensions }
+		# Both callers supply a tree constructed by the XML character validators.
+		validate_transaction_fields(value, True)?
+		Ok(value)
 	}
-	if children(node).any(|child| leaf_tag(child.name() ?? "") and !children(child).is_empty()) {
-		return Err("nested content in scalar transaction field")
-	}
-	value = { type: field(node, "TRNTYPE"), posted: field(node, "DTPOSTED"), amount: field(node, "TRNAMT"), id: field(node, "FITID"), name: field(node, "NAME"), memo: field(node, "MEMO"), check_number: field(node, "CHECKNUM"), extensions: children(node).keep_if(|child| !["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].contains(child.name() ?? "")) }
-	validate_transaction(value)?
-	Ok(value)
 }
 
 validate_context : OFX.Context -> Try({}, Str)
@@ -1137,8 +1229,11 @@ validate_context = |context| {
 }
 
 validate_transaction : OFX.Transaction -> Try({}, Str)
-validate_transaction = |value| {
-	if [value.id, value.name, value.memo, value.check_number].any(|text| text != text.trim()) {
+validate_transaction = |value| validate_transaction_fields(value, False)
+
+validate_transaction_fields : OFX.Transaction, Bool -> Try({}, Str)
+validate_transaction_fields = |value, checked_xml| {
+	if value.id != value.id.trim() or value.name != value.name.trim() or value.memo != value.memo.trim() or value.check_number != value.check_number.trim() {
 		return Err("writer values must use normalized OFX whitespace")
 	}
 	var $extension_names = []
@@ -1156,7 +1251,7 @@ validate_transaction = |value| {
 			$rank = field_rank(name)
 		}
 	}
-	if ![value.type, value.posted, value.amount, value.id, value.name, value.memo, value.check_number].all(valid_text) {
+	if !checked_xml and (!valid_text(value.type) or !valid_text(value.posted) or !valid_text(value.amount) or !valid_text(value.id) or !valid_text(value.name) or !valid_text(value.memo) or !valid_text(value.check_number)) {
 		return Err("invalid XML scalar in transaction")
 	}
 	if !["CREDIT", "DEBIT", "INT", "DIV", "FEE", "SRVCHG", "DEP", "ATM", "POS", "XFER", "CHECK", "PAYMENT", "CASH", "DIRECTDEP", "DIRECTDEBIT", "REPEATPMT", "HOLD", "OTHER"].contains(value.type) {
@@ -1186,7 +1281,21 @@ balance_from = |node| {
 }
 
 digits : Str -> Bool
-digits = |text| !text.is_empty() and text.to_utf8().all(|b| b >= '0' and b <= '9')
+digits = |text| {
+	bytes = text.to_utf8()
+	if bytes.is_empty() {
+		return False
+	}
+	var $at = 0.U64
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte < '0' or byte > '9' {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
+}
 
 decimal : Str -> Bool
 decimal = |text| {
@@ -1598,8 +1707,20 @@ expect OFX.parse_str(" <?xml version=\"1.0\"?>${sample_xml}").is_err()
 
 valid_name : Str -> Bool
 valid_name = |name| {
-	first = name.to_utf8().first() ?? 0
-	((first >= 'A' and first <= 'Z') or first == '_' or first == ':') and name.to_utf8().all(|byte| (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '.' or byte == '_' or byte == ':')
+	bytes = name.to_utf8()
+	first = bytes.first() ?? 0
+	if !((first >= 'A' and first <= 'Z') or first == '_' or first == ':') {
+		return False
+	}
+	var $at = 1.U64
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if !((byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '.' or byte == '_' or byte == ':') {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
 }
 expect {
 	document = OFX.parse_str(sample_xml)?
@@ -1731,4 +1852,26 @@ expect [sample_xml, "\u(feff)${sample_xml}", "<?xml version=\"1.0\" encoding=\"U
 expect {
 	bytes = sample_xml.to_utf8()
 	[0, 1, 8, 64, 128, 512, 1024].all(|limit| OFX.parse_bytes(bytes, { max_token_bytes: limit }) == collect_bytes(bytes, { max_token_bytes: limit }) and OFX.parse_bytes(bytes, { max_record_bytes: limit }) == collect_bytes(bytes, { max_record_bytes: limit }))
+}
+
+expect {
+	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO><MEMO>duplicate</MEMO></STMTTRN>")?.root
+	transaction(node) == Err("duplicate OFX field MEMO")
+}
+
+expect {
+	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO></STMTTRN>")?.root
+	transaction(node) == Err("unexpected text between transaction fields")
+}
+
+expect {
+	node = Xml.parse_str("<STMTTRN><MEMO><EXTRA/></MEMO></STMTTRN>")?.root
+	transaction(node) == Err("nested content in scalar transaction field")
+}
+
+expect {
+	statement = OFX.parse_str(sample_xml)?.statements.first()?
+	value = statement.transactions.first()?
+	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	OFX.write(opened.writer, Transaction({ ..value, name: "bad\u(0)" })).is_err() and OFX.write(opened.writer, Transaction({ ..value, memo: "bad\u(FFFF)" })).is_err()
 }
