@@ -16,6 +16,8 @@ use std::time::Instant;
 
 type Parse = fn(&str) -> Result<u64, ()>;
 
+mod streaming;
+
 fn csv_parse(text: &str) -> Result<u64, ()> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
@@ -301,6 +303,10 @@ fn implementation(name: &str) -> Parse {
         "quick-xml" => quick_xml_parse,
         "roxmltree" => roxmltree_parse,
         "serde_json" => serde_json_parse,
+        "serde-json-array-consume" => streaming::json_array,
+        "serde-json-ndjson-consume" => streaming::ndjson,
+        "quick-xml-consume" => streaming::xml,
+        "httparse-consume" => streaming::http,
         "pulldown-cmark" => pulldown_cmark_parse,
         "comrak" => comrak_parse,
         "httparse" => httparse_parse,

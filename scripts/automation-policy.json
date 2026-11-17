@@ -51,7 +51,8 @@
         "scripts/tests/test_roc_syntax_pins.py",
         "scripts/tests/test_roc_syntax_recovery.py",
         "scripts/tests/test_run_fuzz.py",
-        "scripts/tests/test_source_inventory.py"
+        "scripts/tests/test_source_inventory.py",
+        "scripts/tests/test_streaming_bench.py"
       ]
     },
     {
@@ -70,7 +71,9 @@
       "paths": [
         "scripts/_common.py",
         "scripts/_oracle_cache.py",
+        "scripts/_performance_target.py",
         "scripts/_reference_cache.py",
+        "scripts/_streaming_bench.py",
         "scripts/asciidoc/generate_standard_tree.py",
         "scripts/asciidoc/models.py",
         "scripts/asciidoc/mutations.py",

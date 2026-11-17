@@ -80,6 +80,51 @@ measurements are needed. This measurement cache is separate from the shared
 <<correctness-oracle-cache,correctness oracle cache>>: performance depends on runtime, hardware and
 measurement conditions as well as the input.
 
+[#streaming-performance]
+== Measure streaming performance and elapsed-time targets
+
+Measure record and event consumption separately from whole-document collection:
+
+[source,console]
+----
+$ blueprint run streaming-bench -- --only medium --refresh-references --label streaming-before
+$ blueprint run streaming-bench -- --only medium --label streaming-after --max-slowdown 1.5
+----
+
+The first command explicitly builds and measures the pinned Rust references;
+the second rebuilds Roc and reuses matching reference receipts. The JSON
+corpora contain the generated SBOM's component records as an array or NDJSON,
+preserving number spellings. XML consumes decoded events without a tree. HTTP
+includes header-heavy request pipelines; large opaque bodies are separate
+workloads and cannot stand in for header parsing. The source is preloaded,
+with I/O excluded from the timer. `--chunk-bytes` sets Roc's source chunk width
+(4,096 by default); file-source memory is checked by the stream allocation
+fuzz targets instead.
+
+The references use `serde_json` owned values discarded one record at a time,
+`quick-xml` borrowed events, and `httparse` borrowed heads with body/trailer
+framing. XML's event checksum coalesces adjacent text and decodes references
+and line endings. The report keeps ownership/workload labels; a matching
+checksum does not establish identical validation or lifetime guarantees.
+`Xml.reader` is also timed as a complete-source event reader for comparison.
+Consumer checksums must agree. JSON's original-number and serde-normalized
+number spellings use separate expected checksums computed from an independent
+input model outside the timer; an unexplained mismatch cannot pass.
+
+`--max-slowdown 1.5` requires each selected non-pathological Roc measurement
+to take at most 1.5 times the fastest qualified reference's elapsed time.
+It works for ordinary whole-document benchmark runs too. Collection and
+consumption are compared separately. A missing reference, failed Roc parse,
+or timing spread above 25% cannot pass; a noisy fastest reference must be
+remeasured rather than replaced by a slower library. The command exits with
+status one when a target fails or lacks qualified evidence. Detailed results
+and target decisions are saved in `results.json` and `report.md`.
+
+On macOS the harness cannot pin CPU affinity. Run final measurements serially
+on an otherwise idle machine, retain the reported timing spread, and compare
+revisions on the same hardware and toolchains. The README runner below uses
+CPU affinity on Linux for its published figures.
+
 == Reproduce the README throughput table
 
 On Linux, choose an available logical CPU and run:

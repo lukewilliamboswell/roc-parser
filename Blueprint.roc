@@ -80,6 +80,7 @@ config = [
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
 	Task("bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--allocations", "--blueprint"])]),
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
+	Task("streaming-bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--streaming", "--formats", "json,xml,http", "--blueprint"])]),
 	# Shared packaging and documentation; the release workflow owns publishing.
 	Task("sbom-composition", [Use("release"), Run(["scripts/sbom_composition.roc"])]),
 	Task("docs-path", [Use("docs"), Run(["scripts/docs_path.roc"])]),

@@ -517,13 +517,26 @@ class Builder:
 
 
 def cargo_lock_versions() -> dict[str, str]:
-    lock = (BENCH / "compare" / "rust" / "Cargo.lock").read_text()
+    folder = BENCH / "compare" / "rust"
+    lock = (folder / "Cargo.lock").read_text()
+    pins = {name: direct or inline for name, direct, inline in re.findall(
+        r'^([\w-]+)\s*=\s*(?:"=([^"\n]+)"|\{[^\n]*?version\s*=\s*"=([^"\n]+)")',
+        (folder / "Cargo.toml").read_text(), re.M)}
     wanted = {name for lang in ["rust"] for fmt in COMPARATORS[lang].values() for name, _ in fmt}
     wanted |= {"pulldown-cmark", "unsafe-libyaml"}
-    found = {}
+    versions: dict[str, set[str]] = {}
     for name, version in re.findall(r'name = "([^"]+)"\nversion = "([^"]+)"', lock):
         if name in wanted:
-            found[name] = version
+            versions.setdefault(name, set()).add(version)
+    found = {}
+    for name, choices in versions.items():
+        if name in pins:
+            matching = [value for value in choices if value.split("+", 1)[0] == pins[name].split("+", 1)[0]]
+            if len(matching) != 1:
+                raise ValueError(f"locked direct comparator version is ambiguous or absent: {name}")
+            found[name] = matching[0]
+        else:
+            found[name] = ", ".join(sorted(choices))
     return found
 
 
@@ -669,10 +682,10 @@ def comparison(results: list[dict]) -> list[dict]:
                 for doc, mine in roc.items():
                     other = by_key.get((impl, doc))
                     if other and mine["kind"] != "pathological" and mine["accepted"] and other["accepted"]:
-                        if fmt in ("csv", "qif", "ofx") and (
+                        if (fmt in ("csv", "qif", "ofx") or workload == "consume") and (
                             "checksum" not in mine or "checksum" not in other
                             or mine["checksum"] * other.get("iterations", 1) != other["checksum"] * mine.get("iterations", 1)
-                        ):
+                        ) and not (mine.get("checksum_qualified") is True and other.get("checksum_qualified") is True):
                             mismatches.append(doc)
                             continue
                         ratios.append(mine["median_ns"] / other["median_ns"])
@@ -750,6 +763,17 @@ def markdown_report(report: dict) -> str:
             result += f", {r['allocation_calls']} allocs"
         lines.append(f"| {r['doc']} | {r['bytes']} | {r['impl']} | {fmt_ns(r['median_ns'])} | "
                      f"{r['spread_pct']:.0f}% | {r['mb_per_s']:.3g} | {rss} | {result} |")
+    if "performance_targets" in report:
+        lines += ["", "## Elapsed-time target", "",
+                  "Each ratio is Roc time divided by the fastest qualified reference time. "
+                  "Collection and consumption are separate; borrowing and model differences remain in the implementation notes.", "",
+                  "| Document | Roc implementation | Fastest reference | Slowdown | Limit | Status |",
+                  "| --- | --- | --- | ---: | ---: | --- |"]
+        for row in report["performance_targets"]:
+            ratio = f"{row['slowdown']:.3f}x" if "slowdown" in row else "-"
+            status = row["status"] + (": " + row["reason"] if "reason" in row else "")
+            lines.append(f"| {row['doc']} | {row['implementation']} | {row.get('reference', '-')} | "
+                         f"{ratio} | {row['maximum_slowdown']:g}x | {status} |")
     return "\n".join(lines) + "\n"
 
 
@@ -946,7 +970,7 @@ def parse_args(argv: list[str] | None = None):
                     help="shared reference measurement cache (default: output-dir/reference-cache)")
     ap.add_argument("--roc", default=os.environ.get("ROC", "roc"))
     ap.add_argument("--formats", default=",".join(FORMATS))
-    ap.add_argument("--langs", default="roc,rust,go,python", help="comma-separated: roc,rust,go,python")
+    ap.add_argument("--langs", default=None, help="comma-separated: roc,rust,go,python; streaming defaults to roc,rust")
     ap.add_argument("--only", default="", help="comma-separated document names or kinds to keep")
     ap.add_argument("--python", default=None, help="interpreter with the comparator packages (default: a venv)")
     ap.add_argument("--repetitions", type=int, default=None)
@@ -954,6 +978,10 @@ def parse_args(argv: list[str] | None = None):
     ap.add_argument("--max-iterations", type=int, default=100000)
     ap.add_argument("--timeout", type=float, default=120.0, help="seconds allowed for one batch")
     ap.add_argument("--allocations", action="store_true", help="also count Roc allocations (builds bench/roc/alloc.roc)")
+    ap.add_argument("--streaming", action="store_true", help="consume JSON records and XML/HTTP events; compare separate pinned Rust consumers")
+    ap.add_argument("--chunk-bytes", type=int, default=4096, help="source chunk width for --streaming (default: 4096)")
+    ap.add_argument("--max-slowdown", type=float, default=None,
+                    help="require each selected non-pathological Roc result to take at most this multiple of the fastest qualified reference")
     ap.add_argument("--fail-on-error", action="store_true", help="exit 1 if any roc-parser measurement errored")
     ap.add_argument("--corpus-only", action="store_true", help="write the corpus and its manifest, then stop")
     ap.add_argument("--blueprint", action="store_true",
@@ -961,16 +989,25 @@ def parse_args(argv: list[str] | None = None):
     args = ap.parse_args(argv)
     args.repetitions = args.repetitions or (3 if args.quick else 7)
     args.target_ms = args.target_ms or (20.0 if args.quick else 200.0)
-    args.label = args.label or ("quick" if args.quick else "full")
+    args.label = args.label or (("streaming-" if args.streaming else "") + ("quick" if args.quick else "full"))
     if args.repetitions < 1 or args.target_ms <= 0 or args.max_iterations < 1:
         ap.error("repetitions, target-ms and max-iterations must be positive")
+    if args.chunk_bytes < 1 or (args.max_slowdown is not None and
+                               (not math.isfinite(args.max_slowdown) or args.max_slowdown <= 0)):
+        ap.error("chunk-bytes and max-slowdown must be positive finite values")
     args.formats = tuple(f for f in args.formats.split(",") if f)
     unknown = set(args.formats) - set(FORMATS)
     if unknown:
         ap.error(f"unknown formats {sorted(unknown)}")
-    args.langs = tuple(x for x in args.langs.split(",") if x)
+    if args.streaming and set(args.formats) - {"json", "xml", "http"}:
+        ap.error("--streaming supports --formats json,xml,http")
+    if args.streaming and args.allocations:
+        ap.error("--streaming allocation checks use the format's stream-ceilings fuzz target")
+    args.langs = tuple(x for x in (args.langs or ("roc,rust" if args.streaming else "roc,rust,go,python")).split(",") if x)
     if set(args.langs) - {"roc", "rust", "go", "python"}:
         ap.error("langs must be roc, rust, go or python")
+    if args.streaming and set(args.langs) - {"roc", "rust"}:
+        ap.error("--streaming has pinned Rust consumers; choose --langs roc,rust")
     return args
 
 
@@ -987,7 +1024,14 @@ def main(argv: list[str] | None = None) -> int:
     def log(message: str) -> None:
         print(message, file=sys.stderr, flush=True)
 
-    docs = select(build_corpus(args.quick, args.formats), args.only)
+    streaming = None
+    if args.streaming:
+        if __package__:
+            from . import _streaming_bench as streaming
+        else:
+            import _streaming_bench as streaming
+    docs = select(streaming.documents(sys.modules[__name__], args.quick, args.formats)
+                  if streaming else build_corpus(args.quick, args.formats), args.only)
     manifest = write_corpus(docs, out / "corpus")
     (out / "corpus" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.corpus_only:
@@ -995,13 +1039,19 @@ def main(argv: list[str] | None = None) -> int:
 
     _install_wait_hook()
     builder = Builder(out, args.roc, args.python, log)
-    impls = builder.roc_impls(args.formats) if "roc" in args.langs else []
-    references = reference_specs(args.langs, args.formats)
+    impls = ((streaming.roc_implementations(sys.modules[__name__], builder, args.formats, args.chunk_bytes)
+              if streaming else builder.roc_impls(args.formats)) if "roc" in args.langs else [])
+    references = (streaming.references(sys.modules[__name__], args.langs, args.formats)
+                  if streaming else reference_specs(args.langs, args.formats))
     fresh: dict[tuple[str, str], Impl] = {}
     if args.refresh_references:
         for lang in args.langs:
-            if lang != "roc":
-                fresh.update({(impl.id, impl.format): impl for impl in getattr(builder, f"{lang}_impls")(args.formats)})
+            if lang != "roc" and any(impl.lang == lang for impl in references):
+                built = getattr(builder, f"{lang}_impls")(args.formats)
+                if streaming and built:
+                    built = [dataclasses.replace(spec, command=[built[0].command[0], spec.name])
+                             for spec in references if spec.lang == lang]
+                fresh.update({(impl.id, impl.format): impl for impl in built})
     impls += references
     cache = ReferenceCache((args.reference_cache_dir or args.output_dir / "reference-cache").resolve())
     machine_config = reference_machine() if references else {}
@@ -1021,6 +1071,8 @@ def main(argv: list[str] | None = None) -> int:
         "versions": builder.versions,
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
         "implementations": [{"id": i.id, "format": i.format, "workload": i.workload, "notes": i.notes} for i in impls],
+        "streaming": args.streaming, "chunk_bytes": args.chunk_bytes if args.streaming else None,
+        "maximum_slowdown": args.max_slowdown,
         "corpus": manifest,
         "reference_cache": {"mode": "refresh" if args.refresh_references else "reuse", "directory": str(cache.folder)},
         "measurement": "in-process parse loop around an in-memory document; stdin, process start and "
@@ -1029,9 +1081,12 @@ def main(argv: list[str] | None = None) -> int:
     results: list[dict] = []
     report = {"metadata": metadata, "results": results, "comparison": []}
     for doc in docs:
-        for impl in (i for i in impls if i.format == doc.format):
+        for impl in (i for i in impls if i.format == doc.format and
+                     (streaming is None or streaming.accepts(i, doc))):
             if impl.lang == "roc":
                 record = measure(impl, doc, args)
+                if streaming:
+                    record = streaming.qualify_checksum(impl, doc, record)
             elif impl.lang in profile_errors:
                 record = reference_unavailable(impl, doc, profile_errors[impl.lang])
             else:
@@ -1042,6 +1097,8 @@ def main(argv: list[str] | None = None) -> int:
                         record = reference_unavailable(impl, doc, builder.skipped.get(impl.lang, "reference build failed"), identity)
                     else:
                         record = measure(measured_impl, doc, args)
+                        if streaming:
+                            record = streaming.qualify_checksum(impl, doc, record)
                         provenance = {"report": str(out / "results.json"), "git": metadata["git"],
                                       "measured_at": record.get("receipts", {}).get("measured_at")}
                         try:
@@ -1062,16 +1119,31 @@ def main(argv: list[str] | None = None) -> int:
                         record = reference_unavailable(impl, doc, str(error), identity)
             if alloc and impl.lang == "roc":
                 record.update(count_allocations(alloc, doc, out / "logs", args.timeout))
+            if streaming:
+                record = streaming.qualify_checksum(impl, doc, record)
             results.append(record)
             log(f"{doc.id:40} {impl.id:28} " + (f"error: {record['error'][:80]}" if "error" in record else
                 f"{fmt_ns(record['median_ns']):>10} {record['mb_per_s']:8.3g} MB/s ±{record['spread_pct']:.0f}%"))
             report["comparison"] = comparison(results)
             (out / "results.json").write_text(json.dumps(report, indent=2) + "\n")
+    target_failed = False
+    if args.max_slowdown is not None:
+        if __package__:
+            from ._performance_target import evaluate
+        else:
+            from _performance_target import evaluate
+        targets = evaluate(results, args.max_slowdown)
+        report["performance_targets"] = targets
+        target_failed = not targets or any(row["status"] != "passed" for row in targets)
+        for row in targets:
+            log(f"target {row['doc']} {row['implementation']}: {row['status']} " +
+                (f"{row['slowdown']:.3f}x versus {row['reference']}" if "slowdown" in row else row["reason"]))
+    (out / "results.json").write_text(json.dumps(report, indent=2) + "\n")
     (out / "report.md").write_text(markdown_report(report))
     log(f"wrote {out / 'results.json'} and {out / 'report.md'}")
     roc_errors = [r for r in results if r["lang"] == "roc" and "error" in r]
     roc_missing = [s for s in builder.skipped if s.startswith("roc-")]
-    return 1 if args.fail_on_error and (roc_errors or roc_missing) else 0
+    return 1 if target_failed or (args.max_slowdown is not None and roc_missing) or (args.fail_on_error and (roc_errors or roc_missing)) else 0
 
 
 if __name__ == "__main__":
