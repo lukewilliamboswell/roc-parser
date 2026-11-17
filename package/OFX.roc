@@ -826,9 +826,14 @@ Current : { info : Box(CurrentInfo), transactions : List(OFX.Transaction) }
 
 WholeLimits : { token : U64, record : U64, depth : U64 }
 
-CaptureFrame : { name : Str, first : U64, offset : U64, leaf : Bool }
+CaptureFrame : { name : Str, first : U64, offset : U64, leaf : Bool, core : U8 }
 
-Whole : { reader : Box(State), limits : WholeLimits, nodes : List(Xml.Node), frames : List(CaptureFrame), capture_base : U64, capture_start : U64, current : Current, statements : List(OFX.Statement) }
+Scalars : { values : List(Str), seen : U8 }
+
+empty_scalars : Scalars
+empty_scalars = { values: [], seen: 0 }
+
+Whole : { reader : Box(State), limits : WholeLimits, nodes : List(Xml.Node), frames : List(CaptureFrame), capture_base : U64, capture_start : U64, scalars : Scalars, current : Current, statements : List(OFX.Statement) }
 
 current_statement : OFX.Context -> Current
 current_statement = |context| { info: Box.box({ context, ledger_balance: Err(Missing), available_balance: Err(Missing) }), transactions: [] }
@@ -839,7 +844,7 @@ xml_whole = |bytes, props| {
 		return Err(UseStreaming)
 	}
 	source = Str.from_utf8(bytes).map_err(|_| UseStreaming)?
-	opened = { reader: Box.box(initial(props)), limits: { token: props.max_token_bytes, record: props.max_record_bytes, depth: props.max_depth }, nodes: [], frames: [], capture_base: 0, capture_start: 0, current: current_statement(empty_context), statements: [] }
+	opened = { reader: Box.box(initial(props)), limits: { token: props.max_token_bytes, record: props.max_record_bytes, depth: props.max_depth }, nodes: [], frames: [], capture_base: 0, capture_start: 0, scalars: empty_scalars, current: current_statement(empty_context), statements: [] }
 	match Xml.fold_source(source, { max_depth: props.max_depth, max_elements: 18446744073709551615, max_attributes: 0 }, opened, |state, event| whole_event(bytes, state, event)) {
 		Folded(value) => {
 			reader = Box.unbox(value.reader)
@@ -880,7 +885,7 @@ whole_event = |bytes, input, event| {
 # transitions. The reader remains boxed and untouched during captured content.
 whole_outer : List(U8), Whole, Xml.SourceEvent, Xml.SourceSpan -> Try(Whole, [UseStreaming])
 whole_outer = |bytes, input, event, span| {
-	{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 	width = span.end - span.start
 	var $reader = { ..Box.unbox(reader), offset: span.end }
 	match event {
@@ -889,14 +894,14 @@ whole_outer = |bytes, input, event, span| {
 			if $reader.header.len() > limits.token {
 				return Err(UseStreaming)
 			}
-			return Ok({ reader: Box.box($reader), limits, nodes, frames, capture_base, capture_start, current, statements })
+			return Ok({ reader: Box.box($reader), limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
 		}
 		_ => {}
 	}
 	if !$reader.header_done {
 		$reader = read_header($reader).map_err(|_| UseStreaming)?
 	}
-	whole = { reader: Box.box($reader), limits, nodes, frames, capture_base, capture_start, current, statements }
+	whole = { reader: Box.box($reader), limits, nodes, frames, capture_base, capture_start, scalars, current, statements }
 	match event {
 		Start(value) => {
 			if !value.attributes.is_empty() or (!leaf_tag(value.name) and !aggregate_tag(value.name) and !valid_name(value.name)) {
@@ -920,19 +925,19 @@ whole_outer = |bytes, input, event, span| {
 			Ok(whole)
 		}
 		Declaration(_) | ProcessingInstruction(_) => {
-			{ reader: prior, limits: caps, nodes: ns, frames: fs, capture_base: base, capture_start: start, current: statement, statements: complete } = whole
+			{ reader: prior, limits: caps, nodes: ns, frames: fs, capture_base: base, capture_start: start, scalars: sv, current: statement, statements: complete } = whole
 			consumed = consume_token({ ..Box.unbox(prior), token: bytes.sublist({ start: span.start, len: width }) }).map_err(|_| UseStreaming)?
 			if consumed.state.encoding != Utf8 {
 				return Err(UseStreaming)
 			}
-			whole_action({ reader: Box.box({ ..consumed.state, token: [] }), limits: caps, nodes: ns, frames: fs, capture_base: base, capture_start: start, current: statement, statements: complete }, consumed.outcome)
+			whole_action({ reader: Box.box({ ..consumed.state, token: [] }), limits: caps, nodes: ns, frames: fs, capture_base: base, capture_start: start, scalars: sv, current: statement, statements: complete }, consumed.outcome)
 		}
 	}
 }
 
 whole_start : Whole, Str, Bool, Xml.SourceSpan -> Try(Whole, [UseStreaming])
 whole_start = |input, name, empty, span| {
-	{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 	consumed = consume_name(Box.unbox(reader), name, False, False, [], span.end - span.start, "").map_err(|_| UseStreaming)?
 	{ state: next, outcome } = consumed
 	active = !next.capture_tag.is_empty()
@@ -940,7 +945,7 @@ whole_start = |input, name, empty, span| {
 		return Err(UseStreaming)
 	}
 	base = if (active) next.capture_depth else capture_base
-	whole = whole_action({ reader: Box.box(next), limits, nodes, frames: if (active) [{ name, first: nodes.len(), offset: span.start, leaf: False }] else frames, capture_base: base, capture_start: if (active) span.start else capture_start, current, statements }, outcome)?
+	whole = whole_action({ reader: Box.box(next), limits, nodes, frames: if (active) [{ name, first: nodes.len(), offset: span.start, leaf: False, core: 7 }] else frames, capture_base: base, capture_start: if (active) span.start else capture_start, scalars: if (active and name == "STMTTRN") { values: List.repeat("", 7), seen: 0 } else scalars, current, statements }, outcome)?
 	if empty {
 		if active {
 			capture_close(whole, span)
@@ -957,7 +962,7 @@ whole_start = |input, name, empty, span| {
 capture_event : Whole, Xml.SourceEvent, Xml.SourceSpan -> Try(Whole, [UseStreaming])
 capture_event = |input, event, span| match event {
 	Start(value) => {
-		{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+		{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 		parent = frames.last().map_err(|_| UseStreaming)?
 		name = value.name
 		leaf = leaf_tag(name)
@@ -968,7 +973,16 @@ capture_event = |input, event, span| match event {
 			"OFX" | "STMTTRNRS" | "CCSTMTTRNRS" | "STMTRS" | "CCSTMTRS" | "STATUS" | "INVSTMTMSGSRSV1" | "INVSTMTRS" => return Err(UseStreaming)
 			_ => {}
 		}
-		next = { reader, limits, nodes, frames: frames.append({ name, first: nodes.len(), offset: span.start, leaf }), capture_base, capture_start, current, statements }
+		core = if (!scalars.values.is_empty() and frames.len() == 1) core_slot(name) else 7
+		var $seen = scalars.seen
+		if core < 7 {
+			mask = (1.U8).shl_wrap(core)
+			if $seen.bitwise_and(mask) != 0 {
+				return Err(UseStreaming)
+			}
+			$seen = $seen.bitwise_or(mask)
+		}
+		next = { reader, limits, nodes, frames: frames.append({ name, first: nodes.len(), offset: span.start, leaf, core }), capture_base, capture_start, scalars: { values: scalars.values, seen: $seen }, current, statements }
 		if value.empty {
 			capture_close(next, span)
 		} else {
@@ -990,22 +1004,87 @@ capture_event = |input, event, span| match event {
 
 capture_text : Whole, Str -> Try(Whole, [UseStreaming])
 capture_text = |input, value| {
-	{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
-	Ok({ reader, limits, nodes: if (value.is_empty()) nodes else nodes.append(Text(value)), frames, capture_base, capture_start, current, statements })
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	if !scalars.values.is_empty() and frames.len() == 1 {
+		if !value.trim().is_empty() {
+			return Err(UseStreaming)
+		}
+		return Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
+	}
+	Ok({ reader, limits, nodes: if (value.is_empty()) nodes else nodes.append(Text(value)), frames, capture_base, capture_start, scalars, current, statements })
+}
+
+core_slot : Str -> U8
+core_slot = |name| match name {
+	"TRNTYPE" => 0
+	"DTPOSTED" => 1
+	"TRNAMT" => 2
+	"FITID" => 3
+	"NAME" => 4
+	"MEMO" => 5
+	"CHECKNUM" => 6
+	_ => 7
+}
+
+# Known scalar children need text, not an intermediate Element or child list.
+# Joining a fragmented field once keeps comment/CDATA-heavy fields linear.
+core_text : List(Xml.Node), U64 -> Try(Str, [UseStreaming])
+core_text = |nodes, first| {
+	if nodes.len() == first {
+		return Ok("")
+	}
+	if nodes.len() == first + 1 {
+		return match nodes.get(first) {
+			Ok(Text(value)) => Ok(value.trim().release_excess_capacity())
+			_ => Err(UseStreaming)
+		}
+	}
+	var $parts = List.with_capacity(nodes.len() - first)
+	var $at = first
+	while $at < nodes.len() {
+		match nodes.get($at) {
+			Ok(Text(value)) => {
+				$parts = $parts.append(value)
+			}
+			_ => return Err(UseStreaming)
+		}
+		$at = $at + 1
+	}
+	Ok(Str.join_with($parts, "").trim().release_excess_capacity())
 }
 
 capture_close : Whole, Xml.SourceSpan -> Try(Whole, [UseStreaming])
 capture_close = |input, span| {
-	{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 	frame = frames.last().map_err(|_| UseStreaming)?
-	node = Element({ name: frame.name, attributes: [], children: whole_children(nodes, frame.first) })
 	remaining = frames.drop_last(1)
+	if frame.core < 7 {
+		value = core_text(nodes, frame.first)?
+		{ values: prior, seen } = scalars
+		values = prior.set(frame.core.to_u64(), value).map_err(|_| UseStreaming)?
+		return Ok({ reader, limits, nodes: nodes.take_first(frame.first), frames: remaining, capture_base, capture_start, scalars: { values, seen }, current, statements })
+	}
+	if remaining.is_empty() and !scalars.values.is_empty() {
+		state = Box.unbox(reader)
+		extensions = whole_children(nodes, frame.first)
+		if scalars.seen.count_one_bits().to_u64() + extensions.len() > state.props.max_fields {
+			return Err(UseStreaming)
+		}
+		value = { type: scalars.values.get(0) ?? "", posted: scalars.values.get(1) ?? "", amount: scalars.values.get(2) ?? "", id: scalars.values.get(3) ?? "", name: scalars.values.get(4) ?? "", memo: scalars.values.get(5) ?? "", check_number: scalars.values.get(6) ?? "", extensions }
+		validate_transaction_fields(value, True).map_err(|_| UseStreaming)?
+		if state.capture_tag != "STMTTRN" or state.stack.last().map_ok(|entry| entry.name) != Ok("STMTTRN") {
+			return Err(UseStreaming)
+		}
+		next = { ..state, offset: span.end, stack: state.stack.drop_last(1), capture: [], capture_tag: "" }
+		return whole_action({ reader: Box.box(next), limits, nodes: nodes.take_first(frame.first), frames: remaining, capture_base: 0, capture_start: 0, scalars: empty_scalars, current, statements }, Emitted(Transaction(value)))
+	}
+	node = Element({ name: frame.name, attributes: [], children: whole_children(nodes, frame.first) })
 	prefix = nodes.take_first(frame.first)
 	if !remaining.is_empty() {
-		return Ok({ reader, limits, nodes: prefix.append(node), frames: remaining, capture_base, capture_start, current, statements })
+		return Ok({ reader, limits, nodes: prefix.append(node), frames: remaining, capture_base, capture_start, scalars, current, statements })
 	}
 	consumed = close_tag({ ..Box.unbox(reader), offset: span.end }, frame.name, "", Ok(node)).map_err(|_| UseStreaming)?
-	whole_action({ reader: Box.box(consumed.state), limits, nodes: prefix, frames: remaining, capture_base: 0, capture_start: 0, current, statements }, consumed.outcome)
+	whole_action({ reader: Box.box(consumed.state), limits, nodes: prefix, frames: remaining, capture_base: 0, capture_start: 0, scalars: empty_scalars, current, statements }, consumed.outcome)
 }
 
 # Adjacent text across comments/CDATA has the same coalescing as Xml.parse_str.
@@ -1047,26 +1126,26 @@ whole_children = |nodes, first| {
 
 whole_outer_close : Whole -> Try(Whole, [UseStreaming])
 whole_outer_close = |input| {
-	{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 	state = Box.unbox(reader)
 	name = state.stack.last().map_err(|_| UseStreaming)?.name
 	consumed = close_tag(state, name, "", Err(Missing)).map_err(|_| UseStreaming)?
-	whole_action({ reader: Box.box(consumed.state), limits, nodes, frames, capture_base, capture_start, current, statements }, consumed.outcome)
+	whole_action({ reader: Box.box(consumed.state), limits, nodes, frames, capture_base, capture_start, scalars, current, statements }, consumed.outcome)
 }
 
 whole_outer_text : Whole, Str -> Try(Whole, [UseStreaming])
 whole_outer_text = |input, value| {
-	{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 	state = Box.unbox(reader)
 	top = state.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !leaf_tag(top) {
 		if !value.trim().is_empty() {
 			return Err(UseStreaming)
 		}
-		return Ok({ reader: Box.box(state), limits, nodes, frames, capture_base, capture_start, current, statements })
+		return Ok({ reader: Box.box(state), limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
 	}
 	next = consume_field(state, top, value.trim()).map_err(|_| UseStreaming)?
-	Ok({ reader: Box.box(next), limits, nodes, frames, capture_base, capture_start, current, statements })
+	Ok({ reader: Box.box(next), limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
 }
 
 whole_action : Whole, Action -> Try(Whole, [UseStreaming])
@@ -1075,22 +1154,22 @@ whole_action = |input, action| {
 		Quiet => Ok(input)
 		Rejected(_) => Err(UseStreaming)
 		Emitted(event) => {
-			{ reader, limits, nodes, frames, capture_base, capture_start, current, statements } = input
+			{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 			match event {
-				StatementStart(context) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, current: current_statement(context), statements })
+				StatementStart(context) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: current_statement(context), statements })
 				Transaction(value) => {
 					# Keep the growing list outside its metadata box: unboxing a
 					# statement must not leave a second owner during append.
 					{ info, transactions } = current
-					Ok({ reader, limits, nodes, frames, capture_base, capture_start, current: { info, transactions: transactions.append(value) }, statements })
+					Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: { info, transactions: transactions.append(value) }, statements })
 				}
-				LedgerBalance(value) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, current: { info: Box.box({ ..Box.unbox(current.info), ledger_balance: Ok(value) }), transactions: current.transactions }, statements })
-				AvailableBalance(value) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, current: { info: Box.box({ ..Box.unbox(current.info), available_balance: Ok(value) }), transactions: current.transactions }, statements })
+				LedgerBalance(value) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: { info: Box.box({ ..Box.unbox(current.info), ledger_balance: Ok(value) }), transactions: current.transactions }, statements })
+				AvailableBalance(value) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: { info: Box.box({ ..Box.unbox(current.info), available_balance: Ok(value) }), transactions: current.transactions }, statements })
 				StatementEnd => {
 					{ info, transactions } = current
 					metadata = Box.unbox(info)
 					statement = { context: metadata.context, transactions, ledger_balance: metadata.ledger_balance, available_balance: metadata.available_balance }
-					Ok({ reader, limits, nodes, frames, capture_base, capture_start, current: current_statement(empty_context), statements: statements.append(statement) })
+					Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: current_statement(empty_context), statements: statements.append(statement) })
 				}
 			}
 		}
@@ -1958,4 +2037,22 @@ expect {
 	source = sample_xml.replace_each("</STMTTRN>", "<VENDOR><VALUE><INNER/></VALUE></VENDOR></STMTTRN>")
 	bytes = source.to_utf8()
 	[0, 1, 5, 6, 7, 8, 9, 10, 16].all(|limit| OFX.parse_bytes(bytes, { max_depth: limit }) == collect_bytes(bytes, { max_depth: limit }))
+}
+
+expect {
+	source = sample_xml.replace_each("<NAME>Café &amp; tea</NAME>", "<NAME>Café <!-- gap --><![CDATA[& tea]]></NAME>").replace_each("<MEMO>One</MEMO>", "<MEMO/><CHECKNUM>00042</CHECKNUM><PAYEE><NAME>Other</NAME></PAYEE><VENDOR>extension</VENDOR>")
+	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+}
+
+expect [sample_xml.replace_each("</STMTTRN>", "<NAME/></STMTTRN>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><VENDOR/></MEMO>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO bad='attribute'>One</MEMO>"), sample_xml.replace_each("</STMTTRN>", "unexpected text</STMTTRN>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR/><VENDOR/></STMTTRN>"), sample_xml.replace_each("<FITID>00001</FITID>", ""), sample_xml.replace_each("<TRNAMT>-12.30</TRNAMT>", "<TRNAMT>invalid</TRNAMT>")].all(|source| OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
+
+expect {
+	bytes = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM/><VENDOR/></STMTTRN>").to_utf8()
+	[0, 1, 5, 6, 7, 8, 9, 1024].all(|limit| OFX.parse_bytes(bytes, { max_fields: limit }) == collect_bytes(bytes, { max_fields: limit }))
+}
+
+expect {
+	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>a<!--1-->b<![CDATA[c]]><!--2-->d</MEMO>")
+	document = OFX.parse_str(source)?
+	document.statements.first()?.transactions.first()?.memo == "abcd" and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
 }
