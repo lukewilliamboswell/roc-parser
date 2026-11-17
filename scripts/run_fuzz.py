@@ -501,8 +501,8 @@ def add_limits(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=positive_int, help="override the target's per-input timeout")
     parser.add_argument("--memory-limit", type=positive_int, default=2048)
     parser.add_argument(
-        "--jobs", type=positive_int, default=min(4, os.cpu_count() or 1),
-        help="targets to build at once before running them in turn (default: up to 4)",
+        "--jobs", type=positive_int, default=1,
+        help="targets to build at once before running them in turn (default: 1)",
     )
 
 
