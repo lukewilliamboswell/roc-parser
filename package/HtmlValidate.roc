@@ -16,7 +16,7 @@ HtmlValidate :: [].{
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, in_datalist: False, selected_context: False }
 			$pending = $pending.drop_last(1)
-			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
+			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported(InvalidTreeIndex), line: 1, column: 1 }))
 			match node.kind {
 				Element(name) if name.namespace == Uri(Markup.html_namespace) => {
 					known_element = elements(name.local)
@@ -32,7 +32,7 @@ HtmlValidate :: [].{
 						}
 						at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
 						if $diagnostics.len() >= props.max_diagnostics {
-							return fail(parsed, node, ResourceLimit("max_diagnostics"))
+							return fail(parsed, node, ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }))
 						}
 						$diagnostics = $diagnostics.append({ problem: UnknownElement(name.local), line: at.line, column: at.column })
 					}
@@ -55,7 +55,7 @@ HtmlValidate :: [].{
 							}
 							at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
 							if $diagnostics.len() >= props.max_diagnostics {
-								return attr_fail(parsed, attr, ResourceLimit("max_diagnostics"))
+								return attr_fail(parsed, attr, ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }))
 							}
 							$diagnostics = $diagnostics.append({ problem: UnknownAttribute({ element: name.local, attribute: attr.name.local }), line: at.line, column: at.column })
 						}
@@ -76,7 +76,7 @@ HtmlValidate :: [].{
 					check_children_with_attributes(parsed, node, name.local, item.in_datalist, attributes)?
 					# Standalone fragment roots have no authored parent.
 					if item.parent != "" and !parent_allowed(ancestry, name.local) {
-						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: "allowed parent for ${name.local}" }))
+						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: AllowedParent(name.local) }))
 					}
 					if name.local == "img" and !has_attribute(node, "alt") and !(
 						match value(node, "role") {
@@ -84,10 +84,10 @@ HtmlValidate :: [].{
 							_ => False
 						}
 					) {
-						return fail(parsed, node, InvalidChildren({ element: "img", expected: "alt attribute (or explicit presentation role)" }))
+						return fail(parsed, node, InvalidChildren({ element: "img", expected: ImageAlternative }))
 					}
 					if name.local == "input" and HtmlTokenizer.lower(value(node, "type")) == "image" and (!has_attribute(node, "src") or !has_attribute(node, "alt")) {
-						return fail(parsed, node, InvalidChildren({ element: "input", expected: "image input requires src and alt" }))
+						return fail(parsed, node, InvalidChildren({ element: "input", expected: ImageInputAttributes }))
 					}
 					next_context = descend(ancestry, name)
 					for child in node.children {
@@ -156,19 +156,19 @@ HtmlValidate :: [].{
 		}
 		$summary
 	}
-	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : Str })])
+	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : Markup.ChildGrammar })])
 	context_problem = |context, element, attributes| {
 		if element == "a" and context.anchor {
-			return Err(InvalidChildren({ element: "a", expected: "no descendant a element" }))
+			return Err(InvalidChildren({ element: "a", expected: NoNestedAnchor }))
 		}
 		if context.interactive and (interactive_summary(attributes, element) or attributes.tabindex) {
-			return Err(InvalidChildren({ element: "button", expected: "no nested interactive content" }))
+			return Err(InvalidChildren({ element: "button", expected: NoInteractiveContent }))
 		}
 		if context.in_option and (interactive_summary(attributes, element) or ["datalist", "object"].contains(element) or attributes.tabindex) {
-			return Err(InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
+			return Err(InvalidChildren({ element: "option", expected: OptionContent }))
 		}
 		if element == "selectedcontent" and !context.selected_context {
-			return Err(InvalidChildren({ element: "selectedcontent", expected: "descendant of a button that is a child of select" }))
+			return Err(InvalidChildren({ element: "selectedcontent", expected: SelectButtonDescendant }))
 		}
 		Ok({})
 	}
@@ -212,16 +212,16 @@ HtmlValidate :: [].{
 			_ => AnyChildren
 		}
 	}
-	child_expected : ChildRule, Markup.Name -> Try({}, [Rejected(Str)])
+	child_expected : ChildRule, Markup.Name -> Try({}, [Rejected(Markup.ChildGrammar)])
 	child_expected = |rule, element| match rule {
 		AnyChildren => Ok({})
-		NoChildren => Err(Rejected("no authored child content"))
-		TextOnly => Err(Rejected(""))
-		ElementNames(names) => if (element.namespace == Uri(Markup.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(Str.join_with(names, ", ")))
+		NoChildren => Err(Rejected(NoChildren))
+		TextOnly => Err(Rejected(TextOnly))
+		ElementNames(names) => if (element.namespace == Uri(Markup.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(NamedElements(names)))
 	}
-	text_expected : ChildRule, Str -> Try({}, [Rejected(Str)])
+	text_expected : ChildRule, Str -> Try({}, [Rejected(Markup.ChildGrammar)])
 	text_expected = |rule, text| if (Markup.whitespace(text)) Ok({}) else match rule {
-		NoChildren | ElementNames(_) => Err(Rejected("element-only content"))
+		NoChildren | ElementNames(_) => Err(Rejected(ElementsOnly))
 		_ => Ok({})
 	}
 
@@ -540,12 +540,12 @@ check_children_with_attributes = |parsed, node, name, in_datalist, attribute_fac
 	if rule == AnyChildren {
 		node_count = parsed.tree.nodes.len()
 		if node.children.any(|index| index >= node_count) {
-			return fail(parsed, node, Unsupported("invalid child node"))
+			return fail(parsed, node, Unsupported(InvalidChildIndex))
 		}
 		return Ok({})
 	}
 	for index in node.children {
-		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child node"))
+		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported(InvalidChildIndex))
 		derived = match child.origin {
 			Cloned(_) => True
 			_ => False
@@ -604,7 +604,7 @@ expect {
 	parsed : Markup.Parsed
 	parsed = { source: Markup.Source.from_bytes("<p>x</p>".to_utf8()), tree: { nodes: [parent, child], roots: [0] }, diagnostics: [] }
 	invalid = { ..parent, children: [1, 2] }
-	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup({ problem: Unsupported("invalid child node"), line: 1, column: 1 }))
+	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup({ problem: Unsupported(InvalidChildIndex), line: 1, column: 1 }))
 }
 
 context_frame : U64, HtmlValidate.ContextState -> _

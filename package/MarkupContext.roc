@@ -23,7 +23,9 @@ MarkupContext :: [].{
 	Options := { syntax : Markup.Syntax ?? HtmlSyntax, scripting : Bool ?? True }
 
 	## Placement failures contain explicit names and no fabricated source location.
-	Problem : [InvalidChild({ parent : Markup.Name, child : Markup.Name, expected : Str }), InvalidText({ parent : Markup.Name, expected : Str }), WouldRepair(Markup.StructureReason), UnexpectedNamespace({ element : Markup.Name, expected : DomName.Namespace }), UnsupportedContext({ element : Markup.Name, reason : Str })]
+	Problem : [InvalidChild({ parent : Markup.Name, child : Markup.Name, expected : Markup.ChildGrammar }), InvalidText({ parent : Markup.Name, expected : Markup.ChildGrammar }), WouldRepair(Markup.StructureReason), UnexpectedNamespace({ element : Markup.Name, expected : DomName.Namespace }), UnsupportedContext({ element : Markup.Name, reason : UnsupportedReason })]
+
+	UnsupportedReason : [ExplicitNamespaceRequired, FullParserRequired, ChangedElementIdentity, DuplicateAttributeIdentity, ChangedAttributeIdentity, SelectContextRequiresParser]
 
 	## Start at an explicit enclosing boundary. No outer ancestors are assumed.
 	## Propagate child contexts from a common boundary when ancestry matters.
@@ -51,7 +53,7 @@ MarkupContext :: [].{
 				Err(InvalidChildren(detail)) => return Err(InvalidChild({ parent: context.parent, child: element, expected: detail.expected }))
 			}
 			if context.authoring.parent != "" and !HtmlValidate.parent_allowed(context.authoring, element.local) {
-				return Err(InvalidChild({ parent: context.parent, child: element, expected: "allowed parent for ${element.local}" }))
+				return Err(InvalidChild({ parent: context.parent, child: element, expected: AllowedParent(element.local) }))
 			}
 		}
 		Ok(ConstructorContext.{ parent: element, attributes: summary, authoring: HtmlValidate.descend(context.authoring, element), scopes: Rules.descend(context.scopes, classification(element), element.local), extension: context.extension or extension_boundary(context.parent), options: context.options, mode: child_mode(context.mode, element) })
@@ -82,7 +84,7 @@ MarkupContext :: [].{
 			foreign = classification(context.parent)
 			if foreign == SvgNamespace or foreign == MathNamespace {
 				if !MarkupValidate.text_placement(foreign == SvgNamespace, context.parent.local, value) {
-					return Err(InvalidText({ parent: context.parent, expected: if (foreign == SvgNamespace) "SVG elements" else "MathML elements" }))
+					return Err(InvalidText({ parent: context.parent, expected: if (foreign == SvgNamespace) SvgElements else MathElements }))
 				}
 			}
 		}
@@ -111,10 +113,10 @@ check_supported : Markup.Name, MarkupContext.Options -> Try({}, MarkupContext.Pr
 check_supported = |element, options| {
 	if options.syntax == HtmlSyntax {
 		if element.namespace == NoNamespace {
-			return Err(UnsupportedContext({ element, reason: "HTML construction requires an explicit non-null enclosing namespace" }))
+			return Err(UnsupportedContext({ element, reason: ExplicitNamespaceRequired }))
 		}
 		if element.namespace == Uri(Markup.html_namespace) and ["html", "head", "template", "frameset", "frame", "plaintext", "selectedcontent", "ruby", "rb", "rp", "rt", "rtc"].contains(element.local) {
-			return Err(UnsupportedContext({ element, reason: "document, template, projection or history-sensitive parsing requires the complete parser" }))
+			return Err(UnsupportedContext({ element, reason: FullParserRequired }))
 		}
 	}
 	Ok({})
@@ -126,17 +128,17 @@ check_identity = |element, attributes, options| {
 		return Ok({})
 	}
 	if HtmlTree.canonical_element_name(DomName.qualified(element), uri(element)) != element {
-		return Err(UnsupportedContext({ element, reason: "HTML spelling changes the element's explicit identity" }))
+		return Err(UnsupportedContext({ element, reason: ChangedElementIdentity }))
 	}
 	var $seen = Dict.empty()
 	for attribute in attributes {
 		key = (attribute.name.namespace, attribute.name.local)
 		if $seen.contains(key) {
-			return Err(UnsupportedContext({ element, reason: "duplicate expanded attribute identity" }))
+			return Err(UnsupportedContext({ element, reason: DuplicateAttributeIdentity }))
 		}
 		$seen = $seen.insert(key, True)
 		if HtmlTree.canonical_attribute_name(DomName.qualified(attribute.name), uri(element)) != attribute.name {
-			return Err(UnsupportedContext({ element, reason: "HTML spelling changes an attribute's explicit identity" }))
+			return Err(UnsupportedContext({ element, reason: ChangedAttributeIdentity }))
 		}
 	}
 	Ok({})
@@ -164,7 +166,7 @@ check_child_model = |context, element| {
 		rule = HtmlValidate.child_rule(context.parent.local, context.attributes, context.authoring.in_datalist)
 		match HtmlValidate.child_expected(rule, element) {
 			Ok(_) => {}
-			Err(Rejected(expected)) => return Err(InvalidChild({ parent: context.parent, child: element, expected: if (expected.is_empty()) "text only" else expected }))
+			Err(Rejected(expected)) => return Err(InvalidChild({ parent: context.parent, child: element, expected: expected }))
 		}
 	} else if !context.extension {
 		foreign = classification(context.parent)
@@ -182,7 +184,7 @@ check_html_child = |context, element, attributes| {
 	name = element.local
 	text_behavior = if (parent_class == HtmlNamespace) MarkupVocabulary.text_behavior(context.parent.local, context.options.scripting) else Data
 	if text_behavior != Data {
-		return Err(InvalidChild({ parent: context.parent, child: element, expected: "text content" }))
+		return Err(InvalidChild({ parent: context.parent, child: element, expected: TextOnly }))
 	}
 	integration = (parent_class == SvgNamespace and Rules.svg_integration(context.parent.local)) or (parent_class == MathNamespace and context.parent.local == "annotation-xml" and context.attributes.html_encoding)
 	math_text = parent_class == MathNamespace and Rules.math_text_integration(context.parent.local) and !["mglyph", "malignmark"].contains(name)
@@ -237,7 +239,7 @@ check_html_child = |context, element, attributes| {
 		return Err(WouldRepair(MissingEndTag("option")))
 	}
 	if ["option", "optgroup", "hr"].contains(name) and context.scopes.select and (context.scopes.option or (name != "option" and context.scopes.optgroup)) {
-		return Err(UnsupportedContext({ element, reason: "select implied-end handling needs the full parser in this descendant context" }))
+		return Err(UnsupportedContext({ element, reason: SelectContextRequiresParser }))
 	}
 	if ["html", "head", "body", "image"].contains(name) {
 		return Err(WouldRepair(IgnoredMarkup))

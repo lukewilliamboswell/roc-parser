@@ -30,12 +30,12 @@ Svg := { parsed : Markup.Parsed }.{
 		} else {
 			Markup.parse_xml(source, props)?
 		}
-		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "svg", actual: "fragment" }), line: 1, column: 1 }))?
-		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported("missing root"), line: 1, column: 1 }))
+		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.svg_namespace), local: "svg" }, actual: Fragment }), line: 1, column: 1 }))?
+		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported(MissingRoot), line: 1, column: 1 }))
 		match node.kind {
 			Element(name) if name.namespace == Uri(Markup.svg_namespace) and name.local == "svg" => {}
-			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "svg in the Svg namespace", actual: name.local }), line: 1, column: 1 }))
-			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "svg", actual: "text" }), line: 1, column: 1 }))
+			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.svg_namespace), local: "svg" }, actual: Element(name) }), line: 1, column: 1 }))
+			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.svg_namespace), local: "svg" }, actual: Text }), line: 1, column: 1 }))
 		}
 		validated = validate_tree(parsed, props, [])?
 		Ok(Svg.{ parsed: project_checked(validated, props)? })

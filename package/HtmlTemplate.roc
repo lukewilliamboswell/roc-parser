@@ -13,7 +13,7 @@ HtmlTemplate :: [].{
 	parse_segments = |segments, context, props| {
 		raw_context = ["script", "style"].contains(context.name) or (props.syntax == HtmlSyntax and (["xmp", "iframe", "noembed", "noframes", "plaintext"].contains(context.name) or (context.name == "noscript" and context.scripting)))
 		if segments.len() > 1 and raw_context {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "holes are not permitted in raw-text fragment contexts" }), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: RawTextHole }), line: 1, column: 1 }))
 		}
 		unprojected = MarkupTemplate.parse_segments_with(
 			segments,

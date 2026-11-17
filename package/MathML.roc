@@ -30,12 +30,12 @@ MathML := { parsed : Markup.Parsed }.{
 		} else {
 			Markup.parse_xml(source, props)?
 		}
-		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "math", actual: "fragment" }), line: 1, column: 1 }))?
-		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported("missing root"), line: 1, column: 1 }))
+		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.mathml_namespace), local: "math" }, actual: Fragment }), line: 1, column: 1 }))?
+		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported(MissingRoot), line: 1, column: 1 }))
 		match node.kind {
 			Element(name) if name.namespace == Uri(Markup.mathml_namespace) and name.local == "math" => {}
-			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "math in the MathML namespace", actual: name.local }), line: 1, column: 1 }))
-			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "math", actual: "text" }), line: 1, column: 1 }))
+			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.mathml_namespace), local: "math" }, actual: Element(name) }), line: 1, column: 1 }))
+			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.mathml_namespace), local: "math" }, actual: Text }), line: 1, column: 1 }))
 		}
 		validated = validate_tree(parsed, props, [])?
 		Ok(MathML.{ parsed: project_checked(validated, props)? })

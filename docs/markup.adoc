@@ -48,6 +48,13 @@ fragment. `Html` and `MathML` provide the same document conversion. Dynamic
 input should retain its fallible parsing result rather than call
 `Literal.require`.
 
+Parsing failures carry `InvalidMarkup({ problem, line, column })`. Match
+`Markup.Problem` to handle them without inspecting diagnostic strings. Child
+failures carry a `ChildGrammar`; root failures preserve expanded names; resource
+failures carry the resource tag and maximum. Template failures retain the hole
+index and an `InterpolationProblem` tag. XML syntax failures preserve the
+underlying XML problem. Use `Str.inspect(error.problem)` at a display boundary.
+
 == Select XML or HTML syntax deliberately
 
 The syntaxes can produce different trees from similar text. XML preserves exact

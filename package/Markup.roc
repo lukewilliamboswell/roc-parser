@@ -1,3 +1,4 @@
+import Parser
 import Xml
 import XmlNs
 import Literal
@@ -126,8 +127,17 @@ Markup :: [].{
 	## A structural repair forbidden by exact authored HTML parsing.
 	StructureReason : [ImpliedElement(Str), MissingEndTag(Str), UnexpectedEndTag(Str), NonVoidSelfClosing(Str), ReparentedContent, IgnoredMarkup, ReconstructedContent, ChangedAttributes]
 
+	## Required child-content grammar, independent of diagnostic wording.
+	ChildGrammar : [AllowedParent(Str), ImageAlternative, ImageInputAttributes, NoNestedAnchor, NoInteractiveContent, OptionContent, SelectButtonDescendant, NoChildren, ElementsOnly, NamedElements(List(Str)), TextOnly, MathElements, SvgElements, ChildCount(U64), BaseAndScriptPairs, ScriptsAndPrescripts, ScriptPairs, ExpressionAndAnnotations, SvgContentModel]
+
+	## Internal consistency and unsupported-entrypoint failures.
+	UnsupportedReason : [InvalidTreeIndex, InvalidChildIndex, MissingRoot, HtmlParserRequired, TemplateSourceChanged, InvalidTemplateSlot, InvalidCloneMapping, DeferredProjectionRequired, ProjectedCycle, InvalidProjectedIndex, InvalidSlotParent, MissingXmlStart, MissingScriptEnd]
+	ActualRoot : [Fragment, Text, Element(Name)]
+	Resource : [ParserWork, Nodes, Diagnostics, TemplateSlots, TemplateWork]
+	InterpolationProblem : [RawTextHole, MissingStaticSegment, TextHoleForbidden(Str), RecoveryRequired, SplitCharacterReference, InvalidHolePosition, MultipleAttributeHoles, MarkupDelimiterHole, IncompleteHoleMarkup, LostAttributeHole, CdataHoleNamespace]
+
 	## Structured reason for rejection. Presentation is separate.
-	Problem : [NonCanonicalName({ authored : Str, expected : Str, span : Span }), HtmlStructure({ reason : StructureReason, span : Span }), SyntaxError(Str), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
+	Problem : [NonCanonicalName({ authored : Str, expected : Str, span : Span }), HtmlStructure({ reason : StructureReason, span : Span }), SyntaxError(Parser.Problem(Xml.Problem)), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNs.Problem), WrongRoot({ expected : { namespace : XmlNs.Namespace, local : Str }, actual : ActualRoot }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : ChildGrammar }), Unsupported(UnsupportedReason), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit({ resource : Resource, max : U64 }), Interpolation({ index : U64, reason : InterpolationProblem }), BindingCount({ expected : U64, actual : U64 })]
 
 	## One-based lines and UTF-8 byte columns refer to authored source.
 	Error : { problem : Problem, line : U64, column : U64 }
@@ -200,7 +210,7 @@ Markup :: [].{
 	decode_xml_text = |source_text| {
 		match Xml.parse_str("<_>${source_text}</_>") {
 			Ok(document) => Ok(document.root.text())
-			Err(InvalidXml(error)) => Err(InvalidMarkup({ problem: SyntaxError(error.message), line: error.line, column: error.column }))
+			Err(InvalidXml(error)) => Err(InvalidMarkup({ problem: SyntaxError(error.problem), line: error.line, column: error.column }))
 		}
 	}
 
@@ -317,7 +327,7 @@ StartInfo : { name : Markup.Name, bindings : List(XmlNs.Binding), attributes : L
 parse_xml_source : Str, Str, Bool, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 parse_xml_source = |text, namespace, fragment, props| {
 	if props.syntax != XmlSyntax {
-		return Err(InvalidMarkup({ problem: Unsupported("HTML syntax requires Html parsing"), line: 1, column: 1 }))
+		return Err(InvalidMarkup({ problem: Unsupported(HtmlParserRequired), line: 1, column: 1 }))
 	}
 	if text.count_utf8_bytes() > props.max_source_bytes {
 		return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
@@ -350,7 +360,7 @@ parse_xml_source = |text, namespace, fragment, props| {
 	budget = Markup.work_budget(props, text.count_utf8_bytes())
 	var $work = text.count_utf8_bytes()
 	if $work > budget {
-		return Err(InvalidMarkup({ problem: ResourceLimit("parser work"), line: 1, column: 1 }))
+		return Err(InvalidMarkup({ problem: ResourceLimit({ resource: ParserWork, max: budget }), line: 1, column: 1 }))
 	}
 	var $reader = opened
 	var $starts = []
@@ -358,7 +368,7 @@ parse_xml_source = |text, namespace, fragment, props| {
 	var $context = fragment
 	while !$done {
 		if $work >= budget {
-			return Err(InvalidMarkup({ problem: ResourceLimit("parser work"), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: ParserWork, max: budget }), line: 1, column: 1 }))
 		}
 		$work = $work + 1
 		match $reader.next() {
@@ -388,7 +398,7 @@ escape_namespace = |namespace| Str.join_with(Str.join_with(namespace.split_on("&
 located_xml_error : XmlNs.ReadError, Str, U64 -> [InvalidMarkup(Markup.Error)]
 located_xml_error = |error, text, prefix| {
 	(problem, line, original_column) = match error {
-		InvalidXml(e) => (SyntaxError(e.message), e.line, e.column)
+		InvalidXml(e) => (SyntaxError(e.problem), e.line, e.column)
 		InvalidNamespace(e) => (NamespaceError(e.problem), e.line, e.column)
 		LimitExceeded(e) => (LimitExceeded(e.limit), e.line, e.column)
 	}
@@ -418,7 +428,7 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 		bytes = source.slice(token.span)
 		cost = bytes.len() * 2 + 1
 		if cost > budget - $work {
-			return Err(error_at(source, token.span.start, ResourceLimit("parser work")))
+			return Err(error_at(source, token.span.start, ResourceLimit({ resource: ParserWork, max: budget })))
 		}
 		$work = $work + cost
 		var $new_node = Err(Missing)
@@ -448,7 +458,7 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 							}
 							$new_node = Ok({ kind: Element(start.name), attributes: attrs, children: [], origin: Authored(token.span) })
 						}
-						Err(_) => return Err(error_at(source, token.span.start, SyntaxError("missing XML start event")))
+						Err(_) => return Err(error_at(source, token.span.start, Unsupported(MissingXmlStart)))
 					}
 				}
 			}
@@ -514,7 +524,7 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 			Ok(new_node) => {
 				index = $nodes.len()
 				if index >= props.max_nodes {
-					return Err(error_at(source, token.span.start, ResourceLimit("nodes")))
+					return Err(error_at(source, token.span.start, ResourceLimit({ resource: Nodes, max: props.max_nodes })))
 				}
 				$nodes = $nodes.append(new_node)
 				match $stack.last() {
@@ -737,7 +747,7 @@ parse_xml_fold = |text, input, prefix, depth, elements, fragment, props| {
 	source = Markup.Source.from_tokens(text.to_utf8(), state.tokens)
 	match state.failure {
 		AttributeFailure(offset) => Err(error_at(source, offset, LimitExceeded(Attributes)))
-		NodeFailure(offset) => Err(error_at(source, offset, ResourceLimit("nodes")))
+		NodeFailure(offset) => Err(error_at(source, offset, ResourceLimit({ resource: Nodes, max: props.max_nodes })))
 		NoFailure => Ok({ source, tree: { nodes: state.nodes, roots: state.roots }, diagnostics: [] })
 	}
 }

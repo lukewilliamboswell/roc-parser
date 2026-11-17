@@ -25,7 +25,7 @@ MarkupValidate :: [].{
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, extension: False }
 			$pending = $pending.drop_last(1)
-			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
+			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported(InvalidTreeIndex), line: 1, column: 1 }))
 			match node.kind {
 				Element(name) => {
 					$has_html = $has_html or name.namespace == Uri(Markup.html_namespace)
@@ -38,7 +38,7 @@ MarkupValidate :: [].{
 								return fail(parsed, node, UnknownElement(name.local))
 							}
 							if $diagnostics.len() >= props.max_diagnostics {
-								return fail(parsed, node, ResourceLimit("diagnostics"))
+								return fail(parsed, node, ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }))
 							}
 							offset = match node.origin {
 								Authored(span) => span.start
@@ -58,7 +58,7 @@ MarkupValidate :: [].{
 										return attr_fail(parsed, attr, problem)
 									}
 									if $diagnostics.len() >= props.max_diagnostics {
-										return fail(parsed, node, ResourceLimit("diagnostics"))
+										return fail(parsed, node, ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }))
 									}
 									at = Markup.position(parsed.source, attr.span.start)
 									$diagnostics = $diagnostics.append({ problem, line: at.line, column: at.column })
@@ -106,7 +106,7 @@ MarkupValidate :: [].{
 				TextSlot(target) => {
 					match $parents.get(target.node) {
 						Ok(parent) => {
-							node = plan.parsed.tree.nodes.get(parent) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid text slot parent"), line: 1, column: 1 }))
+							node = plan.parsed.tree.nodes.get(parent) ?? return Err(InvalidMarkup({ problem: Unsupported(InvalidSlotParent), line: 1, column: 1 }))
 							match node.kind {
 								Element(name) => {
 									copied = match (plan.parsed.tree.nodes.get(target.node) ?? node).origin {
@@ -117,7 +117,7 @@ MarkupValidate :: [].{
 									allowed = copied or if (name.namespace == Uri(Markup.svg_namespace)) !svg_elements(name.local) or member(["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"], name.local) else if (name.namespace == Uri(Markup.mathml_namespace)) !math_elements(name.local) or member(["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"], name.local) else if (name.namespace == Uri(Markup.html_namespace)) !html_nothing and !member(["selectedcontent", "html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"], name.local) else True
 									if !allowed {
 										at = Markup.position(plan.parsed.source, slot.location.start)
-										return Err(InvalidMarkup({ problem: Interpolation({ index: slot.index, reason: "text holes are not allowed inside ${name.local}" }), line: at.line, column: at.column }))
+										return Err(InvalidMarkup({ problem: Interpolation({ index: slot.index, reason: TextHoleForbidden(name.local) }), line: at.line, column: at.column }))
 									}
 								}
 								_ => {}
@@ -137,8 +137,8 @@ MarkupValidate :: [].{
 	child_placement = |svg, parent, child| if (svg) svg_child_allowed((svg_child_model(parent)).0, child) else if (parent == "mtable") member(["mtr", "mlabeledtr"], child) else if (member(["mtr", "mlabeledtr"], parent)) child == "mtd" else !math_leaf(parent)
 	text_placement : Bool, Str, Str -> Bool
 	text_placement = |svg, parent, text| Markup.whitespace(text) or (if (svg) !(svg_child_model(parent)).1 else math_text_allowed(parent))
-	child_expectation : Bool, Str -> Str
-	child_expectation = |svg, parent| if (svg) "supported SVG content model" else if (parent == "mtable") "mtr or mlabeledtr" else if (member(["mtr", "mlabeledtr"], parent)) "mtd" else "text only"
+	child_expectation : Bool, Str -> Markup.ChildGrammar
+	child_expectation = |svg, parent| if (svg) SvgContentModel else if (parent == "mtable") NamedElements(["mtr", "mlabeledtr"]) else if (member(["mtr", "mlabeledtr"], parent)) NamedElements(["mtd"]) else TextOnly
 
 	element_known : Bool, Str -> Bool
 	element_known = |svg, local| if (svg) svg_elements(local) else math_elements(local)
@@ -569,7 +569,7 @@ check_math_children = |parsed, node, name| {
 	while $child_index < node.children.len() {
 		index = node.children.get($child_index) ?? 0
 		$child_index = $child_index + 1
-		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child index"))
+		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported(InvalidChildIndex))
 		match child.kind {
 			Element(n) => {
 				$count = $count + 1
@@ -577,7 +577,7 @@ check_math_children = |parsed, node, name| {
 					$elements = $elements.append(n.local)
 				}
 			}
-			Text(text) if !text_allowed and !Markup.whitespace(text) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
+			Text(text) if !text_allowed and !Markup.whitespace(text) => return fail(parsed, node, InvalidChildren({ element: name, expected: MathElements }))
 			_ => {}
 		}
 	}
@@ -589,11 +589,11 @@ check_math_children = |parsed, node, name| {
 		_ => count
 	}
 	if count != expected {
-		return fail(parsed, node, InvalidChildren({ element: name, expected: "${expected.to_str()} child elements" }))
+		return fail(parsed, node, InvalidChildren({ element: name, expected: ChildCount(expected) }))
 	}
 	if name == "mmultiscripts" {
 		if count == 0 or $elements.first() == Ok("mprescripts") {
-			return fail(parsed, node, InvalidChildren({ element: name, expected: "base followed by script pairs" }))
+			return fail(parsed, node, InvalidChildren({ element: name, expected: BaseAndScriptPairs }))
 		}
 		var $post = 0
 		var $pre = 0
@@ -601,7 +601,7 @@ check_math_children = |parsed, node, name| {
 		for child in $elements.drop_first(1) {
 			if child == "mprescripts" {
 				if $prescripts or $post % 2 != 0 {
-					return fail(parsed, node, InvalidChildren({ element: name, expected: "paired scripts and at most one mprescripts" }))
+					return fail(parsed, node, InvalidChildren({ element: name, expected: ScriptsAndPrescripts }))
 				}
 				$prescripts = True
 			} else if $prescripts {
@@ -611,20 +611,20 @@ check_math_children = |parsed, node, name| {
 			}
 		}
 		if $post % 2 != 0 or $pre % 2 != 0 {
-			return fail(parsed, node, InvalidChildren({ element: name, expected: "paired scripts" }))
+			return fail(parsed, node, InvalidChildren({ element: name, expected: ScriptPairs }))
 		}
 	}
 	if name == "semantics" and (count == 0 or [Ok("annotation"), Ok("annotation-xml")].contains($elements.first()) or !$elements.drop_first(1).all(|e| member(["annotation", "annotation-xml"], e))) {
-		return fail(parsed, node, InvalidChildren({ element: name, expected: "one expression followed by annotations" }))
+		return fail(parsed, node, InvalidChildren({ element: name, expected: ExpressionAndAnnotations }))
 	}
 	if name == "mtable" and !$elements.all(|e| MarkupValidate.child_placement(False, name, e)) {
-		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtr or mlabeledtr" }))
+		return fail(parsed, node, InvalidChildren({ element: name, expected: NamedElements(["mtr", "mlabeledtr"]) }))
 	}
 	if member(["mtr", "mlabeledtr"], name) and !$elements.all(|e| MarkupValidate.child_placement(False, name, e)) {
-		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtd" }))
+		return fail(parsed, node, InvalidChildren({ element: name, expected: NamedElements(["mtd"]) }))
 	}
 	if math_leaf(name) and count != 0 {
-		return fail(parsed, node, InvalidChildren({ element: name, expected: "text only" }))
+		return fail(parsed, node, InvalidChildren({ element: name, expected: TextOnly }))
 	}
 	Ok({})
 }
@@ -660,15 +660,15 @@ check_svg_children = |parsed, node, name| {
 		index = node.children.get($child_index) ?? 0
 		$child_index = $child_index + 1
 		if index >= parsed.tree.nodes.len() {
-			return fail(parsed, node, Unsupported("invalid child index"))
+			return fail(parsed, node, Unsupported(InvalidChildIndex))
 		}
 		# Unrestricted parents need only the arena-index check. Their children
 		# are validated independently by the outer vocabulary traversal.
 		if model != Any {
 			child = parsed.tree.nodes.get(index) ?? node
 			match child.kind {
-				Element(n) if !svg_child_allowed(model, n.local) => return fail(parsed, child, InvalidChildren({ element: name, expected: "supported SVG content model" }))
-				Text(text) if reject_text and !Markup.whitespace(text) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
+				Element(n) if !svg_child_allowed(model, n.local) => return fail(parsed, child, InvalidChildren({ element: name, expected: SvgContentModel }))
+				Text(text) if reject_text and !Markup.whitespace(text) => return fail(parsed, child, InvalidChildren({ element: name, expected: SvgElements }))
 				_ => {}
 			}
 		}
@@ -816,7 +816,7 @@ expect {
 	group = parsed.tree.nodes.first()?
 	nodes = parsed.tree.nodes.set(0, { ..group, children: [999] })?
 	invalid = { ..parsed, tree: { ..parsed.tree, nodes } }
-	MarkupValidate.foreign(invalid, {}, []).map_ok(|_| {}) == Err(InvalidMarkup({ problem: Unsupported("invalid child index"), line: 1, column: 1 }))
+	MarkupValidate.foreign(invalid, {}, []).map_ok(|_| {}) == Err(InvalidMarkup({ problem: Unsupported(InvalidChildIndex), line: 1, column: 1 }))
 }
 
 math_text_allowed = |name| name == "mi" or name == "mn" or name == "mo" or name == "ms" or name == "mtext" or name == "annotation"

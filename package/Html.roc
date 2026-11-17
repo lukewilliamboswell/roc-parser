@@ -28,11 +28,23 @@ Html := { parsed : Markup.Parsed }.{
 	parse_with : Str, Props -> Try(Html, [InvalidMarkup(Markup.Error)])
 	parse_with = |text, props| {
 		{ parsed, domain } = authored_syntax(text, props, False)?
-		root = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "html", actual: "fragment" }), line: 1, column: 1 }))?
-		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup({ problem: Unsupported("missing document root"), line: 1, column: 1 }))
+		root = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.html_namespace), local: "html" }, actual: Fragment }), line: 1, column: 1 }))?
+		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup({ problem: Unsupported(MissingRoot), line: 1, column: 1 }))
 		match node.kind {
 			Element(n) if n.namespace == Uri(Markup.html_namespace) and n.local == "html" => {}
-			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "html in the HTML namespace", actual: "other" }), line: 1, column: 1 }))
+			_ => return Err(
+				InvalidMarkup({
+					problem: WrongRoot({
+						expected: { namespace: Uri(Markup.html_namespace), local: "html" },
+						actual: match node.kind {
+							Element(name) => Element(name)
+							_ => Text
+						},
+					}),
+					line: 1,
+					column: 1,
+				}),
+			)
 		}
 		checked = validate_authored(parsed, shared(props), domain)?
 		Ok(Html.{ parsed: project_authored(checked, props, False, domain)? })
@@ -429,7 +441,7 @@ expect {
 	True
 }
 expect match Html.parse_fragment("<svg viewbox='x' viewbox='y'></svg>", { strict_foreign_spelling: True, max_diagnostics: 0 }) {
-	Err(InvalidMarkup(error)) => error.problem == ResourceLimit("max_diagnostics")
+	Err(InvalidMarkup(error)) => error.problem == ResourceLimit({ resource: Diagnostics, max: 0 })
 	_ => False
 }
 expect match Html.parse_fragment("<svg viewbox='x'></svg>", { strict_foreign_spelling: True, max_attributes: 0 }) {

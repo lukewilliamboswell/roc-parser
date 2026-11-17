@@ -31,7 +31,7 @@ MarkupTemplate :: [].{
 	parse_segments_with : List(Str), Markup.Props, (Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])), (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Plan, [InvalidMarkup(Markup.Error)])
 	parse_segments_with = |segments, props, parse, decode| {
 		if segments.is_empty() {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "an interpolation requires at least one static segment" }), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), line: 1, column: 1 }))
 		}
 		var $source_size = 0
 		for segment in segments {
@@ -41,10 +41,10 @@ MarkupTemplate :: [].{
 			$source_size = $source_size + segment.count_utf8_bytes()
 		}
 		if segments.len() - 1 > props.max_slots {
-			return Err(InvalidMarkup({ problem: ResourceLimit("template slots"), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: TemplateSlots, max: props.max_slots }), line: 1, column: 1 }))
 		}
 		if $source_size > Markup.work_budget(props, $source_size) or segments.len() > Markup.work_budget(props, $source_size) {
-			return Err(InvalidMarkup({ problem: ResourceLimit("template work"), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: TemplateWork, max: Markup.work_budget(props, $source_size) }), line: 1, column: 1 }))
 		}
 		source_text = Str.join_with(segments, "")
 		var $holes = []
@@ -68,10 +68,10 @@ MarkupTemplate :: [].{
 		}
 		positions = classify_holes(parsed.source, $holes, props.syntax)?
 		if parsed.tree.nodes.len() > props.max_nodes {
-			return Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: props.max_nodes }), line: 1, column: 1 }))
 		}
 		if !parsed.diagnostics.is_empty() {
-			return Err(template_error(parsed.source, 0, 0, "template structure requires recovery"))
+			return Err(template_error(parsed.source, 0, 0, RecoveryRequired))
 		}
 		build_plan(segments, parsed, positions, props, decode)
 	}
@@ -81,7 +81,7 @@ MarkupTemplate :: [].{
 	bind : Plan, Iter(a) -> Try(Bound(a), [InvalidMarkup(Markup.Error)])
 	bind = |plan, values| {
 		if plan.segments.is_empty() {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "a template requires at least one static segment" }), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), line: 1, column: 1 }))
 		}
 		expected = plan.segments.len() - 1
 		var $items = []
@@ -115,13 +115,13 @@ MarkupTemplate :: [].{
 	fanout : Plan, Markup.Parsed, List({ original : U64, clone : U64 }), Markup.Props -> Try(Plan, [InvalidMarkup(Markup.Error)])
 	fanout = |plan, projected, clones, props| {
 		if plan.segments.is_empty() {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "a template requires at least one static segment" }), line: 1, column: 1 }))
+			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), line: 1, column: 1 }))
 		}
 		if projected.tree.nodes.len() > props.max_nodes {
-			return Err(projection_error(ResourceLimit("nodes")))
+			return Err(projection_error(ResourceLimit({ resource: Nodes, max: props.max_nodes })))
 		}
 		if projected.source.bytes != plan.parsed.source.bytes {
-			return Err(projection_error(Unsupported("projection changed template source")))
+			return Err(projection_error(Unsupported(TemplateSourceChanged)))
 		}
 		reachable = reachable_nodes(projected.tree)?
 		var $by_node = Dict.empty()
@@ -129,12 +129,12 @@ MarkupTemplate :: [].{
 		for slot in plan.slots {
 			index = slot_node_index(slot)
 			if slot.index >= plan.segments.len() - 1 or index >= plan.parsed.tree.nodes.len() {
-				return Err(projection_error(Unsupported("invalid original template slot")))
+				return Err(projection_error(Unsupported(InvalidTemplateSlot)))
 			}
 			$by_node = $by_node.insert(index, ($by_node.get(index) ?? []).append(slot))
 			if reachable.contains(index) {
 				if $slots.len() >= props.max_slots {
-					return Err(projection_error(ResourceLimit("template slots")))
+					return Err(projection_error(ResourceLimit({ resource: TemplateSlots, max: props.max_slots })))
 				}
 				$slots = $slots.append(slot)
 			}
@@ -142,7 +142,7 @@ MarkupTemplate :: [].{
 		var $seen = Set.empty()
 		for edge in clones {
 			if edge.original >= edge.clone or edge.clone < plan.parsed.tree.nodes.len() or edge.clone >= projected.tree.nodes.len() or $seen.contains(edge.clone) {
-				return Err(projection_error(Unsupported("invalid template clone mapping")))
+				return Err(projection_error(Unsupported(InvalidCloneMapping)))
 			}
 			$seen = $seen.insert(edge.clone)
 			match $by_node.get(edge.original) {
@@ -153,7 +153,7 @@ MarkupTemplate :: [].{
 					if reachable.contains(edge.clone) {
 						for base in base_slots {
 							if $slots.len() >= props.max_slots {
-								return Err(projection_error(ResourceLimit("template slots")))
+								return Err(projection_error(ResourceLimit({ resource: TemplateSlots, max: props.max_slots })))
 							}
 							target = match base.target {
 								TextSlot(_) => TextSlot({ node: edge.clone })
@@ -207,7 +207,7 @@ classify_holes = |source, holes, syntax| {
 			$token_index = $token_index + 1
 		}
 		if $raw != "" {
-			return Err(template_error(source, hole.offset, hole.index, "holes are not allowed in raw script/style content"))
+			return Err(template_error(source, hole.offset, hole.index, RawTextHole))
 		}
 		match source.tokens.get($token_index) {
 			Ok(token) if token.span.start < hole.offset => {
@@ -227,7 +227,7 @@ classify_holes = |source, holes, syntax| {
 							$reference_cursor = $reference_cursor + 1
 						}
 						if $reference_open {
-							return Err(template_error(source, hole.offset, hole.index, "a hole cannot split a character reference"))
+							return Err(template_error(source, hole.offset, hole.index, SplitCharacterReference))
 						}
 						$positions = $positions.append({ hole, kind: Data })
 					}
@@ -236,18 +236,18 @@ classify_holes = |source, holes, syntax| {
 					}
 					Tag => {
 						if !whole_attribute(source, token.span, hole.offset, syntax) {
-							return Err(template_error(source, hole.offset, hole.index, "expected character data or an entire quoted attribute value"))
+							return Err(template_error(source, hole.offset, hole.index, InvalidHolePosition))
 						}
 						if $last_attribute == Ok(hole.offset) {
-							return Err(template_error(source, hole.offset, hole.index, "one attribute value accepts exactly one hole"))
+							return Err(template_error(source, hole.offset, hole.index, MultipleAttributeHoles))
 						}
 						$last_attribute = Ok(hole.offset)
 						$positions = $positions.append({ hole, kind: Attribute })
 					}
-					_ => return Err(template_error(source, hole.offset, hole.index, "holes are not allowed in comments, declarations or markup delimiters"))
+					_ => return Err(template_error(source, hole.offset, hole.index, MarkupDelimiterHole))
 				}
 			}
-			Ok({ kind: Invalid, .. }) => return Err(template_error(source, hole.offset, hole.index, "incomplete markup around a hole"))
+			Ok({ kind: Invalid, .. }) => return Err(template_error(source, hole.offset, hole.index, IncompleteHoleMarkup))
 			_ => {
 				$positions = $positions.append({ hole, kind: Data })
 			}
@@ -322,7 +322,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 	}
 	structural_work = (parsed.tree.nodes.len() + positions.len() + 1) * (4 + $levels * 3)
 	if structural_work > Markup.work_budget(props, parsed.source.bytes.len()) {
-		return Err(InvalidMarkup({ problem: ResourceLimit("template work"), line: 1, column: 1 }))
+		return Err(InvalidMarkup({ problem: ResourceLimit({ resource: TemplateWork, max: Markup.work_budget(props, parsed.source.bytes.len()) }), line: 1, column: 1 }))
 	}
 	var $nodes = parsed.tree.nodes
 	var $slots = []
@@ -349,7 +349,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 			Implied(_) => {}
 			Cloned(_) => {
 				if !positions.is_empty() {
-					return Err(projection_error(Unsupported("template syntax callback must defer projections")))
+					return Err(projection_error(Unsupported(DeferredProjectionRequired)))
 				}
 			}
 		}
@@ -389,7 +389,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 				Ok(entry) if entry.span.start < hole.offset and entry.span.end > hole.offset => {
 					$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: AttributeSlot({ node: entry.node, attribute: entry.attribute }), expected: Language("attribute") })
 				}
-				_ => return Err(template_error(parsed.source, hole.offset, hole.index, "attribute hole lost during tree construction"))
+				_ => return Err(template_error(parsed.source, hole.offset, hole.index, LostAttributeHole))
 			}
 		} else {
 			while $text_cursor < text_intervals.len() {
@@ -405,7 +405,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 				}
 				_ => {
 					if position.kind == CData {
-						return Err(template_error(parsed.source, hole.offset, hole.index, "CDATA hole is not character data in this namespace"))
+						return Err(template_error(parsed.source, hole.offset, hole.index, CdataHoleNamespace))
 					}
 					while $element_cursor < element_intervals.len() {
 						entry = element_intervals.get($element_cursor) ?? empty_interval
@@ -509,7 +509,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 	roots = merge_insertions($nodes, $roots, $at_roots)
 
 	if $nodes.len() > props.max_nodes {
-		return Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
+		return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: props.max_nodes }), line: 1, column: 1 }))
 	}
 	Ok({ segments, parsed: { ..parsed, tree: { nodes: $nodes, roots } }, slots: $slots.sort_with(|a, b| if (a.index < b.index) Before else if (a.index > b.index) After else Same) })
 }
@@ -572,7 +572,7 @@ tag_name = |bytes| {
 	ascii_lower(Str.from_utf8_lossy(bytes.drop_first(start).take_first($end - start)))
 }
 
-template_error : Markup.Source, U64, U64, Str -> [InvalidMarkup(Markup.Error)]
+template_error : Markup.Source, U64, U64, Markup.InterpolationProblem -> [InvalidMarkup(Markup.Error)]
 template_error = |source, offset, index, reason| {
 	at = Markup.position(source, offset)
 	InvalidMarkup({ problem: Interpolation({ index, reason }), line: at.line, column: at.column })
@@ -719,7 +719,7 @@ expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_work_per_byte: 
 append_bounded : List(Markup.Node), Markup.Node, U64 -> Try(List(Markup.Node), [InvalidMarkup(Markup.Error)])
 append_bounded = |nodes, node, limit| {
 	if nodes.len() >= limit {
-		Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
+		Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: limit }), line: 1, column: 1 }))
 	} else {
 		Ok(nodes.append(node))
 	}
@@ -732,7 +732,7 @@ raw_text_parser = |source| {
 	# Test callback models HTML's token regions for one fixed script and p.
 	# The production callback is HtmlTree's own tokenizer-backed source.
 	bytes = source.to_utf8()
-	closing = source.split_first("</script>").map_err(|_| InvalidMarkup({ problem: SyntaxError("missing script end"), line: 1, column: 1 }))?
+	closing = source.split_first("</script>").map_err(|_| InvalidMarkup({ problem: Unsupported(MissingScriptEnd), line: 1, column: 1 }))?
 	end_script_text = closing.before.count_utf8_bytes()
 	p_start = end_script_text + 9
 	p_end = bytes.len()
@@ -759,14 +759,14 @@ reachable_nodes = |tree| {
 		index = $pending.last() ?? 0
 		$pending = $pending.drop_last(1)
 		if $seen.contains(index) {
-			return Err(projection_error(Unsupported("projected structure is not a tree")))
+			return Err(projection_error(Unsupported(ProjectedCycle)))
 		}
 		$seen = $seen.insert(index)
 		match tree.nodes.get(index) {
 			Ok(node) => {
 				$pending = $pending.concat(node.children)
 			}
-			Err(_) => return Err(projection_error(Unsupported("invalid projected node index")))
+			Err(_) => return Err(projection_error(Unsupported(InvalidProjectedIndex)))
 		}
 	}
 	Ok($seen)

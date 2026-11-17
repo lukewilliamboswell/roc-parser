@@ -185,20 +185,7 @@ quotation_placeholder_offset = |nodes| nodes.fold(
 )
 
 quotation_diagnostic_message : RocSyntax.DiagnosticCode -> Str
-quotation_diagnostic_message = |code| match code {
-	InvalidByte => "InvalidByte: invalid source byte"
-	InvalidUtf8 => "InvalidUtf8: invalid UTF-8 source text"
-	BidiControlInSource => "BidiControlInSource: bidirectional control character in source"
-	Utf8ByteOrderMark => "Utf8ByteOrderMark: unexpected UTF-8 byte order mark"
-	UnclosedString => "UnclosedString: unterminated string literal"
-	UnclosedDelimiter => "UnclosedDelimiter: unclosed or mismatched delimiter"
-	UnexpectedToken => "UnexpectedToken: unexpected token in Roc source"
-	InvalidNumber => "InvalidNumber: invalid numeric literal"
-	InvalidEscape => "InvalidEscape: invalid escape sequence"
-	InvalidCharacter => "InvalidCharacter: invalid character literal"
-	UnsupportedSyntax => "UnsupportedSyntax: unsupported Roc syntax"
-	ResourceLimit => "ResourceLimit: Roc syntax resource limit exceeded"
-}
+quotation_diagnostic_message = Str.inspect
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
 
@@ -937,7 +924,7 @@ expect {
 
 expect {
 	source = "ok = 1\r\nbad = 01\r\n"
-	RocSyntax.validate({ source, name: "numbers.roc" }) == Err(BadQuotedBytes("numbers.roc:2:7: RocSyntax: InvalidNumber: invalid numeric literal"))
+	RocSyntax.validate({ source, name: "numbers.roc" }) == Err(BadQuotedBytes("numbers.roc:2:7: RocSyntax: InvalidNumber"))
 }
 
 expect {

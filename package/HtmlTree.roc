@@ -144,7 +144,7 @@ HtmlTree :: [].{
 				Diagnostics => {
 					offset = next.reader.diagnostics.last().map_ok(|d| d.offset) ?? next.token.span.start
 					at = Literal.position(source, offset)
-					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+					return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }), line: at.line, column: at.column }))
 				}
 			}
 			if props.exact_structure {
@@ -225,15 +225,15 @@ HtmlTree :: [].{
 			}
 			if $state.nodes.len() > props.max_nodes {
 				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: at.line, column: at.column }))
+				return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: props.max_nodes }), line: at.line, column: at.column }))
 			}
 			if $state.diagnostics_exceeded or $reader.diagnostics.len() + $state.diagnostics.len() > props.max_diagnostics {
 				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+				return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }), line: at.line, column: at.column }))
 			}
 			if $state.work > $state.work_limit {
 				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: at.line, column: at.column }))
+				return Err(InvalidMarkup({ problem: ResourceLimit({ resource: ParserWork, max: $state.work_limit }), line: at.line, column: at.column }))
 			}
 			match next.token.kind {
 				Start(tag) if tag.attributes.len() > props.max_attributes => {
@@ -3594,7 +3594,7 @@ project_selectedcontent = |state, props| {
 							}
 							if !removed {
 								if $s.nodes.len() >= props.max_nodes {
-									return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: 0, column: insertion_at }))
+									return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: props.max_nodes }), line: 0, column: insertion_at }))
 								}
 								is_element = match original.kind {
 									Element(_) => True
@@ -3616,7 +3616,7 @@ project_selectedcontent = |state, props| {
 								$s = append_node({ ..$s, stack: [item.parent], foster: False }, { ..original, children: [], origin: Cloned({ source: source_span, at: insertion_at }) })
 								$s = { ..$s, stack, clones: $s.clones.append({ original: item.source, clone: new_id }) }
 								if $s.work > $s.work_limit {
-									return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: 0, column: insertion_at }))
+									return Err(InvalidMarkup({ problem: ResourceLimit({ resource: ParserWork, max: $s.work_limit }), line: 0, column: insertion_at }))
 								}
 								var $i = original.children.len()
 								while $i > 0 {
@@ -3873,7 +3873,7 @@ expect {
 	n = p.tree.nodes.get(p.tree.roots.first()?)?
 	n.children.len() == 1 and (p.tree.nodes.get(n.children.first()?)?).kind == Text("a  bc") and p.source.partition_valid() and p.diagnostics == [{ problem: HtmlSyntax(UnexpectedNull), line: 1, column: 12 }]
 }
-expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 2, column: 2 }))
+expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup({ problem: ResourceLimit({ resource: Diagnostics, max: 0 }), line: 2, column: 2 }))
 
 # Exact authored structure is separate from WHATWG recovery and precedes
 # selectedcontent projection. The default browser tree remains unchanged.
