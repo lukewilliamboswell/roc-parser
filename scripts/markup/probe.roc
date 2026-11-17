@@ -86,7 +86,7 @@ main! = |arguments| {
 				html_props : Html.Props
 				html_props = { syntax, recovery, exact_structure: args.get(12) == Ok("on"), strict_foreign_spelling: args.get(13) == Ok("on"), allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values, context_namespace: namespace, context_element: context, scripting: args.get(7) == Ok("on") }
 				if !validate {
-					Html.parse_source(source, html_props, fragment)
+					Html.parse_source(source, { mode: if (fragment) Fragment else Document, options: html_props })
 				} else if fragment {
 					Html.parse_fragment(source, html_props).map_ok(|value| value.parsed)
 				} else {

@@ -72,8 +72,8 @@ checksum_node = |tree, index| {
 parse : Str, Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 parse = |input, operation| match operation {
 	"xml-raw" => Markup.parse_xml(input, {})
-	"html-document-raw" => Html.parse_source(input, { recovery: Browser }, False)
-	"html-fragment-raw" => Html.parse_source(input, { recovery: Browser }, True)
+	"html-document-raw" => Html.parse_source(input, { options: { recovery: Browser } })
+	"html-fragment-raw" => Html.parse_source(input, { mode: Fragment, options: { recovery: Browser } })
 	"html-document-full" => Html.parse_str(input, {}).map_ok(|value| value.parsed)
 	"html-fragment-full" => Html.parse_fragment(input, {}).map_ok(|value| value.parsed)
 	"mathml-full" => MathML.parse_str(input, {}).map_ok(|value| value.parsed)
