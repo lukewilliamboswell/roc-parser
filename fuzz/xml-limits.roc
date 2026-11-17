@@ -87,6 +87,7 @@ test! = |bytes| {
 							Depth => exceeded.max == props.max_depth and shape.depth > props.max_depth
 							Elements => exceeded.max == props.max_elements and shape.elements > props.max_elements
 							Attributes => exceeded.max == props.max_attributes and shape.attributes > props.max_attributes
+							ContextBytes | ReferenceBytes | TextBytes | TokenBytes => crash "whole-document XML reported a streaming-only resource limit"
 						}
 					if !real {
 						crash "LimitExceeded names a limit the document does not exceed: ${Str.inspect(exceeded)}"

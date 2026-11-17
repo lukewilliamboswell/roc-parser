@@ -132,7 +132,7 @@ test! = |bytes| {
 		Err(problem) => crash "Xml.parse_str of shape ${shape.to_str()} (${size.to_str()} bytes) ${problem}"
 	}
 
-	# A loop over `next` holds the reader's stack (about 28 bytes a level)
+	# A loop over `next` holds the reader's stack (16 bytes a level)
 	# and one event, not the document.
 	depth = if (shape == 9) n * 16 else 2
 	drained = Fuzz.measure!("reader", || Xml.reader(input, { max_depth: depth, max_attributes: n * 16 }).map_ok(drain))
@@ -166,7 +166,9 @@ examples = {
 		$examples = $examples.append(Fuzz.example({ name: "shape-${$shape.to_str()}-large", revision: "1", make: || large }))
 		$shape = $shape + 1
 	}
-	$examples
+	# At this depth the open-name list grows between its small and large
+	# examples; transient old and new capacities must fit the same bound.
+	$examples.append(Fuzz.example({ name: "reader-depth-capacity-transition", revision: "1", make: || [9, 127] }))
 }
 
 target = Fuzz.target_with!({

@@ -554,7 +554,7 @@ Limits : { depth : U64, elements : U64, attributes : U64, namespaces : Bool }
 ## the most recent start tag was an empty-element tag whose end is still to
 ## be reported, whether the root has ended, where the most recent `Start`
 ## (or `no_start`) and the most recent event began, and the element count.
-Cursor : { pos : U64, open : List(Str), pending_end : Bool, closed : Bool, start : U64, at : U64, elements : U64 }
+Cursor : { pos : U64, open : List({ start : U64, end : U64 }), pending_end : Bool, closed : Bool, start : U64, at : U64, elements : U64 }
 
 StartTag : {
 	name : Str,
@@ -684,7 +684,7 @@ step : Str, List(U8), Limits, Cursor -> Try(Step, ReadFailure)
 step = |src, bytes, limits, r| {
 	if r.pending_end {
 		# The end of an empty-element tag.
-		name = reader_open_name(r.open)
+		name = open_name(src, bytes, r.open)
 		open = r.open.drop_last(1)
 		closed = open.is_empty()
 		return Ok(Ev(End(name), { ..r, open, pending_end: False, closed, start: no_start }))
@@ -699,25 +699,23 @@ step = |src, bytes, limits, r| {
 			match scan(src, bytes, limits.namespaces, r.pos)? {
 				TagAt(tag) => tag
 				TextUntil(text, pos) => return Ok(Ev(Text(text), { ..r, pos, start: no_start, at: r.pos }))
-				EndOfInput(pos) => return fail(pos, UnclosedElement(reader_open_name(r.open)))
+				EndOfInput(pos) => return fail(pos, UnclosedElement(open_name(src, bytes, r.open)))
 			}
 		}
 	if bytes.get(at + 1) == Ok('/') {
-		opened = r.open.last() ?? ""
-		end_tag = read_end_named(src, bytes, at, opened)?
+		opened = r.open.last() ?? { start: 0, end: 0 }
+		end_tag = read_end_tag(src, bytes, at, opened)?
+		name = slice_str(src, bytes, opened.start, opened.end)
 		open = r.open.drop_last(1)
 		closed = open.is_empty()
-		return Ok(Ev(End(opened), { ..r, pos: end_tag.pos, open, closed, start: no_start, at }))
+		return Ok(Ev(End(name), { ..r, pos: end_tag.pos, open, closed, start: no_start, at }))
 	}
 	check_start(limits, r.open.len(), r.elements, at)?
 	tag = parse_start_tag(src, bytes, at, limits.attributes)?
 	elements = r.elements + 1
-	open = r.open.append(tag.name)
+	open = r.open.append({ start: at + 1, end: at + 1 + tag.name.count_utf8_bytes() })
 	Ok(Ev(Start({ name: tag.name, attributes: tag.attributes }), { ..r, pos: tag.pos, open, pending_end: tag.empty, start: at, at, elements }))
 }
-
-reader_open_name : List(Str) -> Str
-reader_open_name = |open| open.last() ?? ""
 
 # The name of the innermost open element.
 open_name : Str, List(U8), List({ start : U64, end : U64 }) -> Str
@@ -899,32 +897,6 @@ read_end_tag = |src, bytes, at, expected| {
 	Ok({ name_end: end, pos: close + 1 })
 }
 
-read_end_named : Str, List(U8), U64, Str -> Try({ name_end : U64, pos : U64 }, ReadFailure)
-read_end_named = |src, bytes, at, expected| {
-	known_end = at + 2 + expected.count_utf8_bytes()
-	if !expected.is_empty() and bytes.get(known_end) == Ok('>') {
-		var $position = at + 2
-		var $same = True
-		for byte in expected.iter_utf8() {
-			$same = $same and bytes.get($position) == Ok(byte)
-			$position = $position + 1
-		}
-		if $same {
-			return Ok({ name_end: known_end, pos: known_end + 1 })
-		}
-	}
-	end = name_end(bytes, at + 2) ?? return fail(at + 2, ExpectedEndTagName)
-	actual = slice_str(src, bytes, at + 2, end)
-	if actual != expected {
-		return fail(at, EndTagMismatch({ actual, expected }))
-	}
-	close = skip_space(bytes, end)
-	if bytes.get(close) != Ok('>') {
-		return fail(close, ExpectedEndTagClose)
-	}
-	Ok({ name_end: end, pos: close + 1 })
-}
-
 # See https://www.w3.org/TR/xml/#NT-STag. Limits are checked before the tag
 # at `at` is parsed, so nothing is built for a tag that would exceed one.
 check_start : Limits, U64, U64, U64 -> Try({}, ReadFailure)
@@ -958,7 +930,7 @@ build_element = |src, bytes, limits, r, name, attributes| {
 	var $open = []
 	var $name = name
 	var $attributes = attributes
-	var $range = { start: r.start + 1, end: r.start + 1 + (r.open.last() ?? "").count_utf8_bytes() }
+	var $range = r.open.last() ?? { start: 0, end: 0 }
 	var $first_child = 0
 	var $nodes = []
 	var $elements = r.elements
@@ -1266,7 +1238,7 @@ build_with = |src, bytes, limits, r, context, first, on_start, on_text, on_end| 
 	var $context = context
 	var $frames = []
 	var $current = first
-	var $range = { start: r.start + 1, end: r.start + 1 + (r.open.last() ?? "").count_utf8_bytes() }
+	var $range = r.open.last() ?? { start: 0, end: 0 }
 	var $first_child = 0
 	var $nodes = []
 	var $elements = r.elements
