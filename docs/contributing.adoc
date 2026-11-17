@@ -40,9 +40,7 @@ Install:
   https://github.com/roc-lang/nightlies/releases[roc-lang/nightlies], on your
   `PATH` as `roc`;
 * Python 3.10–3.13, for the independent parser test and reference harnesses
-  (the pinned Quiffen oracle requires Python below 3.14; CI uses 3.13);
-* Ruby 3.4 or newer and RubyGems for the AsciiDoc oracle (CI uses the Ruby 3.4
-  package from the Nixpkgs revision in `Blueprint.lock`);
+  (the optional local Quiffen oracle requires Python below 3.14; CI uses 3.13);
 * the `blueprint` binary of
   https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.13.0[roc-blueprint 0.13.0],
   which runs the same named tasks as CI;
@@ -79,8 +77,9 @@ mv blueprint-aarch64-darwin ~/.local/bin/blueprint
 the tools it pins in `Blueprint.lock`, such as Zig for the RocSyntax oracle, and
 expects the others, such as `roc`, `python3`, `ruby` and `docker`, on your
 `PATH`; `blueprint requirements` lists them. Nix supplies the benchmark
-environment (<<benchmarks-blueprint>>) and the `oracle-ruby` activation used by
-CI. A local `blueprint run check` uses the compatible Ruby already on `PATH`.
+environment (<<benchmarks-blueprint>>) and the optional local `oracle-ruby`
+activation. The default check needs no reference runtimes or Nix. Local
+AsciiDoc comparisons require Ruby 3.4 or newer and RubyGems.
 
 The scripts find the compiler through the `ROC` environment variable and fall
 back to `roc` on `PATH`. Leave `ROC` unset when you run `blueprint`, which reads
@@ -136,7 +135,7 @@ blueprint run check
 
 It runs `scripts/check_all.roc`, which works through these sections in order and
 stops at the first failure. Name sections to run only those, for example
-`blueprint run check -- fuzz conformance`, and list them with
+`blueprint run check -- fuzz bench`, and list them with
 `blueprint run check -- --list`:
 
 [cols="1,4",options="header"]
@@ -147,15 +146,25 @@ stops at the first failure. Name sections to run only those, for example
 |`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/spec.json`
 |`docs` |The manual's Roc examples and the API reference audit (<<contributing-docs>>)
 |`fuzz` |Builds every fuzz target and runs 2,000 inputs from its seeds (<<property-testing>>)
-|`conformance` |The fast conformance checks of every format against its reference implementation (<<conformance>>)
-|`asciidoc` |AsciiDoc against the pinned Asciidoctor, and a smoke run of its performance harness
-|`roc-syntax` |RocSyntax against the compiler's own parser, built with Zig, including recovery, mutations and the performance protocol
 |`bench` |A smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
 |===
 
-The longer runs are scheduled: `fuzz.yml` runs ten-minute campaigns of every
-fuzz target and every conformance review each night, and `bench.yml` runs the
-full benchmark comparison each week.
+The scheduled `fuzz.yml` workflow runs ten-minute native Roc campaigns for
+each registered CI target. Cross-language correctness and performance
+comparisons run locally through the named `conformance`, `markup`, `asciidoc`,
+`roc-syntax`, `bench` and `bench-quick` Blueprint tasks. They are excluded from
+CI, nightly compatibility checks and release validation.
+
+Harness unit tests retain fake workers and authored adapter fixtures. Tests
+that launch installed reference implementations require an explicit local
+opt-in and their dependencies:
+
+[source,bash]
+----
+ROC_PARSER_RUN_ORACLE_TESTS=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+----
+
+The opt-in is disabled when `CI` is set.
 
 When you change what an example prints, record the new output and review the
 diff:
@@ -175,6 +184,9 @@ that breaks one fails CI:
   declared in Blueprint. Only tooling is pinned; probes and package applications
   use the current nightly. Independent Python harnesses live under `scripts/`.
   No shell scripts (`*.sh`) are allowed.
+* Cross-language oracle and benchmark comparisons are local-only. The default
+  check runs scripts, package, examples, docs, native fuzz smoke tests and Roc-only
+  benchmark smoke tests. Workflows cannot enable live oracle integration tests.
 * Every `uses:` in a workflow names an action by its full 40-character commit
   SHA, not a tag or branch. Local actions (`./...`) are exempt.
 * Every roc-automation action and workflow is used at the one reviewed
@@ -187,8 +199,9 @@ that breaks one fails CI:
 
 `scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
 registered in `scripts/run_fuzz.py`, and the campaign matrix in `fuzz.yml` to
-match that registry; `scripts/tests/test_check.py` does the same for the
-conformance reviews in `scripts/src/HarnessPlan.roc`.
+match that registry. `scripts/tests/test_check.py` keeps the local conformance
+entry point available, and repository policy guards the default check and
+workflow entry points against cross-language execution.
 
 [#contributing-docs]
 == Build the documentation

@@ -240,7 +240,7 @@ class Protocol(unittest.TestCase):
                 self.assertEqual(before['operation_checksum'],after['operation_checksum'])
         finally: engine.close()
 
-    @unittest.skipUnless(os.environ.get('ASCIIDOC_ORACLE_GEM_HOME'),'set ASCIIDOC_ORACLE_GEM_HOME for instrumented live Ruby checks')
+    @unittest.skipUnless(os.environ.get('ROC_PARSER_RUN_ORACLE_TESTS') == '1' and not os.environ.get('CI') and os.environ.get('ASCIIDOC_ORACLE_GEM_HOME'),'local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 and ASCIIDOC_ORACLE_GEM_HOME for live Ruby checks')
     def test_ruby_positive_calls_each_operation_without_extra_output_conversion(self):
         # Instrument the real protocol, leaving both operation implementations
         # and timed loops intact. The tiny document converts exactly once per

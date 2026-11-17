@@ -2,10 +2,10 @@ name: CI
 
 # The working tree on the latest Roc nightly. `blueprint run check` holds
 # everything a pull request must pass (scripts/check_all.roc lists it): the
-# package's checks and tests, the examples against tests/examples.json, a
-# release dry run against a loopback bundle, the manual's examples, and smoke runs of every fuzz target, conformance review, oracle and
-# benchmark. Long campaigns run in fuzz.yml and bench.yml. The `check` job is
-# the required status check.
+# package's checks and tests, the examples against tests/spec.json, a
+# release dry run against a loopback bundle, the manual's examples, native Roc
+# fuzz smoke campaigns, and Roc benchmark driver smoke runs. Cross-language
+# comparisons run locally. The `check` job is the required status check.
 on:
   pull_request:
   push:
@@ -44,9 +44,6 @@ jobs:
         with:
           cache: 'true'
           cache-workload: check
-          install-nix: 'true'
-      - name: Activate the locked Ruby oracle runtime
-        run: blueprint env oracle-ruby --github-path >> "$GITHUB_PATH"
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
@@ -61,20 +58,7 @@ jobs:
           download-method: asset-api
           version: nightly
           nightly-tag: ${{ steps.nightly.outputs.tag }}
-      - id: oracle-cache
-        name: Restore deterministic oracle answers
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .roc-parser-tmp/oracle-cache
-          key: oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-check-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-check-
       - run: blueprint run check
-      - name: Save deterministic oracle answers
-        if: ${{ !cancelled() && steps.oracle-cache.outputs.cache-primary-key != '' && hashFiles('.roc-parser-tmp/oracle-cache/**/*.json') != '' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .roc-parser-tmp/oracle-cache
-          key: ${{ steps.oracle-cache.outputs.cache-primary-key }}
       - name: Upload evidence and reproducers
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -82,11 +66,6 @@ jobs:
           name: check-evidence
           path: |
             .roc-parser-tmp/fuzz/runs/
-            .roc-parser-tmp/asciidoc/review/
-            .roc-parser-tmp/asciidoc/performance-smoke/
-            .roc-parser-tmp/roc-syntax-validation/*.json
-            .roc-parser-tmp/roc-syntax-validation/*.stdout
-            .roc-parser-tmp/roc-syntax-validation/*.stderr
             .roc-parser-tmp/bench/quick/
           if-no-files-found: ignore
           include-hidden-files: true

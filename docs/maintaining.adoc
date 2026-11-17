@@ -41,8 +41,8 @@ compiler, and every run uses the newest one:
   package for the new compiler in its own pull request.
 * `release.yml` builds and tests a release with the latest nightly, and the
   release notes name it under "Compilers".
-* `fuzz.yml` and `bench.yml` run their campaigns on the latest nightly and
-  record its version with their results.
+* `fuzz.yml` runs native Roc campaigns on the latest nightly and records its
+  version. Cross-language correctness and performance comparisons are local-only.
 
 There is no compiler pin file and no automated update controller: the
 compiler moves by itself every day, and nothing else in the repository changes
@@ -83,7 +83,7 @@ These change only through a pull request a maintainer reviews:
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].
 * *Blueprint.lock.* `blueprint update` refreshes it: the nixpkgs revision that
-  supplies Ruby to CI and Go, Rust and Python to the benchmarks, and the digests
+  supplies optional local Ruby, Go, Rust and Python reference runtimes, and the digests
   of Zig 0.17.0,
   which builds the RocSyntax oracle. The benchmark environment takes tools from
   Nix, so the update needs Nix. Review the new digests and download hosts it
@@ -166,8 +166,8 @@ Run the `Release` workflow
 `main`, with `version` set to the new version, for example `2.1.0`, or
 `2.1.0-rc.4` for a release candidate. Leave `nightly-tag` empty to resolve the
 latest compiler, or name an exact nightly to reproduce reviewed compiler
-evidence. The reusable CI job runs the full checks with compatible oracle
-runtimes before release assembly. It passes the validated compiler identity to
+evidence. The reusable CI job runs the native package checks, mocked harness
+tests and Roc-only smoke workloads before release assembly. It passes the validated compiler identity to
 the build, candidate tests and documentation jobs. The pinned roc-automation
 `release-package.yml` workflow validates the version, builds
 the package and tests the unchanged release candidate. It owns SBOM validation,

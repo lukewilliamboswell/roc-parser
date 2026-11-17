@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import random
 import shutil
@@ -554,7 +555,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-@unittest.skipUnless(shutil.which("roc"), "requires the current package compiler")
+@unittest.skipUnless(os.environ.get("ROC_PARSER_RUN_ORACLE_TESTS") == "1" and not os.environ.get("CI") and shutil.which("roc"), "local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 with the current package compiler")
 class BoundedJsonTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

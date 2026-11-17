@@ -18,8 +18,8 @@
 # `roc-stable` compiler; Python remains for independent parser harnesses.
 #
 # Zig 0.17.0 builds the compiler's own parser as the RocSyntax oracle. It is
-# downloaded and checked against Blueprint.lock, so local `check` needs no Nix.
-# Nix supplies CI's Ruby oracle and the benchmark Go, Rust and Python toolchains
+# downloaded and checked against Blueprint.lock for the local oracle task.
+# Nix supplies the local Ruby oracle and benchmark Go, Rust and Python toolchains
 # from the nixpkgs revision Blueprint.lock records. Their
 # libraries are pinned separately, by bench/compare/rust/Cargo.lock,
 # bench/compare/go/go.sum and bench/compare/python/requirements.txt.
@@ -57,7 +57,7 @@ config = [
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
 	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem", "node", "npm", "java"])]),
-	# Activate the locked Ruby before resolving machine tools in CI.
+	# Optional locked Ruby activation for local oracle comparisons.
 	Environment("oracle-ruby", [Tools(["nix#ruby_3_4"])]),
 	# Shared release utilities run without a local build compiler.
 	Environment("release", [Extend("inventory"), Expect(["gh"])]),
@@ -67,8 +67,8 @@ config = [
 	Shell("oracle-ruby", [Use("oracle-ruby")]),
 	Shell("bench", [Use("bench")]),
 	# Everything a pull request must pass; `blueprint run check -- --list`.
-	Task("check", [Use("oracles"), Run(["scripts/check_all.roc", "--"])]),
-	# Parts of check, and the longer runs of the scheduled workflows.
+	Task("check", [Use("package"), Run(["scripts/check_all.roc", "--"])]),
+	# Native checks and explicit local comparison tasks.
 	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
 	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
 	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),

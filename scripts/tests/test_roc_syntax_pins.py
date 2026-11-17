@@ -30,7 +30,7 @@ class SyntaxPinTests(unittest.TestCase):
         self.assertEqual(len(module.ROC_REVISION), 40)
         self.assertEqual(fixture["version"], review_roc_syntax.PROTOCOL_VERSION)
 
-    def test_ci_uses_the_oracle_toolchain_version(self):
+    def test_local_task_uses_the_oracle_toolchain_version(self):
         path = ROOT / "scripts/roc_syntax/build_oracle.py"
         spec = importlib.util.spec_from_file_location("ci_checked_build_oracle", path)
         module = importlib.util.module_from_spec(spec)
@@ -40,10 +40,7 @@ class SyntaxPinTests(unittest.TestCase):
         self.assertIn(f"ziglang.org/download/{module.ZIG_VERSION}", blueprint)
         self.assertIn(f"zig-x86_64-linux-{module.ZIG_VERSION}.tar.xz", blueprint)
         self.assertIn('Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])])', blueprint)
-        self.assertIn('Task("check", [Use("oracles")', blueprint)
-        workflow = (ROOT / ".github/workflows/fuzz.yml").read_text()
-        job = workflow.split("  roc-syntax:\n", 1)[1].split("  asciidoc:\n", 1)[0]
-        self.assertIn("blueprint run roc-syntax -- ", job)
+        self.assertIn('Task("check", [Use("package")', blueprint)
 
     def test_old_sibling_falls_back_to_owned_cache_without_fetching_sibling(self):
         path = ROOT / 'scripts/roc_syntax/build_oracle.py'

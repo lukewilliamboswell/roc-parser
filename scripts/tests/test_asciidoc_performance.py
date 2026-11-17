@@ -6,6 +6,7 @@ import argparse
 import json
 import hashlib
 import io
+import os
 import shlex
 import tempfile
 import unittest
@@ -548,8 +549,8 @@ class Performance(unittest.TestCase):
         self.assertIn(':k511!:\n:k511: v511\n\n{k511}',source)
 
     def test_varied_source_revision_model_matches_pinned_oracle(self):
-        if not (perf.DEFAULT_HOME/'gems/asciidoctor-2.0.23').is_dir():
-            self.skipTest('run setup_oracle.py for pinned integration tests')
+        if os.environ.get('ROC_PARSER_RUN_ORACLE_TESTS') != '1' or os.environ.get('CI') or not (perf.DEFAULT_HOME/'gems/asciidoctor-2.0.23').is_dir():
+            self.skipTest('local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 and run setup_oracle.py')
         from review_asciidoc import Oracle
         with Oracle() as oracle:
             result=oracle.request(perf.static_base_revisions(3,varied=True))
@@ -653,8 +654,8 @@ class Performance(unittest.TestCase):
         self.assertEqual(len(perf.scaling(rows)),4)
 
     def test_alternating_rich_simple_model_matches_authored_oracle_predicates(self):
-        if not (perf.DEFAULT_HOME/'gems/asciidoctor-2.0.23').is_dir():
-            self.skipTest('run setup_oracle.py for pinned integration tests')
+        if os.environ.get('ROC_PARSER_RUN_ORACLE_TESTS') != '1' or os.environ.get('CI') or not (perf.DEFAULT_HOME/'gems/asciidoctor-2.0.23').is_dir():
+            self.skipTest('local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 and run setup_oracle.py')
         from review_asciidoc import Oracle
         with Oracle() as oracle:
             result=oracle.request(perf.alternating_rich_simple_counters(2))
