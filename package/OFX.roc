@@ -1935,9 +1935,9 @@ expect ["", "plain", "\r", "\n", "\r\n", "a\r\nb\rc\nd", "\n\r\n\r"].all(
 		bytes = text.to_utf8()
 		base = move(initial({}), '\r')
 		var $same = True
-		for first in (0.U64).to(bytes.len() + 1) {
+		for first in (0.U64).to(bytes.len()) {
 			start = bytes.take_first(first).fold(base, move)
-			for last in first.to(bytes.len() + 1) {
+			for last in first.to(bytes.len()) {
 				bulk = move_span(start, bytes, first, last)
 				individual = bytes.sublist({ start: first, len: last - first }).fold(start, move)
 				$same = $same and { offset: bulk.offset, line: bulk.line, column: bulk.column, last_cr: bulk.last_cr } == { offset: individual.offset, line: individual.line, column: individual.column, last_cr: individual.last_cr }
