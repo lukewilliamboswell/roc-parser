@@ -1393,7 +1393,7 @@ validate_transaction_fields = |value, checked_xml| {
 	if !checked_xml and (!valid_text(value.type) or !valid_text(value.posted) or !valid_text(value.amount) or !valid_text(value.id) or !valid_text(value.name) or !valid_text(value.memo) or !valid_text(value.check_number)) {
 		return Err("invalid XML scalar in transaction")
 	}
-	if !["CREDIT", "DEBIT", "INT", "DIV", "FEE", "SRVCHG", "DEP", "ATM", "POS", "XFER", "CHECK", "PAYMENT", "CASH", "DIRECTDEP", "DIRECTDEBIT", "REPEATPMT", "HOLD", "OTHER"].contains(value.type) {
+	if !transaction_type(value.type) {
 		return Err("invalid OFX transaction type")
 	}
 	if !timestamp(value.posted) {
@@ -1408,6 +1408,12 @@ validate_transaction_fields = |value, checked_xml| {
 	Ok({})
 }
 
+transaction_type : Str -> Bool
+transaction_type = |value| match value {
+	"CREDIT" | "DEBIT" | "INT" | "DIV" | "FEE" | "SRVCHG" | "DEP" | "ATM" | "POS" | "XFER" | "CHECK" | "PAYMENT" | "CASH" | "DIRECTDEP" | "DIRECTDEBIT" | "REPEATPMT" | "HOLD" | "OTHER" => True
+	_ => False
+}
+
 balance_from : Xml.Node -> Try(OFX.Balance, Str)
 balance_from = |node| {
 	unique(node)?
@@ -1420,8 +1426,10 @@ balance_from = |node| {
 }
 
 digits : Str -> Bool
-digits = |text| {
-	bytes = text.to_utf8()
+digits = |text| digit_bytes(text.to_utf8())
+
+digit_bytes : List(U8) -> Bool
+digit_bytes = |bytes| {
 	if bytes.is_empty() {
 		return False
 	}
@@ -1462,6 +1470,20 @@ decimal = |text| {
 
 timestamp : Str -> Bool
 timestamp = |text| {
+	len = text.count_utf8_bytes()
+	if len == 8 or len == 10 or len == 12 or len == 14 {
+		bytes = text.to_utf8()
+		if digit_bytes(bytes) {
+			return timestamp_calendar(bytes)
+		}
+	}
+	timestamp_general(text)
+}
+
+# Fractional seconds and timezone spellings retain the general grammar. Both
+# paths share the same calendar and clock validation after checking digits.
+timestamp_general : Str -> Bool
+timestamp_general = |text| {
 	parts = text.split_on("[")
 	if parts.len() > 2 {
 		return False
@@ -1475,25 +1497,7 @@ timestamp = |text| {
 	if base.len() == 2 and (len != 14 or !digits(base.last() ?? "")) {
 		return False
 	}
-	bytes = date.to_utf8()
-	num = |at, count| {
-		var $value = 0.U64
-		var $pos = at
-		while $pos < at + count {
-			$value = $value * 10 + ((bytes.get($pos) ?? '0') - '0').to_u64()
-			$pos = $pos + 1
-		}
-		$value
-	}
-	year = num(0, 4)
-	month = num(4, 2)
-	day = num(6, 2)
-	if year == 0 or month == 0 or month > 12 {
-		return False
-	}
-	leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
-	maxday = [31, if (leap) 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].get(month - 1) ?? 0
-	if day == 0 or day > maxday or (len >= 10 and num(8, 2) > 23) or (len >= 12 and num(10, 2) > 59) or (len >= 14 and num(12, 2) > 60) {
+	if !timestamp_calendar(date.to_utf8()) {
 		return False
 	}
 	if parts.len() == 2 {
@@ -1515,6 +1519,35 @@ timestamp = |text| {
 		}
 	}
 	True
+}
+
+# `bytes` contains exactly 8, 10, 12 or 14 ASCII digits, established by either
+# caller. Avoid building a month-length list for each transaction timestamp.
+timestamp_calendar : List(U8) -> Bool
+timestamp_calendar = |bytes| {
+	len = bytes.len()
+	num = |at, count| {
+		var $value = 0.U64
+		var $pos = at
+		while $pos < at + count {
+			$value = $value * 10 + ((bytes.get($pos) ?? '0') - '0').to_u64()
+			$pos = $pos + 1
+		}
+		$value
+	}
+	year = num(0, 4)
+	month = num(4, 2)
+	day = num(6, 2)
+	if year == 0 or month == 0 or month > 12 {
+		return False
+	}
+	leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+	maxday = match month {
+		2 => if (leap) 29 else 28
+		4 | 6 | 9 | 11 => 30
+		_ => 31
+	}
+	!(day == 0 or day > maxday or (len >= 10 and num(8, 2) > 23) or (len >= 12 and num(10, 2) > 59) or (len >= 14 and num(12, 2) > 60))
 }
 
 escape : Str -> Str
@@ -2075,3 +2108,11 @@ expect {
 	document = OFX.parse_str(source)?
 	document.statements.first()?.transactions.first()?.memo == "abcd" and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
 }
+
+expect ["00010101", "19000228", "20000229", "20240229", "24000229", "20260101", "2026010123", "202601012359", "20260101235960", "20260228235959", "99991231235960"].all(|value| timestamp(value) and timestamp_general(value))
+
+expect ["", "2026010", "202601010", "20260101000", "2026010100000", "202601010000000", "00000101", "19000229", "20230229", "20260431", "20260001", "20261301", "20260100", "20260132", "2026010124", "202601012360", "20260101235961", "2026é01", "２０２６０１０１", "202601 1", "2026\u(0)101"].all(|value| !timestamp(value) and !timestamp_general(value))
+
+expect ["20260101[+1]", "20260101[-12:WEST]", "20260101[14:]", "20260101235960.001[-5:EST]", "20260101000000.5[5.5:IST]", "20260101[15]", "20260101[-13]", "20260101[5.]"].all(|value| timestamp(value) == timestamp_general(value)) and timestamp("20260101[+1]") and timestamp("20260101235960.001[-5:EST]") and !timestamp("20260101[15]") and !timestamp("20260101[-13]")
+
+expect ["DEBIT", "DIRECTDEBIT", "OTHER"].all(transaction_type) and ["", "credit", "DEBIT ", "INVALID"].all(|value| !transaction_type(value))
