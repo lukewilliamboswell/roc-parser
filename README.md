@@ -13,28 +13,34 @@ compilation, with configurable validation checks.
 
 | Format | Specification | Manual | Throughput |
 | --- | --- | --- | ---: |
-| CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) | 51 MB/s |
-| QIF | Quicken bank/cash/card records | [Reading QIF](docs/qif.adoc) | 23 MB/s |
-| OFX | Banking/card statements in SGML and XML | [Reading OFX](docs/ofx.adoc) | 4.4 MB/s |
-| YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) | 56 MB/s |
-| XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) | 150 MB/s |
-| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) | 60 MB/s |
-| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) | 74 MB/s |
-| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) | 34 MB/s |
-| JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) | 96 MB/s |
-| Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) | 51 MB/s |
-| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) | 9.3 MB/s |
-| HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) | 350 MB/s |
-| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) | 230 MB/s |
+| CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) | 51 MB/s vs encoding/csv (Go) 420 MB/s |
+| QIF | Quicken bank/cash/card records | [Reading QIF](docs/qif.adoc) | 23 MB/s vs qif_parser (Rust)† 190 MB/s |
+| OFX | Banking/card statements in SGML and XML | [Reading OFX](docs/ofx.adoc) | 4.4 MB/s vs ofx-rs (Rust) 120 MB/s |
+| YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) | 54 MB/s vs yaml-rust2 (Rust) 59 MB/s |
+| XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) | 150 MB/s vs roxmltree (Rust)† 300 MB/s |
+| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) | 60 MB/s vs x/net/html (Go)‡ 75 MB/s |
+| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) | 46 MB/s vs roxmltree (Rust)†‡ 450 MB/s |
+| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) | 22 MB/s vs roxmltree (Rust)†‡ 210 MB/s |
+| JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) | 94 MB/s vs serde_json (Rust) 180 MB/s |
+| Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) | 51 MB/s vs pulldown-cmark (Rust) 200 MB/s |
+| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) | 9 MB/s vs Asciidoctor (Ruby) 2 MB/s |
+| HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) | 350 MB/s vs httparse (Rust) 1700 MB/s |
+| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) | 230 MB/s vs Roc compiler parser (Zig) 270 MB/s |
 | Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) | Varies |
 
-Measured on an AMD Ryzen 7 9700X under Linux using one pinned logical core,
-Roc `nightly-2026-11-15-f25da45` and `--opt=speed --debug`. Values are the
-median of seven ~200-ms batches of in-memory parsing and result construction,
-excluding I/O, on representative ~64 KiB documents (HTTP: a 555-byte request
-head). MB/s uses 1,000,000 bytes per MB. See the [method and reproduction
-command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table) and
-[measurement receipts](bench/throughput.json).
+Each cell shows Roc versus the fastest measured reference parser. Measured
+on an AMD Ryzen 7 9700X under Linux using one pinned logical core. Roc apps
+were built with `nightly-2026-11-15-f25da45` and `--opt=speed --debug`. Figures are
+medians of seven calibrated batches targeting 200 ms, including parsing,
+result construction and checksum traversal, excluding I/O. Inputs are
+representative ~64 KiB documents (HTTP: a 555-byte request head).
+MB/s uses 1,000,000 bytes per MB.
+
+Reference libraries construct different result models. † Borrows input;
+`qif_parser` also uses floating-point amounts. ‡ Builds a DOM; Roc also
+retains source information and validates vocabulary and values. See the
+[method and reproduction command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table)
+and [library versions and measurement receipts](bench/throughput.json).
 
 CSV, QIF and OFX support [chunked reading and writing](docs/streaming.adoc)
 through Roc’s builtin `Iter` and `Stream`. The other format parsers require

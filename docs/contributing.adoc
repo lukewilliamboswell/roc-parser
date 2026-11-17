@@ -41,6 +41,7 @@ Install:
   `PATH` as `roc`;
 * Python 3.10–3.13, for the independent parser test and reference harnesses
   (the pinned Quiffen oracle requires Python below 3.14; CI uses 3.13);
+* Ruby 3.4 or newer and RubyGems for the AsciiDoc oracle (CI uses 3.4.11);
 * the `blueprint` binary of
   https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.13.0[roc-blueprint 0.13.0],
   which runs the same named tasks as CI;
