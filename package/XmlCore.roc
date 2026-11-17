@@ -60,12 +60,12 @@ XmlCore := {
 
 	## Parse complete XML, rejecting enabled lints after native parse errors.
 	## Input is already UTF-8, so a different declared encoding is suspicious.
-	validate : ValidationProps -> Try(XmlCore, [BadQuotedBytes(Str)])
+	validate : ValidationProps -> Try(XmlCore, [InvalidXml(Error)])
 	validate = |props| {
-		xml = XmlCore.parse_str(props.source).map_err(|InvalidXml(error)| Parser.Quotation.error({ name: props.name, format: "XML", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))?
+		xml = XmlCore.parse_str(props.source).map_err(|InvalidXml(error)| InvalidXml({ ..error, path: error.path.append(Source(props.name)) }))?
 		if props.lints.non_utf8_declaration {
 			match xml.declaration {
-				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(Parser.Quotation.error({ name: props.name, format: "XML", line: 1, message: "non_utf8_declaration: input is UTF-8 but declares ${encoding}" }))
+				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(InvalidXml(Diagnostic.{ problem: NonUtf8Encoding(encoding), location: Text({ offset: 0, line: 1, column: 1 }), path: [Source(props.name)] }))
 				_ => {}
 			}
 		}
@@ -74,7 +74,12 @@ XmlCore := {
 
 	## Use a well-formed, lint-checked XML document as a quoted value.
 	from_quote : Str -> Try(XmlCore, [BadQuotedBytes(Str)])
-	from_quote = |source| XmlCore.validate({ source: source })
+	from_quote = |source| XmlCore.validate({ source: source }).map_err(
+		|InvalidXml(error)| {
+			at = Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }
+			Parser.Quotation.error({ format: "XML", message: Str.inspect(error.problem), line: at.line, column: at.column })
+		},
+	)
 
 	## An XML attribute name and decoded value.
 	##
@@ -119,7 +124,7 @@ XmlCore := {
 
 	Construct : [Document, ByteOrderMark, Text, Tag, Comment, Instruction, CData, Reference]
 
-	Error : Diagnostic(Parser.Problem(XmlCore.Problem))
+	Error : Diagnostic(XmlCore.Problem)
 
 	## Parse one complete XML document.
 	##
@@ -189,18 +194,21 @@ XmlCore := {
 	## expect (XmlCore.parser).parse_str("<a/> <b/>") == Err(ParseError({ problem: UnexpectedInput, offset: 5 }))
 	## ```
 	parser : Parser(Parser.Utf8.Bytes, XmlCore, Problem)
-	parser =
-		Parser.custom(
-			|input| {
-				# Validate once, so names and text can be cut from the string
-				# without validating each one again.
-				match read_document(Str.from_utf8(input) ?? "", input, unbounded(input)) {
-					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
-					Err(XmlFail(failure)) => Err(ParseError(Diagnostic.{ problem: failure.problem, location: InputOffset(failure.offset), path: [] }))
-					Err(LimitFail(exceeded)) => Err(ParseError(Diagnostic.{ problem: LimitExceeded({ resource: exceeded.limit, max: exceeded.max, observed: AtLeast(exceeded.max + 1) }), location: InputOffset(exceeded.offset), path: [] }))
+	parser = Parser.custom(
+		|input| {
+			decoded = xml_input_prefix(input)
+			match read_document(decoded.source, decoded.bytes, unbounded(decoded.bytes)) {
+				Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
+				Err(XmlFail(failure)) => {
+					match decoded.encoding {
+						InvalidAt(index) if failure.offset >= decoded.bytes.len() => Err(ParseError(Diagnostic.{ problem: InvalidUtf8, location: InputOffset(index), path: [] }))
+						_ => Err(ParseError(Diagnostic.{ problem: failure.problem, location: InputOffset(failure.offset), path: [] }))
+					}
 				}
-			},
-		)
+				Err(LimitFail(exceeded)) => Err(ParseError(Diagnostic.{ problem: LimitExceeded({ resource: exceeded.limit, max: exceeded.max, observed: AtLeast(exceeded.max + 1) }), location: InputOffset(exceeded.offset), path: [] }))
+			}
+		},
+	)
 
 	## Limits for untrusted input, checked while reading.
 	##
@@ -543,7 +551,31 @@ XmlCore := {
 
 }
 
-Failure : { offset : U64, problem : Parser.Problem(XmlCore.Problem) }
+# A prefix runner must not decode or replace an unconsumed invalid byte suffix.
+xml_input_prefix : List(U8) -> { source : Str, bytes : List(U8), encoding : [Complete, InvalidAt(U64)] }
+xml_input_prefix = |input| match Str.from_utf8(input) {
+	Ok(source) => { source, bytes: input, encoding: Complete }
+	Err(BadUtf8(problem)) => {
+		var $prefix = input.take_first(problem.index)
+		while True {
+			match Str.from_utf8($prefix) {
+				Ok(source) => return { source, bytes: $prefix, encoding: InvalidAt(problem.index) }
+				Err(BadUtf8(previous)) => {
+					if previous.index < $prefix.len() {
+						$prefix = $prefix.take_first(previous.index)
+					} else {
+						if $prefix.is_empty() {
+							crash "Xml.xml_input_prefix: empty bytes must be valid UTF-8"
+						}
+						$prefix = $prefix.drop_last(1)
+					}
+				}
+			}
+		}
+	}
+}
+
+Failure : { offset : U64, problem : XmlCore.Problem }
 
 ReadFailure : [XmlFail(Failure), LimitFail({ limit : XmlCore.Limit, max : U64, offset : U64 })]
 
@@ -584,7 +616,7 @@ Open : {
 ## processing instructions and whitespace that follow it.
 Step : [Ev(XmlCore.Event, Cursor), Finished(U64)]
 
-fail : U64, Parser.Problem(XmlCore.Problem) -> Try(_, ReadFailure)
+fail : U64, XmlCore.Problem -> Try(_, ReadFailure)
 fail = |offset, problem| Err(XmlFail({ offset, problem }))
 
 read_error : List(U8), ReadFailure -> XmlCore.ReadError
@@ -607,7 +639,7 @@ unbounded = |bytes| { depth: bytes.len(), elements: bytes.len(), attributes: byt
 no_start : U64
 no_start = 18_446_744_073_709_551_615
 
-locate : List(U8), U64, Parser.Problem(XmlCore.Problem) -> XmlCore.Error
+locate : List(U8), U64, XmlCore.Problem -> XmlCore.Error
 locate = |bytes, offset, problem| {
 	at = position(bytes, offset)
 	Diagnostic.{ problem: problem, location: Text({ offset, line: at.line, column: at.column }), path: [] }
@@ -2147,12 +2179,12 @@ expect {
 	xml.root.text() == "quoted"
 }
 expect match XmlCore.validate({ source: "<?xml version='1.0' encoding='latin1'?><a/>", name: "feed.xml" }) {
-	Err(BadQuotedBytes(message)) => message.contains("feed.xml:1: XML: non_utf8_declaration")
+	Err(InvalidXml(error)) => error.problem == NonUtf8Encoding("latin1") and error.path == [Source("feed.xml")]
 	Ok(_) => False
 }
 expect XmlCore.validate({ source: "<?xml version='1.0' encoding='latin1'?><a/>", lints: { non_utf8_declaration: False } }).is_ok()
 expect match XmlCore.validate({ source: "<?xml version='1.0' encoding='latin1'?><a></b>" }) {
-	Err(BadQuotedBytes(message)) => !message.contains("non_utf8_declaration") and message.contains("XML")
+	Err(InvalidXml(error)) => error.problem == EndTagMismatch({ actual: "b", expected: "a" })
 	Ok(_) => False
 }
 
@@ -2737,10 +2769,10 @@ chunk_advance = |state, byte| {
 	}
 }
 
-chunk_error : ChunkAt, Parser.Problem(XmlCore.Problem) -> XmlCore.StreamError
+chunk_error : ChunkAt, XmlCore.Problem -> XmlCore.StreamError
 chunk_error = |at, problem| Diagnostic.{ problem: problem, location: Text({ offset: at.offset, line: at.line, column: at.column }), path: [] }
 
-chunk_fail : ChunkState, U64, ChunkAt, Parser.Problem(XmlCore.Problem) -> Streaming.Step(ChunkState, XmlCore.Event, XmlCore.StreamError)
+chunk_fail : ChunkState, U64, ChunkAt, XmlCore.Problem -> Streaming.Step(ChunkState, XmlCore.Event, XmlCore.StreamError)
 chunk_fail = |state, consumed, at, problem| { state: { ..state, done: True }, consumed, outcome: Failed(chunk_error(at, problem)) }
 
 chunk_locate : ChunkAt, List(U8), ReadFailure -> XmlCore.StreamError
@@ -3648,7 +3680,7 @@ chunk_direct_text = |bytes, start, maximum, reference_limit| {
 	Err(Fallback)
 }
 
-unfinished_problem : ChunkState -> Parser.Problem(XmlCore.Problem)
+unfinished_problem : ChunkState -> XmlCore.Problem
 unfinished_problem = |state| {
 	construct = match state.mode {
 		Initial => Document
@@ -3693,4 +3725,17 @@ expect {
 			Ok(InvalidXml({ problem: EndTagMismatch({ actual: "bad", expected: "r" }), location: Text({ offset: 11, .. }), .. })) => True
 			_ => False
 		}
+}
+
+## Prefix parsing leaves an invalid UTF-8 suffix untouched.
+expect {
+	input = "<root>name</root>".to_utf8().concat([0xFF])
+	parsed = XmlCore.parser.run(input)?
+	parsed.value.root.text() == "name" and parsed.rest == [0xFF]
+}
+
+## Invalid UTF-8 needed by the XML document produces a typed source failure.
+expect match XmlCore.parser.run("<r>".to_utf8().concat([0xFF]).concat("</r>".to_utf8())) {
+	Err(ParseError(error)) => error.problem == InvalidUtf8 and error.location == InputOffset(3)
+	_ => False
 }
