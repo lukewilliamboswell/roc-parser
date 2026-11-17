@@ -1,3 +1,4 @@
+import MarkupValidation
 import Parser
 import Diagnostic
 import DomConstruction
@@ -67,36 +68,11 @@ Html := { parsed : MarkupCore.Parsed }.{
 		Ok(Fragment.{ parsed: project_authored(checked, props, True, domain)? })
 	}
 
-	## Syntax-only parsing with all HTML options, including the scripting flag
-	## and fragment context. No scripts are executed by this pure parser.
-	parse_source : Str, Props, Bool -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	parse_source = syntax
-
-	## Syntax-only entrypoint used by mixed-format frontends and independent
-	## tree-construction oracles. This does not perform vocabulary/value checks.
-	parse_syntax : Str, MarkupCore.Props, Bool, MarkupCore.Name -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	parse_syntax = |text, props, fragment, context| {
-		if props.syntax == XmlSyntax {
-			if fragment {
-				MarkupCore.parse_xml_fragment(text, namespace_uri(context), props)
-			} else {
-				MarkupCore.parse_xml(text, props)
-			}
-		} else {
-			HtmlTree.parse(text, fragment, { name: context.local, namespace: namespace_uri(context) }, props)
-		}
-	}
-
-	## Validate mixed markup, skipping the future values of typed attribute holes.
-	validate_tree : MarkupCore.Parsed, MarkupCore.Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	validate_tree = |parsed, props, holes| {
-		foreign = MarkupValidate.foreign_with_html(parsed, props, holes)?
-		if foreign.has_html {
-			HtmlValidate.validate(foreign.parsed, props, holes)
-		} else {
-			Ok(foreign.parsed)
-		}
-	}
+	## Syntax-only parsing retains browser tree construction and diagnostics.
+	## Use Fragment mode for the configured enclosing element; Document is default.
+	SourceProps := { mode : [Document, Fragment] ?? Document, options : Props ?? {} }
+	parse_source : Str, SourceProps -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
+	parse_source = |source, props| syntax(source, props.options, props.mode == Fragment)
 
 	## Validate a complete document for a checked constant or imported file.
 	validate : ValidationProps -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
@@ -120,10 +96,6 @@ Html := { parsed : MarkupCore.Parsed }.{
 }
 
 HtmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
-
-	## Bind an explicit iterator to an existing plan without reparsing.
-	bind : MarkupTemplate.Plan, Iter(a) -> Try(Html.Template(a), [InvalidMarkup(MarkupCore.Error)])
-	bind = |plan, values| MarkupTemplate.bind_values(plan, values).map_ok(|bound| Html.Template.{ bound })
 
 	## Parse a static fragment as a template with no holes.
 	from_quote : Str -> Try(Html.Template(a), [BadQuotedBytes(Str)])
@@ -153,17 +125,16 @@ HtmlFragment := { parsed : MarkupCore.Parsed }.{
 	}
 }
 
-namespace_uri = |name| match name.namespace {
-	Uri(uri) => uri
-	NoNamespace => ""
-}
-
 syntax = |text, props, fragment| {
 	if props.syntax == HtmlSyntax {
 		HtmlTree.parse(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props))
 	}
 	else {
-		Html.parse_syntax(text, shared(props), fragment, { local: props.context_element, namespace: Uri(props.context_namespace), prefix: Unprefixed })
+		if fragment {
+			MarkupCore.parse_xml_fragment(text, props.context_namespace, shared(props))
+		} else {
+			MarkupCore.parse_xml(text, shared(props))
+		}
 	}
 }
 
@@ -310,7 +281,7 @@ authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
 validate_authored = |parsed, props, domain| if domain == PureHtmlNoProjection {
 	HtmlValidate.validate(parsed, props, [])
 } else {
-	Html.validate_tree(parsed, props, [])
+	MarkupValidation.check(parsed, props, [])
 }
 
 project_authored = |parsed, props, fragment, domain| if domain == PureHtmlNoProjection {
@@ -377,7 +348,7 @@ expect {
 				Ok(foreign) => HtmlValidate.validate(foreign, props, [])
 				Err(error) => Err(error)
 			}
-			$same = $same and Html.validate_tree(parsed, props, []) == legacy
+			$same = $same and MarkupValidation.check(parsed, props, []) == legacy
 		}
 	}
 	$same
@@ -409,13 +380,13 @@ expect {
 	p.domain == General
 }
 expect {
-	p = Html.parse_source("<p>x</p>", {}, True)?
+	p = Html.parse_source("<p>x</p>", { mode: Fragment })?
 	id = p.tree.roots.first()?
 	node = p.tree.nodes.get(id)?
 	match node.kind {
 		Element(name) => {
 			forged = { ..p, tree: { ..p.tree, nodes: p.tree.nodes.set(id, { ..node, kind: Element({ ..name, namespace: Uri("urn:untrusted") }) })? } }
-			Html.validate_tree(forged, {}, []).is_err()
+			MarkupValidation.check(forged, {}, []).is_err()
 		}
 		_ => False
 	}
@@ -447,7 +418,7 @@ expect Html.parse_fragment("<svg xmlns='http://www.w3.org/2000/svg' viewbox='0 0
 expect Html.parse_segments(["<svg viewbox='", "'></svg>"], { strict_foreign_spelling: True }).is_err()
 expect {
 	plan = Html.parse_segments(["<svg viewBox='", "'></svg>"], { strict_foreign_spelling: True })?
-	_ = Html.Template.bind(plan, ["0 0 1 1"].iter())?
+	_ = plan.bind(["0 0 1 1"].iter())?
 	True
 }
 expect match Html.parse_fragment("<svg viewbox='x' viewbox='y'></svg>", { strict_foreign_spelling: True, max_diagnostics: 0 }) {

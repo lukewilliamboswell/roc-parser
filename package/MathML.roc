@@ -1,9 +1,9 @@
+import MarkupValidation
 import Parser
 import Diagnostic
 import MarkupCore
 import MarkupValidate
 import MarkupTemplate
-import Html
 import HtmlTemplate
 import HtmlTree
 import HtmlValidate
@@ -36,7 +36,7 @@ MathML := { parsed : MarkupCore.Parsed }.{
 			Element(name) => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Element(name) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			_ => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Text }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
-		validated = validate_tree(parsed, props, [])?
+		validated = MarkupValidation.check(parsed, props, [])?
 		Ok(MathML.{ parsed: project_checked(validated, props)? })
 	}
 
@@ -44,13 +44,9 @@ MathML := { parsed : MarkupCore.Parsed }.{
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
 	parse_fragment = |source, props| {
 		parsed = fragment_syntax(source, props)?
-		validated = validate_tree(parsed, props, [])?
+		validated = MarkupValidation.check(parsed, props, [])?
 		Ok(Fragment.{ parsed: project_checked(validated, props)? })
 	}
-
-	## Validate fixed markup, skipping unavailable whole attribute holes.
-	validate_tree : MarkupCore.Parsed, Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
@@ -77,7 +73,7 @@ MathML := { parsed : MarkupCore.Parsed }.{
 				_ => {}
 			}
 		}
-		parsed = validate_tree(plan.metadata().parsed, props, $holes)?
+		parsed = MarkupValidation.check(plan.metadata().parsed, props, $holes)?
 		slots = plan.metadata().slots.map(
 			|slot| {
 				match slot.target {
@@ -118,9 +114,6 @@ MathmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 		Ok(MathML.Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
 	}
 
-	## Fallibly bind an explicitly parsed plan, checking the binding count.
-	bind : MarkupTemplate.Plan, Iter(a) -> Try(MathML.Template(a), [InvalidMarkup(MarkupCore.Error)])
-	bind = |plan, values| MarkupTemplate.bind_values(plan, values).map_ok(|bound| MathML.Template.{ bound })
 }
 
 MathmlFragment := { parsed : MarkupCore.Parsed }.{

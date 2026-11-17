@@ -1,10 +1,10 @@
+import MarkupValidation
 import Parser
 import Diagnostic
 import SvgPath
 import MarkupCore
 import MarkupValidate
 import MarkupTemplate
-import Html
 import HtmlTemplate
 import HtmlTree
 import HtmlValidate
@@ -39,7 +39,7 @@ Svg := { parsed : MarkupCore.Parsed }.{
 			Element(name) => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Element(name) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			_ => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Text }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
-		validated = validate_tree(parsed, props, [])?
+		validated = MarkupValidation.check(parsed, props, [])?
 		Ok(Svg.{ parsed: project_checked(validated, props)? })
 	}
 
@@ -47,13 +47,9 @@ Svg := { parsed : MarkupCore.Parsed }.{
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
 	parse_fragment = |source, props| {
 		parsed = fragment_syntax(source, props)?
-		validated = validate_tree(parsed, props, [])?
+		validated = MarkupValidation.check(parsed, props, [])?
 		Ok(Fragment.{ parsed: project_checked(validated, props)? })
 	}
-
-	## Validate fixed markup, skipping unavailable whole attribute holes.
-	validate_tree : MarkupCore.Parsed, Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
@@ -80,7 +76,7 @@ Svg := { parsed : MarkupCore.Parsed }.{
 				_ => {}
 			}
 		}
-		parsed = validate_tree(plan.metadata().parsed, props, $holes)?
+		parsed = MarkupValidation.check(plan.metadata().parsed, props, $holes)?
 		slots = plan.metadata().slots.map(
 			|slot| {
 				match slot.target {
@@ -121,9 +117,6 @@ SvgTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 		Ok(Svg.Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
 	}
 
-	## Fallibly bind an explicitly parsed plan, checking the binding count.
-	bind : MarkupTemplate.Plan, Iter(a) -> Try(Svg.Template(a), [InvalidMarkup(MarkupCore.Error)])
-	bind = |plan, values| MarkupTemplate.bind_values(plan, values).map_ok(|bound| Svg.Template.{ bound })
 }
 
 SvgFragment := { parsed : MarkupCore.Parsed }.{

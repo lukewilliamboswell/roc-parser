@@ -1,3 +1,4 @@
+import MarkupValidation
 import InitialNewline
 import ExpandedName
 import MarkupCore
@@ -43,6 +44,12 @@ Markup :: [].{
 	Node : MarkupCore.Node
 	Tree : MarkupCore.Tree
 	Parsed : MarkupCore.Parsed
+
+	## Validate all names, attribute values and child models in a supplied tree.
+	## Unavailable template values can only be skipped by internal slot parsing.
+	validate_tree : Parsed, Props -> Try(Parsed, [InvalidMarkup(Error)])
+	validate_tree = |parsed, props| MarkupValidation.check(parsed, props, [])
+
 	parse_xml : _
 	parse_xml = MarkupCore.parse_xml
 	parse_xml_fragment : _
@@ -61,4 +68,16 @@ Markup :: [].{
 	element_names = MarkupFacts.element_names
 	aria_attribute_names : List(Str)
 	aria_attribute_names = MarkupFacts.aria_attribute_names
+}
+
+## Public validation checks every concrete attribute value.
+expect {
+	parsed = Markup.parse_xml_fragment("<path d='L0 0'/>", Markup.svg_namespace, {})?
+	match Markup.validate_tree(parsed, {}) {
+		Err(InvalidMarkup(error)) => match error.problem {
+			InvalidValue(_) => True
+			_ => False
+		}
+		Ok(_) => False
+	}
 }
