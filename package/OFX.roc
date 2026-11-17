@@ -1045,7 +1045,9 @@ whole_action = |input, action| {
 				AvailableBalance(value) => Ok({ reader, nodes, marks, current: { info: Box.box({ ..Box.unbox(current.info), available_balance: Ok(value) }), transactions: current.transactions }, statements })
 				StatementEnd => {
 					{ info, transactions } = current
-					Ok({ reader, nodes, marks, current: current_statement(empty_context), statements: statements.append({ ..Box.unbox(info), transactions }) })
+					metadata = Box.unbox(info)
+					statement = { context: metadata.context, transactions, ledger_balance: metadata.ledger_balance, available_balance: metadata.available_balance }
+					Ok({ reader, nodes, marks, current: current_statement(empty_context), statements: statements.append(statement) })
 				}
 			}
 		}
