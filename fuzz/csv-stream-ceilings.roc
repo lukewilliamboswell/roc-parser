@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.CSV
+import parser.Streaming
 
 ## Generate chunks inside the measured region and discard every completed
 ## record. Shape 2 retains one early tiny field while later large chunks pass.

@@ -132,4 +132,4 @@ finish_record = |state, at, skip_lf| { ..state, field: [], fields: [], starts: [
 failure : CSVReader.State, U64, CSVReader.Problem -> Streaming.Step(CSVReader.State, List(List(U8)), CSVReader.Error)
 failure = |state, consumed, problem| { state, consumed, outcome: Failed({ record: state.record, field: state.fields.len() + 1, line: state.field_start.line, column: state.field_start.column, problem }) }
 
-expect Streaming.collect(Streaming.iter(["a,\"b".to_utf8(), "\"\"c\"\r".to_utf8(), "\nx,y".to_utf8()].iter(), CSVReader.new({}), CSVReader.step, {})) == Ok([["a".to_utf8(), "b\"c".to_utf8()], ["x".to_utf8(), "y".to_utf8()]])
+expect Streaming.collect(Streaming.read_iter(["a,\"b".to_utf8(), "\"\"c\"\r".to_utf8(), "\nx,y".to_utf8()].iter(), Streaming.decoder(CSVReader.new({}), CSVReader.step))) == Ok([["a".to_utf8(), "b\"c".to_utf8()], ["x".to_utf8(), "y".to_utf8()]])

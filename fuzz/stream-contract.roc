@@ -53,18 +53,18 @@ test = |input| {
 	props = { error_policy: policy, max_errors: (input.get(1) ?? 0).to_u64() % 8 }
 	bytes = input.drop_first(2)
 	want = expected(bytes, props)
-	whole = List.from_iter(Streaming.iter([bytes].iter(), 0, step, props))
+	whole = List.from_iter(Streaming.read_iter([bytes].iter(), Streaming.decoder(0, step).with_errors(props)))
 	if whole != want {
 		crash "whole chunk differs from independent protocol model"
 	}
 	pieces = bytes.map(|byte| [byte])
-	many = List.from_iter(Streaming.iter([[]].concat(pieces).append([]).iter(), 0, step, props))
+	many = List.from_iter(Streaming.read_iter([[]].concat(pieces).append([]).iter(), Streaming.decoder(0, step).with_errors(props)))
 	if many != want {
 		crash "one-byte/empty chunks changed protocol outcomes"
 	}
 	for split in (0.U64).to(bytes.len() + 1) {
 		parts = [bytes.take_first(split), [], bytes.drop_first(split)]
-		if List.from_iter(Streaming.iter(parts.iter(), 0, step, props)) != want {
+		if List.from_iter(Streaming.read_iter(parts.iter(), Streaming.decoder(0, step).with_errors(props))) != want {
 			crash "split changed protocol outcomes"
 		}
 	}
@@ -76,7 +76,7 @@ test! = |bytes| {
 	source : Stream(Try(List(U8), [Injected]))
 	source = [Ok(bytes), Err(Injected), Ok([1.U8])].iter().stream()
 	var $actual = []
-	for! item in Streaming.stream(source, 0, step, {}) {
+	for! item in Streaming.read_stream(source, Streaming.decoder(0, step)) {
 		$actual = $actual.append(item)
 	}
 	prefix = expected(bytes, {})
