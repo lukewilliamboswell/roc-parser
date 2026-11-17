@@ -933,8 +933,8 @@ whole_start = |input, name, empty, span| {
 	if !whole_record_fits(next, span.end) {
 		return Err(UseStreaming)
 	}
-	marks = if (next.capture_tag.is_empty()) marks else marks.append(nodes.len())
-	whole = whole_action({ reader: next, nodes, marks, current, statements }, outcome)?
+	next_marks = if (next.capture_tag.is_empty()) marks else marks.append(nodes.len())
+	whole = whole_action({ reader: next, nodes, marks: next_marks, current, statements }, outcome)?
 	if empty {
 		whole_close(whole)
 	} else {
