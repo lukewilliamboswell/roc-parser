@@ -169,10 +169,12 @@ CSV := { records : List(CSV.Record) }.{
 		var $values = []
 		var $pos = 0.U64
 		var $index = 0.U64
+		var $field_capacity = 0.U64
 		while $pos < bytes.len() {
-			match scan_record(bytes, $pos) {
+			match scan_record_sized(bytes, $pos, $field_capacity) {
 				Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
 				Ok({ fields, next }) => {
+					$field_capacity = smaller(fields.len(), 64)
 					match record_parser.run(fields) {
 						Ok({ value, rest }) if rest.is_empty() => {
 							$values = $values.append(value)
@@ -779,10 +781,12 @@ decode_table = |text, parse_row, mode| {
 	var $index = 0.U64
 	var $pos = 0.U64
 	var $values = []
+	var $field_capacity = 0.U64
 	while $pos < bytes.len() {
-		match scan_record(bytes, $pos) {
+		match scan_record_sized(bytes, $pos, $field_capacity) {
 			Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
 			Ok({ fields: row, next }) => {
+				$field_capacity = smaller(row.len(), 64)
 				if $index == 0 and mode != Headerless {
 					$header = row.map(|field| if (mode == HeaderNormalized) normalize_name(field) else Str.from_utf8_lossy(field))
 				} else if row != [[]] {
@@ -1096,12 +1100,14 @@ scan_table = |bytes| {
 	len = bytes.len()
 	var $records = []
 	var $pos = 0
+	var $field_capacity = 0.U64
 	while $pos < len {
-		match scan_record(bytes, $pos) {
+		match scan_record_sized(bytes, $pos, $field_capacity) {
 			Err({ field, at, problem }) => {
 				return Err({ record: $records.len(), field, at, problem })
 			}
 			Ok({ fields, next }) => {
+				$field_capacity = smaller(fields.len(), 64)
 				$records = $records.append(fields)
 				$pos = after_break(bytes, next)
 			}
@@ -1114,9 +1120,15 @@ scan_table = |bytes| {
 ## the end of input). Fails with the index, offset and problem of a malformed
 ## quoted field.
 scan_record : List(U8), U64 -> Try({ fields : CSV.Record, next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
-scan_record = |bytes, start| {
+scan_record = |bytes, start| scan_record_sized(bytes, start, 0)
+
+# The previous row's width avoids repeated growth for regular tables. The
+# callers cap the hint so an unusually wide row does not force a large
+# allocation for the following row. Width remains unconstrained.
+scan_record_sized : List(U8), U64, U64 -> Try({ fields : CSV.Record, next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
+scan_record_sized = |bytes, start, field_capacity| {
 	len = bytes.len()
-	var $fields = []
+	var $fields = List.with_capacity(field_capacity)
 	var $pos = start
 	while True {
 		scanned =
@@ -1392,6 +1404,13 @@ user : Parser(CSV.Record, { name : Str, age : U64 })
 user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
 
 expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+
+# Row widths can grow or shrink between records, including empty fields.
+expect {
+	text = "a,b,c,d\nx\n,,\n\"a,b\",c\n"
+	expected = [["a", "b", "c", "d"], ["x"], ["", "", ""], ["a,b", "c"]]
+	records(text) == Ok(expected) and CSV.parse_with(Parser.many(CSV.field(CSV.string)), text) == Ok(expected)
+}
 
 # A field that does not decode names its record, field and position.
 expect error_of(CSV.parse_with(user, "Ada,36\nAlan,forty\n")) == Ok({ record: 2, field: 2, line: 2, column: 6, message: "expected a U64, found `forty`" })
