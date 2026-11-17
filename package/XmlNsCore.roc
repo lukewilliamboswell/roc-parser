@@ -1895,7 +1895,8 @@ expect {
 }
 expect problem_of("<a:·x xmlns:a='urn:a'/>") == Ok(NotAQName("a:·x"))
 
-NamespaceChunkState :: { inner : XmlCore.Decoder, scope : Scope, done : Bool }.{
+## Transparent private state lets ownership move through the opaque shared decoder.
+NamespaceChunkState := { inner : XmlCore.Decoder, scope : Scope, done : Bool }.{
 	metadata : NamespaceChunkState -> XmlCore.Metadata
 	metadata = |state| state.inner.metadata()
 }
