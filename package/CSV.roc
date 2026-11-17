@@ -24,12 +24,12 @@ import CSVReader
 ##
 ## Read a file as typed rows, text fields, or raw bytes:
 ##
-## - [CSV.parse] decodes rows into records whose field names match the header
+## - [CSV.decode_str] decodes rows into records whose field names match the header
 ##   row, with the row type chosen by type inference;
-## - [CSV.parse_with] runs a hand-built record parser (`record`, `field` and
+## - [CSV.rows_parser] runs a hand-built record parser (`record`, `field` and
 ##   `Parser.keep`) over every row, matching columns by position;
 ## - [CSV.parse_string_records] returns every field as a `Str`;
-## - [CSV.parse_records] returns the raw fields.
+## - [CSV.parse_str] returns the raw fields.
 ##
 ## ```roc
 ## Person : { name : Str, age : U64 }
@@ -54,19 +54,16 @@ CSV := { records : List(CSV.Record) }.{
 	Record : List(List(U8))
 
 	## Native CSV failures. Payload bytes are bounded excerpts of source data.
-	Problem(p) : [Syntax(CSVReader.Problem), ExpectedValue({ expected : ValueType, bytes : List(U8) }), MissingField, WidthMismatch({ found : U64, expected : U64 }), EmptyHeader, DuplicateHeader(Str), MissingRequiredField(Str), UnsupportedCell([Record, Tuple, TagPayload]), InvalidValue, UnknownTag(List(U8)), ..p]
+	Problem(p) : [Syntax(CSVReader.Problem), ExpectedValue({ expected : ValueType, source : Diagnostic.Excerpt }), MissingField, WidthMismatch({ found : U64, expected : U64 }), EmptyHeader, DuplicateHeader(Str), MissingRequiredField(Str), EmptyRecord, LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), UnsupportedCell([Record, Tuple, TagPayload]), InvalidValue, UnknownTag(Diagnostic.Excerpt), ..p]
 
 	## The scalar type expected by a cell decoder.
 	ValueType : [Text, Boolean, Empty, U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, Dec, F32, F64]
 
-	## One-based record, field, physical line and byte column; unknown positions are zero.
-	Located(problem) : Diagnostic(problem)
-
 	## A CSV syntax or type-directed decoding failure.
-	Error : Located(Problem([]))
+	Error : Diagnostic(Problem([]))
 
 	## A custom positional parser failure, preserving its own tagged problem.
-	RowError(problem) : Located([ParserFailure(Parser.Problem(problem)), UnreadFields({ found : U64, read : U64 })])
+	RowError(problem) : Diagnostic([ParserFailure(Parser.Problem(problem)), UnreadFields({ found : U64, read : U64 })])
 
 	## Whether the first record is a header, and how its names are matched.
 	## Raw validation keeps every record unchanged in all modes.
@@ -115,7 +112,7 @@ CSV := { records : List(CSV.Record) }.{
 	##
 	## Fields are kept verbatim, with CSV quoting removed and doubled quotes
 	## decoded. Empty input has no records; a blank line has one empty field.
-	## Uses the same grammar and syntax diagnostics as [CSV.parse_records].
+	## Uses the same grammar and syntax diagnostics as [CSV.parse_str].
 	##
 	## ```roc
 	## expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n", {}) == Ok([["name", "note"], ["Ada", "said \"hello\""]])
@@ -158,11 +155,12 @@ CSV := { records : List(CSV.Record) }.{
 	## ```roc
 	## expect {
 	##     records = CSV.parse_str("name,age\nAda,36\n", {}).map_ok(|document| document.records)?
-	##     CSV.split_header(records) == { header: ["name", "age"], rows: [["Ada".to_utf8(), "36".to_utf8()]] }
+	##     CSV.{records:records}.split_header() == { header: ["name", "age"], rows: [["Ada".to_utf8(), "36".to_utf8()]] }
 	## }
 	## ```
-	split_header : List(Record) -> { header : List(Str), rows : List(Record) }
-	split_header = |records| {
+	split_header : CSV -> { header : List(Str), rows : List(Record) }
+	split_header = |document| {
+		records = document.records
 		match records.first() {
 			Ok(first) => { header: first.map(Str.from_utf8_lossy), rows: records.drop_first(1) }
 			Err(_) => { header: [], rows: [] }
@@ -184,8 +182,8 @@ CSV := { records : List(CSV.Record) }.{
 
 	## Decode already parsed records with a hand-built record parser.
 	##
-	## Errors are as for [CSV.parse_with], numbered from the first record given,
-	## with `line` and `column` set to `0`.
+	## Errors are as for [CSV.rows_parser], numbered from the first record given,
+	## with an explicitly unavailable source location.
 
 	## Start a record parser with a curried constructor for the desired value.
 	##
@@ -328,7 +326,7 @@ CSV := { records : List(CSV.Record) }.{
 					Err(InvalidCsv(error)) => Err(ParseError(Diagnostic.{ problem: InvalidCsv(error), location: error.location, path: error.path }))
 					Err(InvalidRow(error)) => Err(ParseError(Diagnostic.{ problem: InvalidRow(error), location: error.location, path: error.path }))
 				}
-				Err(BadUtf8(problem)) => Err(ParseError(Diagnostic.{ problem: InvalidCsv(Diagnostic.{ problem: ExpectedValue({ expected: Text, bytes: [] }), location: ByteOffset(problem.index), path: [] }), location: InputOffset(problem.index), path: [] }))
+				Err(BadUtf8(problem)) => Err(ParseError(Diagnostic.{ problem: InvalidCsv(Diagnostic.{ problem: ExpectedValue({ expected: Text, source: Diagnostic.excerpt(bytes.drop_first(problem.index)) }), location: ByteOffset(problem.index), path: [] }), location: InputOffset(problem.index), path: [] }))
 			}
 		},
 	)
@@ -337,25 +335,27 @@ CSV := { records : List(CSV.Record) }.{
 	Format : CsvFormat
 
 	## Limits for one unfinished record; completed rows leave the decoder.
-	ReaderProps : CSVReader.Props
+	Resource : CSVReader.Resource
+	ReaderLimits : CSVReader.Props
+	ReaderProps := { max_field_bytes : U64 ?? CSVReader.default_field_bytes, max_record_bytes : U64 ?? CSVReader.default_record_bytes, max_fields : U64 ?? CSVReader.default_fields, errors : Streaming.RecoveryProps ?? {} }
 
 	## Decode raw byte records with the shared streaming API.
 	decoder : ReaderProps -> Streaming.Decoder(CSVReader.State, Record, [InvalidCsv(Error)])
-	decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(props), step: |state, bytes, end| Streaming.map_step_error(raw_step(state, bytes, end), |error| InvalidCsv(error)), errors: props.errors })
+	decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(reader_limits(props)), step: |state, bytes, end| Streaming.map_step_error(raw_step(state, bytes, end), |error| InvalidCsv(error)), errors: props.errors })
 
 	## Decode safely framed rows with a custom positional parser.
-	PositionalProps(row, p) := { row : Parser(Record, row, p), reader : ReaderProps ?? {} }
+	PositionalProps(row, p) := { row : Parser(Record, row, p), reader : ReaderLimits ?? {}, errors : Streaming.RecoveryProps ?? {} }
 	positional_decoder : PositionalProps(row, p) -> Streaming.Decoder(CSVReader.State, row, [InvalidCsv(Error), InvalidRow(RowError(p))])
-	positional_decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(props.reader), step: |state, bytes, end| positional_step(props.row, state, bytes, end), errors: props.reader.errors })
+	positional_decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(props.reader), step: |state, bytes, end| positional_step(props.row, state, bytes, end), errors: props.errors })
 
 	## Decode rows into the inferred type using the chosen header mode.
-	TypedProps := { header : HeaderMode ?? Exact, reader : ReaderProps ?? {} }
+	TypedProps := { header : HeaderMode ?? Exact, reader : ReaderLimits ?? {}, errors : Streaming.RecoveryProps ?? {} }
 	typed_decoder : TypedProps -> Streaming.Decoder(TypedState, row, [InvalidCsv(Error), ..errs])
 		where [row.Parseable([InvalidCsv(Error), ..errs])]
 	typed_decoder = |props| {
 		Row : row
 		parse_row = Row.parser_for(CsvFormat.Default)
-		Streaming.decoder({ initial_state: typed_state(props.header, props.reader), step: |state, bytes, end| typed_step(parse_row, state, bytes, end), errors: props.reader.errors })
+		Streaming.decoder({ initial_state: typed_state(props.header, props.reader), step: |state, bytes, end| typed_step(parse_row, state, bytes, end), errors: props.errors })
 	}
 
 	## Writer options. Each emitted chunk is bounded; records are validated first.
@@ -368,16 +368,15 @@ CSV := { records : List(CSV.Record) }.{
 	WriteProps := { line_ending : LineEnding ?? CrLf, quoting : Quoting ?? Necessary, max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536, chunk_bytes : U64 ?? 65_536 }
 
 	## Invalid writer input or configured record bounds.
-	WriteProblem : [EmptyRecord, FieldCountExceeded({ max : U64 }), FieldBytesExceeded({ max : U64 }), RecordBytesExceeded({ max : U64 })]
 
 	## Validate and encode one byte record using necessary quoting and CRLF.
-	encode_record : Record, WriteProps -> Try(List(U8), WriteProblem)
+	encode_record : Record, WriteProps -> Try(List(U8), [InvalidCsv(Error)])
 	encode_record = |row_fields, props| {
 		if row_fields.is_empty() {
-			return Err(EmptyRecord)
+			return Err(write_error(EmptyRecord, []))
 		}
 		if row_fields.len() > props.max_fields {
-			return Err(FieldCountExceeded({ max: props.max_fields }))
+			return Err(write_error(LimitExceeded({ resource: FieldCount, max: props.max_fields, observed: Exact(row_fields.len()) }), []))
 		}
 		terminator = match props.line_ending {
 			CrLf => ['\r', '\n']
@@ -385,14 +384,16 @@ CSV := { records : List(CSV.Record) }.{
 			Cr => ['\r']
 		}
 		var $size = terminator.len() + row_fields.len() - 1
+		var $field_index = 0.U64
 		for cell_bytes in row_fields {
+			$field_index = $field_index + 1
 			if cell_bytes.len() > props.max_field_bytes {
-				return Err(FieldBytesExceeded({ max: props.max_field_bytes }))
+				return Err(write_error(LimitExceeded({ resource: FieldBytes, max: props.max_field_bytes, observed: Exact(cell_bytes.len()) }), [Field($field_index)]))
 			}
 			quoted = props.quoting == Always or cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
 			size = cell_bytes.len() + (if (quoted) 2 + cell_bytes.count_if(|byte| byte == '"') else 0)
 			if size > props.max_record_bytes or $size > props.max_record_bytes - size {
-				return Err(RecordBytesExceeded({ max: props.max_record_bytes }))
+				return Err(write_error(LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast($size + size) }), []))
 			}
 			$size = $size + size
 		}
@@ -421,18 +422,36 @@ CSV := { records : List(CSV.Record) }.{
 	}
 
 	## Encode validated records through the shared streaming writer.
-	encoder : WriteProps -> Streaming.Encoder({}, Record, WriteProblem)
-	encoder = |props| Streaming.encoder({ initial_state: {}, encode: |state, fields| encode_record(fields, props).map_ok(|bytes| { state, bytes }), finish: |_| Ok([]), chunk_bytes: props.chunk_bytes })
+	encoder : WriteProps -> Streaming.Encoder(U64, Record, [InvalidCsv(Error)])
+	encoder = |props| Streaming.encoder({
+		initial_state: 0.U64,
+		encode: |state, fields| {
+			bytes = encode_record(fields, props).map_err(|InvalidCsv(error)| InvalidCsv({ ..error, path: [Record(state + 1)].concat(error.path) }))?
+			Ok({ state: state + 1, bytes })
+		},
+		finish: |_| Ok([]),
+		chunk_bytes: props.chunk_bytes,
+	})
+
+	## Encode this document with the configured writer and completion checks.
+	encode : CSV, WriteProps -> Try(List(U8), [InvalidCsv(Error), InvalidChunkSize(Parser.Diagnostic(Parser.ChunkSizeProblem))])
+	encode = |document, props| {
+		var $bytes = []
+		for chunk in CSV.encoder(props).write_iter(document.records.iter()) {
+			$bytes = $bytes.concat(chunk?)
+		}
+		Ok($bytes)
+	}
 
 	## The cursor for type-directed decoding: one record, the header names,
-	## and indices into them. Used through [CSV.parse]; you do not need to name
+	## and indices into them. Used through [CSV.decode_str]; you do not need to name
 	## it.
 	State :: { row : Record, header : List(Str), column : U64, cell : U64, record : U64, nested : Bool }
 }
 
 CsvFormat :: [Default].{
 
-	## Field names are matched as written; [CSV.parse_normalized] normalizes the header instead.
+	## Field names are matched as written; [CSV.decode_str] normalizes the header instead.
 	rename_field : CsvFormat, Str -> Str
 	rename_field = |_, name| name
 
@@ -618,7 +637,7 @@ CsvFormat :: [Default].{
 				start_payloads: |s, count| if (count == 0) Ok(s) else Err(cell_error(s, UnsupportedCell(TagPayload))),
 				next_payload: |s, _, _| Ok(s),
 				finish_payloads: |s, _| Ok(s),
-				missing: cell_error(state, UnknownTag(error_excerpt(bytes))),
+				missing: cell_error(state, UnknownTag(Diagnostic.excerpt(bytes))),
 			},
 		)
 	}
@@ -689,12 +708,15 @@ decode_rows_core = |record_parser, records| {
 	Ok($values)
 }
 
+write_error : CSV.Problem([]), List(Diagnostic.PathSegment) -> [InvalidCsv(CSV.Error)]
+write_error = |problem, path| InvalidCsv(Diagnostic.{ problem, location: Unavailable(GeneratedValue), path })
+
 TypedState : { reader : CSVReader.State, header : List(Str), header_read : Bool, mode : CSV.HeaderMode }
 
-typed_state : CSV.HeaderMode, CSV.ReaderProps -> TypedState
+typed_state : CSV.HeaderMode, CSV.ReaderLimits -> TypedState
 typed_state = |mode, props| { reader: CSVReader.new(props), header: [], header_read: mode == Absent, mode }
 
-stream_location : CSVReader.State, CSV.Located(p) -> CSV.Located(p)
+stream_location : CSVReader.State, Diagnostic(p) -> Diagnostic(p)
 stream_location = |reader, problem| {
 	if csv_coordinates(problem).field == 0 {
 		return problem
@@ -703,13 +725,22 @@ stream_location = |reader, problem| {
 	{ ..problem, location: Text(at) }
 }
 
+reader_limits : CSV.ReaderProps -> CSVReader.Props
+reader_limits = |props| { max_field_bytes: props.max_field_bytes, max_record_bytes: props.max_record_bytes, max_fields: props.max_fields }
+
+reader_problem : CSVReader.Problem -> CSV.Problem([])
+reader_problem = |problem| match problem {
+	LimitExceeded(detail) => LimitExceeded(detail)
+	_ => Syntax(problem)
+}
+
 raw_step : CSVReader.State, List(U8), Streaming.InputEnd -> Streaming.Step(CSVReader.State, CSV.Record, CSV.Error)
 raw_step = |state, bytes, end| {
 	next = CSVReader.step(state, bytes, end)
 	outcome = match next.outcome {
 		Item(fields) => Item(fields)
-		RecordError(error) => RecordError(Diagnostic.{ problem: Syntax(error.problem), location: Text({ offset: error.offset, line: error.line, column: error.column }), path: [Record(error.record), Field(error.field)] })
-		Failed(error) => Failed(Diagnostic.{ problem: Syntax(error.problem), location: Text({ offset: error.offset, line: error.line, column: error.column }), path: [Record(error.record), Field(error.field)] })
+		RecordError(error) => RecordError(Diagnostic.{ problem: reader_problem(error.problem), location: Text({ offset: error.offset, line: error.line, column: error.column }), path: [Record(error.record), Field(error.field)] })
+		Failed(error) => Failed(Diagnostic.{ problem: reader_problem(error.problem), location: Text({ offset: error.offset, line: error.line, column: error.column }), path: [Record(error.record), Field(error.field)] })
 		NeedInput => NeedInput
 		Done => Done
 	}
@@ -963,22 +994,8 @@ dec_from_bytes = |bytes| {
 	}
 }
 
-## Maximum source bytes retained in a failed cell payload.
-excerpt_len : U64
-excerpt_len = 40
-
-## Detach diagnostic bytes from a potentially much larger field or source.
-error_excerpt : List(U8) -> List(U8)
-error_excerpt = |bytes| {
-	var $out = List.with_capacity(U64.min(bytes.len(), excerpt_len))
-	for byte in bytes.take_first(excerpt_len) {
-		$out = $out.append(byte)
-	}
-	$out
-}
-
 expected_problem : CSV.ValueType, List(U8) -> CSV.Problem(p)
-expected_problem = |expected, bytes| ExpectedValue({ expected, bytes: error_excerpt(bytes) })
+expected_problem = |expected, bytes| ExpectedValue({ expected, source: Diagnostic.excerpt(bytes) })
 
 ## Explain why a record parser left fields unread, preferring the furthest
 ## failure (such as a field that stopped a `Parser.many`).
@@ -1011,7 +1028,7 @@ syntax_error = |bytes, bad| {
 
 ## Fill in the line and column of a decoding error from the source bytes.
 ## Only runs on the error path, so it rescans the input.
-locate : List(U8), CSV.Located(p) -> CSV.Located(p)
+locate : List(U8), Diagnostic(p) -> Diagnostic(p)
 locate = |bytes, problem| {
 	if bytes.is_empty() {
 		return problem
@@ -1461,8 +1478,8 @@ expect match (CSV.parser({})).parse("a\n\"b".to_utf8()) {
 }
 
 # The header helper splits off the column names.
-expect CSV.split_header([]) == { header: [], rows: [] }
-expect CSV.split_header([["a".to_utf8()], ["1".to_utf8()]]) == { header: ["a"], rows: [["1".to_utf8()]] }
+expect CSV.{ records: [] }.split_header() == { header: [], rows: [] }
+expect CSV.{ records: [["a".to_utf8()], ["1".to_utf8()]] }.split_header() == { header: ["a"], rows: [["1".to_utf8()]] }
 
 # A hand-built record parser decodes every row, as in the module docs.
 user : Parser(CSV.Record, { name : Str, age : U64 }, _)
@@ -1478,14 +1495,14 @@ expect {
 }
 
 # A field that does not decode names its record, field and position.
-expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada,36\nAlan,forty\n")) == Ok(csv_error({ record: 2, field: 2, line: 2, column: 6, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: "forty".to_utf8() }), location: ByteOffset(0), path: [] })) }))
+expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada,36\nAlan,forty\n")) == Ok(csv_error({ record: 2, field: 2, line: 2, column: 6, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, source: Diagnostic.excerpt("forty".to_utf8()) }), location: ByteOffset(0), path: [] })) }))
 
 # Extra fields are an error carrying the record number.
 expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada,36\n\"Al\nan\",41,x\n")) == Ok(csv_error({ record: 2, field: 3, line: 3, column: 8, problem: UnreadFields({ found: 3, read: 2 }) }))
 
 # A repetition's rejected field keeps its problem and quoted-field position
 # when the row is rebuilt for the leftover diagnostic. Later syntax loses to it.
-expect row_error_of(CSV.rows_parser({ row: Parser.many(CSV.field(CSV.u64({}))) }).parse_str("1,2\r\n3,\"4\",nope\r\n\"unterminated")) == Ok(csv_error({ record: 2, field: 3, line: 2, column: 7, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: "nope".to_utf8() }), location: ByteOffset(0), path: [] })) }))
+expect row_error_of(CSV.rows_parser({ row: Parser.many(CSV.field(CSV.u64({}))) }).parse_str("1,2\r\n3,\"4\",nope\r\n\"unterminated")) == Ok(csv_error({ record: 2, field: 3, line: 2, column: 7, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, source: Diagnostic.excerpt("nope".to_utf8()) }), location: ByteOffset(0), path: [] })) }))
 
 # Too few fields is an error too.
 expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada")) == Ok(csv_error({ record: 1, field: 2, line: 1, column: 1, problem: ParserFailure(MissingField) }))
@@ -1493,18 +1510,18 @@ expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada")) == Ok(csv_e
 # Invalid UTF-8 remains raw source bytes in bounded structured payloads.
 expect {
 	bad = [0xFF, 0xC3, 'x']
-	row_error_of(CSV.{ records: [[bad, "1".to_utf8()]] }.decode_rows({ row: user })) == Ok(csv_error({ record: 1, field: 1, line: 0, column: 0, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: Text, bytes: bad }), location: ByteOffset(0), path: [] })) }))
+	row_error_of(CSV.{ records: [[bad, "1".to_utf8()]] }.decode_rows({ row: user })) == Ok(csv_error({ record: 1, field: 1, line: 0, column: 0, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: Text, source: Diagnostic.excerpt(bad) }), location: ByteOffset(0), path: [] })) }))
 }
 expect {
 	long = List.repeat('9', 5000)
 	match CSV.{ records: [["a".to_utf8(), long]] }.decode_rows({ row: user }) {
-		Err(InvalidRow({ problem: ParserFailure(FieldProblem({ problem: ExpectedValue({ bytes, .. }), .. })), .. })) => bytes.len() == 40
+		Err(InvalidRow({ problem: ParserFailure(FieldProblem({ problem: ExpectedValue({ source, .. }), .. })), .. })) => source.bytes.len() == 40 and source.total_bytes == long.len()
 		_ => False
 	}
 }
 expect {
 	all_fields = Parser.many(CSV.field(CSV.u64({})))
-	row_error_of(CSV.{ records: [["1".to_utf8(), [0xFF, 0xFE]]] }.decode_rows({ row: all_fields })) == Ok(csv_error({ record: 1, field: 2, line: 0, column: 0, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: [0xFF, 0xFE] }), location: ByteOffset(0), path: [] })) }))
+	row_error_of(CSV.{ records: [["1".to_utf8(), [0xFF, 0xFE]]] }.decode_rows({ row: all_fields })) == Ok(csv_error({ record: 1, field: 2, line: 0, column: 0, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, source: Diagnostic.excerpt([0xFF, 0xFE]) }), location: ByteOffset(0), path: [] })) }))
 }
 
 # Type-directed decoding: header names choose fields, unknown columns are
@@ -1536,7 +1553,7 @@ expect {
 expect {
 	people : PersonResult
 	people = CSV.decode_str("name,age,admin\nAda,36,true\nBob,old,true\n", {})
-	error_of(people) == Ok(csv_error({ record: 3, field: 2, line: 3, column: 5, problem: ExpectedValue({ expected: U64, bytes: "old".to_utf8() }) }))
+	error_of(people) == Ok(csv_error({ record: 3, field: 2, line: 3, column: 5, problem: ExpectedValue({ expected: U64, source: Diagnostic.excerpt("old".to_utf8()) }) }))
 }
 
 # Short and long rows are errors naming the record; blank lines are skipped.
@@ -1567,7 +1584,7 @@ expect {
 expect {
 	rows : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error)])
 	rows = CSV.decode_str("status\nNope\n", {})
-	error_of(rows) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 1, problem: UnknownTag("Nope".to_utf8()) }))
+	error_of(rows) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 1, problem: UnknownTag(Diagnostic.excerpt("Nope".to_utf8())) }))
 }
 
 # Every number type uses the data grammar; signs only where they fit.
@@ -1655,7 +1672,7 @@ expect CSV.parse_str("a,\"b,c\"\n", {}).map_ok(|document| document.records) == O
 
 expect {
 	found = CSV.parse_str("name,age\nAda,36\n", {}).map_ok(|document| document.records)?
-	CSV.split_header(found) == { header: ["name", "age"], rows: [["Ada".to_utf8(), "36".to_utf8()]] }
+	CSV.{ records: found }.split_header() == { header: ["name", "age"], rows: [["Ada".to_utf8(), "36".to_utf8()]] }
 }
 
 expect {
@@ -1799,7 +1816,7 @@ expect {
 }
 expect {
 	decode = Parser.many(CSV.field(CSV.u64({})))
-	decoder = CSV.positional_decoder({ row: decode, reader: { errors: { policy: ReportInvalidRecords } } })
+	decoder = CSV.positional_decoder({ row: decode, errors: { policy: ReportInvalidRecords } })
 	match decoder.collect_report(["1\nwrong\n2\n".to_utf8()].iter()) {
 		Ok({ values, errors, report }) => values == [[1], [2]] and errors.len() == 1 and errors.all(
 			|error| match error {
@@ -1819,14 +1836,14 @@ expect {
 	result : Try(List({ id : U64 }), _)
 	result = CSV.decode_str("id\nwrong\n\"unterminated", {})
 	match result {
-		Err(InvalidCsv(error)) => csv_coordinates(error).record == 2 and error.problem == ExpectedValue({ expected: U64, bytes: "wrong".to_utf8() })
+		Err(InvalidCsv(error)) => csv_coordinates(error).record == 2 and error.problem == ExpectedValue({ expected: U64, source: Diagnostic.excerpt("wrong".to_utf8()) })
 		_ => False
 	}
 }
 expect {
 	decode = Parser.many(CSV.field(CSV.u64({})))
 	match CSV.rows_parser({ row: decode }).parse_str("bad\n\"unterminated") {
-		Err(ParseError({ problem: InvalidRow(error), .. })) => csv_coordinates(error).record == 1 and error.problem == ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: "bad".to_utf8() }), location: ByteOffset(0), path: [] }))
+		Err(ParseError({ problem: InvalidRow(error), .. })) => csv_coordinates(error).record == 1 and error.problem == ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, source: Diagnostic.excerpt("bad".to_utf8()) }), location: ByteOffset(0), path: [] }))
 		_ => False
 	}
 }
@@ -1922,4 +1939,49 @@ csv_coordinates = |error| {
 	}
 	position = Diagnostic.line_column(error.location) ?? { line: 0, column: 0 }
 	{ record: $record, field: $field, line: position.line, column: position.column }
+}
+
+## Parsed documents support receiver decoding and encoding without another format import.
+expect {
+	document = CSV.parse_str("name,age\r\nAda,36\r\n", {})?
+	rows : List({ name : Str, age : U64 })
+	rows = document.decode({})?
+	actual = document.encode({})?
+	rows == [{ name: "Ada", age: 36 }] and actual == "name,age\r\nAda,36\r\n".to_utf8()
+}
+
+## Detached document failures keep logical record and field paths without source coordinates.
+expect {
+	document = CSV.{ records: [["age".to_utf8()], ["bad".to_utf8()]] }
+	result : Try(List({ age : U64 }), [InvalidCsv(CSV.Error)])
+	result = document.decode({})
+	match result {
+		Err(InvalidCsv(error)) => error.location == Unavailable(NotRetained) and error.path == [Record(2), Field(1)]
+		Ok(_) => False
+	}
+}
+
+## Reader limits retain their resource, configured maximum and first violating count.
+expect match CSV.decoder({ max_field_bytes: 1 }).collect(["ab\n".to_utf8()].iter()) {
+	Err(InvalidCsv(error)) => error.problem == LimitExceeded({ resource: FieldBytes, max: 1, observed: AtLeast(2) }) and error.location == Text({ offset: 0, line: 1, column: 1 }) and error.path == [Record(1), Field(1)]
+	_ => False
+}
+
+## Writer failures identify generated values and preserve exact field counts.
+expect CSV.encode_record(["a".to_utf8(), "b".to_utf8()], { max_fields: 1 }) == Err(InvalidCsv(Diagnostic.{ problem: LimitExceeded({ resource: FieldCount, max: 1, observed: Exact(2) }), location: Unavailable(GeneratedValue), path: [] }))
+
+## Streaming writer failures add the logical record without fabricating text positions.
+expect {
+	results = List.from_iter(CSV.encoder({}).write_iter([["good".to_utf8()], []].iter()))
+	match results.last()? {
+		Err(InvalidCsv(error)) => error.problem == EmptyRecord and error.location == Unavailable(GeneratedValue) and error.path == [Record(2)]
+		_ => False
+	}
+}
+
+## Typed and positional readers share recovery configuration at the outer props level.
+expect {
+	row = Parser.many(CSV.field(CSV.u64({})))
+	report = CSV.positional_decoder({ row, reader: { max_field_bytes: 16 }, errors: { policy: ReportInvalidRecords } }).collect_report(["1\nbad\n2\n".to_utf8()].iter())?
+	report.values == [[1], [2]] and report.errors.len() == 1 and report.report.rejected_records == 1
 }

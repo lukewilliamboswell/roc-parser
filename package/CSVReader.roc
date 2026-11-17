@@ -1,12 +1,20 @@
 import Streaming
+import Diagnostic
 
 ## Stateful RFC 4180 byte scanning shared by CSV's streaming entrypoints.
 CSVReader :: [].{
 
 	## Limits bound the unfinished record, including fields retained for decoding.
-	Props := { max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536, errors : Streaming.RecoveryProps ?? {} }
+	default_field_bytes : U64
+	default_field_bytes = 16_777_216
+	default_record_bytes : U64
+	default_record_bytes = 67_108_864
+	default_fields : U64
+	default_fields = 65_536
+	Props := { max_field_bytes : U64 ?? default_field_bytes, max_record_bytes : U64 ?? default_record_bytes, max_fields : U64 ?? default_fields }
 
-	Problem : [UnterminatedQuotedField, TextAfterQuote, RecordBytesExceeded({ max : U64 }), FieldBytesExceeded({ max : U64 }), FieldCountExceeded({ max : U64 })]
+	Resource : [RecordBytes, FieldBytes, FieldCount]
+	Problem : [UnterminatedQuotedField, TextAfterQuote, LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed })]
 
 	## One-based record, field, physical line and byte column.
 	Error : { offset : U64, record : U64, field : U64, line : U64, column : U64, problem : Problem }
@@ -52,10 +60,10 @@ CSVReader :: [].{
 			} else {
 				$state = { ..$state, skip_lf: False }
 				if $state.record_bytes >= $state.props.max_record_bytes {
-					return failure($state, $index, RecordBytesExceeded({ max: $state.props.max_record_bytes }))
+					return failure($state, $index, LimitExceeded({ resource: RecordBytes, max: $state.props.max_record_bytes, observed: AtLeast($state.record_bytes + 1) }))
 				}
 				if $state.mode == Start and $state.fields.len() >= $state.props.max_fields {
-					return failure($state, $index, FieldCountExceeded({ max: $state.props.max_fields }))
+					return failure($state, $index, LimitExceeded({ resource: FieldCount, max: $state.props.max_fields, observed: AtLeast($state.fields.len() + 1) }))
 				}
 				$state = { ..$state, record_started: True, record_bytes: $state.record_bytes + 1 }
 				is_break = byte == '\r' or byte == '\n'
@@ -81,7 +89,7 @@ CSVReader :: [].{
 						AfterQuote if byte != '"' => return { state: $state, consumed: $index, outcome: Failed({ offset: $state.offset, record: $state.record, field: $state.fields.len() + 1, line: $state.line, column: $state.column, problem: TextAfterQuote }) }
 						_ => {
 							if $state.field.len() >= $state.props.max_field_bytes {
-								return failure($state, $index, FieldBytesExceeded({ max: $state.props.max_field_bytes }))
+								return failure($state, $index, LimitExceeded({ resource: FieldBytes, max: $state.props.max_field_bytes, observed: AtLeast($state.field.len() + 1) }))
 							}
 							$state = { ..$state, field: $state.field.append(byte), mode: if ($state.mode == AfterQuote or $state.mode == Quoted) Quoted else Unquoted }
 						}
@@ -99,7 +107,7 @@ CSVReader :: [].{
 		}
 		if $state.record_started {
 			if $state.fields.len() >= $state.props.max_fields {
-				return failure($state, $index, FieldCountExceeded({ max: $state.props.max_fields }))
+				return failure($state, $index, LimitExceeded({ resource: FieldCount, max: $state.props.max_fields, observed: AtLeast($state.fields.len() + 1) }))
 			}
 			$state = finish_field($state)
 			fields = $state.fields
