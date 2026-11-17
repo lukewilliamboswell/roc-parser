@@ -233,6 +233,83 @@ move = |state, byte| {
 	}
 }
 
+markup_start : Utf8.ByteClass
+markup_start = Utf8.ByteClass.from_bytes(['<'])
+
+# Apply source coordinates once per span, visiting only its line endings.
+# In particular, CRLF remains one line ending even when split between calls.
+move_span : State, List(U8), U64, U64 -> State
+move_span = |state, bytes, start, end| {
+	var $at = start
+	var $line = state.line
+	var $column = state.column
+	var $last_cr = state.last_cr
+	while $at < end {
+		next = Utf8.find_line_end(bytes, $at)
+		if next >= end {
+			break
+		}
+		if next > $at {
+			$last_cr = False
+		}
+		byte = bytes.get(next) ?? 0
+		if byte == '\r' {
+			$line = $line + 1
+			$last_cr = True
+		} else {
+			$line = $line + (if ($last_cr) 0 else 1)
+			$last_cr = False
+		}
+		$column = 1
+		$at = next + 1
+	}
+	if $at < end {
+		$column = $column + end - $at
+		$last_cr = False
+	}
+	{ ..state, offset: state.offset + end - start, line: $line, column: $column, last_cr: $last_cr }
+}
+
+# Include at most the first excess byte so limit errors keep their original
+# offset and the unfinished buffer never grows to the rest of a large chunk.
+bounded_end : U64, U64, U64, U64 -> U64
+bounded_end = |start, end, retained, limit| {
+	allowance = if (retained >= limit) 0 else limit - retained
+	if end - start > allowance {
+		start + allowance + 1
+	} else {
+		end
+	}
+}
+
+# Keep the scanner's cursor and quote state in small locals. Materialize one
+# token per call rather than updating the full decoder for every byte.
+scan_token : List(U8), List(U8), U64, U64, U8 -> { token : List(U8), at : U64, quote : U8, complete : Bool }
+scan_token = |prefix, bytes, start, end, quote| {
+	joined = |index| if (index < prefix.len()) prefix.get(index) ?? 0 else bytes.get(start + index - prefix.len()) ?? 0
+	available = prefix.len() + end - start
+	comment = available >= 4 and joined(0) == '<' and joined(1) == '!' and joined(2) == '-' and joined(3) == '-'
+	cdata = available >= 9 and joined(0) == '<' and joined(1) == '!' and joined(2) == '[' and joined(3) == 'C' and joined(4) == 'D' and joined(5) == 'A' and joined(6) == 'T' and joined(7) == 'A' and joined(8) == '['
+	pi = available >= 2 and joined(0) == '<' and joined(1) == '?'
+	var $at = start
+	var $quote = quote
+	while $at < end {
+		byte = bytes.get($at) ?? 0
+		$at = $at + 1
+		if byte == '"' or byte == '\'' {
+			$quote = if ($quote == 0) byte else if ($quote == byte) 0 else $quote
+		}
+		if byte == '>' {
+			len = prefix.len() + $at - start
+			complete = if (comment) len >= 3 and joined(len - 2) == '-' and joined(len - 3) == '-' else if (cdata) len >= 3 and joined(len - 2) == ']' and joined(len - 3) == ']' else if (pi) len >= 2 and joined(len - 2) == '?' else $quote == 0
+			if complete {
+				return { token: prefix.concat(bytes.sublist({ start, len: $at - start })), at: $at, quote: $quote, complete: True }
+			}
+		}
+	}
+	{ token: prefix.concat(bytes.sublist({ start, len: $at - start })), at: $at, quote: $quote, complete: False }
+}
+
 advance : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, OFX.Event, OFX.Error)
 advance = |state, bytes, ending| {
 	if state.terminal {
@@ -242,31 +319,16 @@ advance = |state, bytes, ending| {
 	var $at = 0
 	while $at < bytes.len() {
 		byte = bytes.get($at) ?? 0
-		$s = move($s, byte)
-		$at = $at + 1
-		if !$s.header_done {
-			if byte == '<' {
-				match read_header($s) {
-					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
-					Ok(next) => {
-						$s = { ..next, token_mode: True, token: ['<'] }
-					}
-				}
-			} else {
-				$s = { ..$s, header: $s.header.append(byte) }
-				if $s.header.len() > $s.props.max_token_bytes {
-					return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX header exceeds max_token_bytes")) }
-				}
-			}
-		} else if $s.token_mode {
-			$s = { ..$s, token: $s.token.append(byte) }
+		if $s.header_done and $s.token_mode {
+			end = bounded_end($at, bytes.len(), $s.token.len(), $s.props.max_token_bytes)
+			scanned = scan_token($s.token, bytes, $at, end, $s.quote)
+			$s = move_span($s, bytes, $at, scanned.at)
+			$at = scanned.at
+			$s = { ..$s, token: scanned.token, quote: scanned.quote }
 			if $s.token.len() > $s.props.max_token_bytes {
 				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX token exceeds max_token_bytes")) }
 			}
-			if byte == '"' or byte == '\'' {
-				$s = { ..$s, quote: if ($s.quote == 0) byte else if ($s.quote == byte) 0 else $s.quote }
-			}
-			if token_complete($s.token, $s.quote) {
+			if scanned.complete {
 				match consume_token($s) {
 					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
 					Ok({ state: next, outcome }) => {
@@ -279,23 +341,44 @@ advance = |state, bytes, ending| {
 					}
 				}
 			}
-		} else if byte == '<' {
-			if !$s.capture_tag.is_empty() {
-				$s = { ..$s, capture: $s.capture.concat($s.leaf) }
-			}
-			else if !$s.leaf.is_empty() {
-				match consume_text($s) {
-					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
-					Ok(next) => {
-						$s = next
-					}
-				}
-			}
-			$s = { ..$s, leaf: [], token_mode: True, token: ['<'] }
-		} else {
-			$s = { ..$s, leaf: $s.leaf.append(byte) }
+		} else if $s.header_done and byte != '<' {
+			end = bounded_end($at, bounded_end($at, Utf8.find_any(bytes, $at, markup_start), $s.leaf.len(), $s.props.max_token_bytes), $s.capture.len() + $s.leaf.len(), $s.props.max_record_bytes)
+			$s = move_span($s, bytes, $at, end)
+			$s = { ..$s, leaf: $s.leaf.concat(bytes.sublist({ start: $at, len: end - $at })) }
+			$at = end
 			if $s.leaf.len() > $s.props.max_token_bytes {
 				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX field exceeds max_token_bytes")) }
+			}
+		} else {
+			$s = move($s, byte)
+			$at = $at + 1
+			if !$s.header_done {
+				if byte == '<' {
+					match read_header($s) {
+						Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
+						Ok(next) => {
+							$s = { ..next, token_mode: True, token: ['<'] }
+						}
+					}
+				} else {
+					$s = { ..$s, header: $s.header.append(byte) }
+					if $s.header.len() > $s.props.max_token_bytes {
+						return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX header exceeds max_token_bytes")) }
+					}
+				}
+			} else {
+				if !$s.capture_tag.is_empty() {
+					$s = { ..$s, capture: $s.capture.concat($s.leaf) }
+				}
+				else if !$s.leaf.is_empty() {
+					match consume_text($s) {
+						Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
+						Ok(next) => {
+							$s = next
+						}
+					}
+				}
+				$s = { ..$s, leaf: [], token_mode: True, token: ['<'] }
 			}
 		}
 		if $s.capture.len() + $s.leaf.len() > $s.props.max_record_bytes {
@@ -312,22 +395,6 @@ advance = |state, bytes, ending| {
 		{ state: { ..$s, terminal: True }, consumed: $at, outcome: Done }
 	} else {
 		{ state: $s, consumed: $at, outcome: NeedInput }
-	}
-}
-
-token_complete : List(U8), U8 -> Bool
-token_complete = |bytes, quote| {
-	if bytes.starts_with("<!--".to_utf8()) {
-		bytes.ends_with("-->".to_utf8())
-	}
-	else if bytes.starts_with("<![CDATA[".to_utf8()) {
-		bytes.ends_with("]]>".to_utf8())
-	}
-	else if bytes.starts_with("<?".to_utf8()) {
-		bytes.ends_with("?>".to_utf8())
-	}
-	else {
-		bytes.last() == Ok('>') and quote == 0
 	}
 }
 
@@ -1317,3 +1384,27 @@ expect {
 expect ["", "\t\r\n", "plain & < > ]]> text", "Café 日本", "\u(20)\u(D7FF)\u(E000)\u(FFFD)", "\u(10000)\u(10FFFF)", "\u(0)", "\u(8)", "\u(B)", "\u(C)", "\u(1F)", "\u(FFFE)", "\u(FFFF)"].all(|value| valid_text(value) == Xml.parse_str("<v>${escape(value)}</v>").is_ok())
 expect ["0", "+0", "-1", "123456789012345678901234567890.0001", "0.00"].all(decimal)
 expect ["", "+", "-", ".5", "1.", "1.2.3", "1e2", " 1", "1 ", "1\n"].all(|value| !decimal(value))
+
+expect ["", "plain", "\r", "\n", "\r\n", "a\r\nb\rc\nd", "\n\r\n\r"].all(
+	|text| {
+		bytes = text.to_utf8()
+		start = move(initial({}), '\r')
+		move_span(start, bytes, 0, bytes.len()) == bytes.fold(start, move)
+	},
+)
+
+expect {
+	bytes = sample_xml.replace_each(">", ">\r\n").replace_each("-12.30", "bad").to_utf8()
+	List.from_iter(OFX.parse_iter([bytes].iter(), {})) == List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), {}))
+}
+
+expect {
+	source = sample_xml.replace_each("Café &amp; tea", "<![CDATA[a>b]]>").replace_each("<MEMO>", "<!-- > ' \" -->\r\n<MEMO>")
+	bytes = source.to_utf8()
+	List.from_iter(OFX.parse_iter([bytes].iter(), {})) == List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), {})) and OFX.parse_str(source)?.statements.first()?.transactions.first()?.name == "a>b"
+}
+
+expect {
+	bytes = "\r\n${sample_xml}".to_utf8()
+	[0, 1, 3, 7, 8, 16].all(|limit| List.from_iter(OFX.parse_iter([bytes].iter(), { max_token_bytes: limit })) == List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), { max_token_bytes: limit })))
+}
