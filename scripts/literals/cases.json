@@ -31,14 +31,15 @@
   },
   {
     "name": "custom-combinator",
-    "body": "Count := { value : U64 }.{\n    from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])\n    from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits, source }).map_ok(|value| Count.{ value })\n}\ncount : Count\ncount = \"42\"\nvalue = count.value == 42\n"
+    "body": "Count := { value : U64 }.{\n    from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])\n    from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits({}), source }).map_ok(|value| Count.{ value })\n}\ncount : Count\ncount = \"42\"\nvalue = count.value == 42\n"
   },
   {
     "name": "inline-yaml-syntax",
     "body": "value : Yaml\nvalue = \"a: [\"\n",
     "errors": [
       "invalid string",
-      "YAML"
+      "YAML",
+      "UnclosedFlowCollection"
     ]
   },
   {
@@ -46,7 +47,8 @@
     "body": "value : Xml\nvalue = \"<a></b>\"\n",
     "errors": [
       "invalid string",
-      "XML"
+      "XML",
+      "EndTagMismatch"
     ]
   },
   {
@@ -54,7 +56,8 @@
     "body": "value : CSV\nvalue = \"a,\\\"unterminated\"\n",
     "errors": [
       "invalid string",
-      "CSV"
+      "CSV",
+      "UnterminatedQuotedField"
     ]
   },
   {
@@ -70,7 +73,8 @@
     "body": "value : AsciiDoc\nvalue = \"include::missing.adoc[]\"\n",
     "errors": [
       "invalid string",
-      "AsciiDoc"
+      "AsciiDoc",
+      "UnexpandedInclude"
     ]
   },
   {
@@ -78,7 +82,8 @@
     "body": "value : HTTP.RequestLiteral\nvalue = \"GET / HTTP/1.1\\nHost: a\\n\\n\"\n",
     "errors": [
       "invalid string",
-      "HTTP"
+      "HTTP",
+      "LfWithoutCr"
     ]
   },
   {
@@ -86,7 +91,8 @@
     "body": "value : RocSyntax\nvalue = \"answer = [\"\n",
     "errors": [
       "invalid string",
-      "Roc"
+      "Roc",
+      "UnclosedDelimiter"
     ]
   },
   {
@@ -94,7 +100,8 @@
     "body": "value : Yaml\nvalue = \"answer: yes\"\n",
     "errors": [
       "invalid string",
-      "YAML"
+      "YAML",
+      "LegacyBoolean"
     ]
   },
   {
@@ -129,7 +136,8 @@
     "errors": [
       "invalid string",
       "YAML",
-      "port"
+      "port",
+      "MissingRequiredField"
     ]
   },
   {
@@ -137,7 +145,8 @@
     "body": "value : Yaml.Decoded({ port : U8 })\nvalue = \"port: 999\"\n",
     "errors": [
       "invalid string",
-      "YAML"
+      "YAML",
+      "IntegerOutOfRange"
     ]
   },
   {
@@ -146,7 +155,8 @@
     "errors": [
       "invalid string",
       "CSV",
-      "age"
+      "age",
+      "MissingRequiredField"
     ]
   },
   {
@@ -154,7 +164,8 @@
     "body": "value : CSV.Decoded({ age : U8 })\nvalue = \"age\\n999\\n\"\n",
     "errors": [
       "invalid string",
-      "CSV"
+      "CSV",
+      "ExpectedValue"
     ]
   },
   {
@@ -163,7 +174,8 @@
     "errors": [
       "compile time crash",
       "bad.yaml",
-      "yaml"
+      "yaml",
+      "UnclosedFlowCollection"
     ],
     "assets": {
       "bad.yaml": "a: [\n"
@@ -175,7 +187,8 @@
     "errors": [
       "compile time crash",
       "bad.xml",
-      "xml"
+      "xml",
+      "EndTagMismatch"
     ],
     "assets": {
       "bad.xml": "<a></b>"
@@ -187,7 +200,8 @@
     "errors": [
       "compile time crash",
       "bad.csv",
-      "csv"
+      "csv",
+      "UnterminatedQuotedField"
     ],
     "assets": {
       "bad.csv": "a,\"broken"
@@ -211,7 +225,8 @@
     "errors": [
       "compile time crash",
       "bad.adoc",
-      "asciidoc"
+      "asciidoc",
+      "UnexpandedInclude"
     ],
     "assets": {
       "bad.adoc": "include::missing.adoc[]\n"
@@ -223,7 +238,8 @@
     "errors": [
       "compile time crash",
       "bad.http",
-      "http"
+      "http",
+      "LfWithoutCr"
     ],
     "assets": {
       "bad.http": "GET / HTTP/1.1\nHost: a\n\n"
@@ -235,7 +251,8 @@
     "errors": [
       "compile time crash",
       "bad.roc",
-      "roc"
+      "roc",
+      "UnclosedDelimiter"
     ],
     "assets": {
       "bad.roc": "answer = [\n"
@@ -261,7 +278,7 @@
       "compile time crash",
       "headers.csv",
       "CSV",
-      "duplicate"
+      "DuplicateHeader"
     ]
   },
   {
@@ -271,7 +288,7 @@
       "compile time crash",
       "headers.csv",
       "CSV",
-      "empty"
+      "EmptyHeader"
     ]
   },
   {
@@ -281,7 +298,8 @@
       "compile time crash",
       "settings.yaml",
       "YAML",
-      "typo"
+      "typo",
+      "UnknownKey"
     ]
   },
   {
@@ -290,7 +308,8 @@
     "errors": [
       "compile time crash",
       "pipeline.http",
-      "HTTP"
+      "HTTP",
+      "TrailingContent"
     ]
   },
   {
@@ -325,11 +344,12 @@
   },
   {
     "name": "custom-combinator-trailing",
-    "body": "Count := { value : U64 }.{\n    from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])\n    from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits, source }).map_ok(|value| Count.{ value })\n}\nvalue : Count\nvalue = \"42x\"\n",
+    "body": "Count := { value : U64 }.{\n    from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])\n    from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits({}), source }).map_ok(|value| Count.{ value })\n}\nvalue : Count\nvalue = \"42x\"\n",
     "errors": [
       "invalid string",
       "parser",
-      ":1:3"
+      ":1:3",
+      "UnexpectedInput"
     ]
   },
   {
@@ -357,7 +377,8 @@
     "body": "value : HTTP.ResponseLiteral\nvalue = \"not HTTP\"\n",
     "errors": [
       "invalid string",
-      "HTTP"
+      "HTTP",
+      "MissingCrlf"
     ]
   },
   {
@@ -400,7 +421,8 @@
     "errors": [
       "invalid string",
       "InvalidChildren",
-      "mfrac"
+      "mfrac",
+      "ChildCount"
     ]
   },
   {
@@ -593,7 +615,8 @@
     "body": "value : QIF\nvalue = \"!Type:Bank\\nT1\\n\"\n",
     "errors": [
       "invalid string",
-      "QIF"
+      "QIF",
+      "MissingRecordTerminator"
     ]
   },
   {
@@ -601,7 +624,8 @@
     "body": "value : OFX\nvalue = \"<OFX>\"\n",
     "errors": [
       "invalid string",
-      "OFX"
+      "OFX",
+      "IncompleteDocument"
     ]
   }
 ]

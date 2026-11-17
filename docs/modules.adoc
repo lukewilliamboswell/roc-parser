@@ -128,13 +128,15 @@ Each format type module follows the same conventions:
 * `parse_str` (or, for CSV, `parse`) reads a whole document and returns
   `Ok(value)` or an error tag named after the module: `InvalidCsv`,
   `InvalidHttp`, `InvalidJsonValue`, `InvalidXml` or `InvalidYaml`. The tag
-  carries a record with a `message` and the most precise location the format
-  has. Markdown has no syntax errors, so `Markdown.parse_str` returns the tree
-  directly.
-* `parser` (and, for HTTP, `request` and `response`) is the same parser as a
-  `Parser(Utf8.Bytes, ...)` value, for embedding in a larger parser. Its
+  carries a record with a structured `problem` tag and the most precise
+  source location. Markdown has no syntax errors, so `Markdown.parse_str`
+  returns the tree directly.
+* The `parser` API exposes a `Parser(Utf8.Bytes, ...)` value for embedding
+  in a larger parser. Use `CSV.parser({})` for CSV, or `HTTP.request` and
+  `HTTP.response` for HTTP. Its
   failures are `ParseError({ problem, offset })`. `JsonValue.parser_with`
-  takes the same options as `JsonValue.parse_with`.
+  takes the same options as `JsonValue.parse_with`. Use `map_problem` to
+  wrap a native problem in a domain tag when composing it with another grammar.
 * `CSV.parse` and `Yaml.decode` decode straight into your own record type
   through the static dispatch method `parser_for`; the compiler infers the
   type from how you use the result.
@@ -230,7 +232,7 @@ body.
 * `HTTP.parse_request` and `HTTP.parse_response` take bytes and return the
   message and the `rest`, which is the next pipelined message, if any.
   `HTTP.parse_requests` reads a whole pipeline. Failures are
-  `InvalidHttp({ offset, message })`.
+  `InvalidHttp({ offset, problem })`.
 * `Request` and `Response` are records. `Header` is `{ name, value }`, and
   `HTTP.header(headers, name)` looks a field up case-insensitively. `Method`
   has a tag for each standard method and `Extension(name)` for any other
@@ -251,7 +253,7 @@ straight into a record.
 
 * `JsonValue.parse_str` reads one strict document and returns a `JsonValue`
   (`Null`, `Bool`, `Number`, `String`, `Array` or `Object`), or
-  `InvalidJsonValue({ line, column, message })`. Repeated keys are rejected.
+  `InvalidJsonValue({ line, column, problem })`. Repeated keys are rejected.
 * `JsonValue.parse_with` takes a `JsonValue.Options` record with defaulted
   fields: limits (`max_depth`, 128 by default, `max_items`,
   `max_string_bytes`, `max_number_digits`), relaxations (`comments`,
@@ -298,7 +300,7 @@ before you render untrusted input (see <<markdown>>).
 
 * `Xml.parse_str` returns an `Xml` record with the
   `declaration : Try(Declaration, [Missing])` and the `root` element, or
-  `InvalidXml({ line, column, message })`.
+  `InvalidXml({ line, column, problem })`.
 * The node methods `name`, `attribute`, `children_named` and `text` read the
   tree: `root.attribute("href")` is `Try(Str, [Missing])`.
 * `Xml.parser` is the same parser for use inside a larger parser.
@@ -331,7 +333,7 @@ Markdown frontmatter.
 * `Yaml.parse_str` returns a `Yaml` tree (`Null`, `Bool`, `Int`, `Float`,
   `Text`, `Sequence` or `Mapping`). The methods `get`, `at`, `get_path`,
   `as_str`, `as_i64`, `as_bool` and `as_list` walk it.
-* Both fail with `InvalidYaml({ line, column, message })`. `Yaml.parser` is
+* Both fail with `InvalidYaml({ line, column, problem })`. `Yaml.parser` is
   the tree parser for embedding.
 
 Anchors, aliases, tags, directives, complex keys, multi-line flow collections,

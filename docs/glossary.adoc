@@ -151,7 +151,7 @@ optional; a required field that is absent fails with
 == Parsing incomplete
 The parser succeeded but did not consume the whole input. Functions such as
 `Utf8.parse_str`, which expect to read everything, report it as a
-`ParseError` at the furthest failure, or as `unexpected input` at the
+`ParseError` at the furthest failure, or as `UnexpectedInput` at the
 leftover.
 
 [#glossary-progress]

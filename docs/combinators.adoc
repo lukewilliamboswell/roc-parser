@@ -231,7 +231,7 @@ include::examples/combinators-behaviour.roc[tag=many-backtracks,indent=0]
 
 The failure of the element that stopped the repetition is kept, though. So
 when you parse a whole input with `Utf8.parse_str`, a bad element in the
-middle of a list is reported by its own failure message and offset.
+middle of a list is reported by its own problem tag and offset.
 <<errors>> shows how to turn that into a useful message.
 
 == Recursive structures
