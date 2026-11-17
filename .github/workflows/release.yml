@@ -48,6 +48,7 @@ jobs:
   docs:
     name: Build the documentation site
     needs: release
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
