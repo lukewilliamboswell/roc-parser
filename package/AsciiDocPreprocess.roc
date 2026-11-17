@@ -11,6 +11,7 @@ AsciiDocPreprocess :: [].{
 	Include : { path : Str, source : Str }
 	Options : { includes : List(Include), attributes : List(Attribute), max_depth : U64, expand_includes : Bool }
 	Line : { text : Str, attributes : List(Attribute), path : Str, line : U64, offset : U64 }
+
 	## A preprocessing failure with source paths and configured limits as data.
 	Problem : [IncludeCycle(Str), IncludeDepthExceeded({ path : Str, max : U64 }), InvalidIncludePath(Str), MissingInclude(Str), UnexpandedInclude(Str), ExpandedSourceTooLarge(U64)]
 	Error : { path : Str, line : U64, offset : U64, problem : Problem }
