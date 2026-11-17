@@ -70,9 +70,12 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	custom = |fun| {
 		{
 			fun: |input| {
+				# Retain only the size for errors, rather than aliasing input while
+				# the custom parser consumes it.
+				len = input.len()
 				match fun(input) {
 					Ok({ value, rest }) => Ok({ value, rest, furthest: no_failure({}) })
-					Err(ParseError({ problem, offset })) => Err({ problem, remaining: minus(input.len(), offset) })
+					Err(ParseError({ problem, offset })) => Err({ problem, remaining: minus(len, offset) })
 				}
 			},
 		}
@@ -90,9 +93,10 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	## your own parsing building blocks.
 	run : Parser(input, a, p), input -> ParseResult(input, a, p) where [input.len : input -> U64]
 	run = |parser, input| {
+		len = input.len()
 		match step(parser, input) {
 			Ok({ value, rest, furthest: _ }) => Ok({ value, rest })
-			Err(failure) => Err(ParseError({ problem: failure.problem, offset: minus(input.len(), failure.remaining) }))
+			Err(failure) => Err(ParseError({ problem: failure.problem, offset: minus(len, failure.remaining) }))
 		}
 	}
 
@@ -620,19 +624,35 @@ step = |{ fun }, input| {
 
 # Repeat `parser` from `input`, whose length is `len`, collecting `values`.
 # The no-progress check compares lengths, so each iteration is O(1).
+# Keep repetition in one loop so element parsers can inline across iterations.
 many_help : Parser(input, a, p), List(a), input, U64, Failure(p) -> Step(input, List(a), p) where [input.len : input -> U64]
 many_help = |parser, values, input, len, furthest| {
-	match step(parser, input) {
-		Err(failure) =>
-			Ok({ value: values, rest: input, furthest: further(furthest, failure) })
+	var $values = values
+	var $input = input
+	var $len = len
+	var $furthest = furthest
+	while True {
+		match step(parser, $input) {
+			Err(failure) =>
+				return Ok({ value: $values, rest: $input, furthest: further($furthest, failure) })
 
-		Ok(next) => {
-			next_len = next.rest.len()
-			if next_len == len {
-				# No progress: repeating would loop forever on the same input.
-				Ok({ value: values, rest: input, furthest: further(furthest, next.furthest) })
-			} else {
-				many_help(parser, values.append(next.value), next.rest, next_len, further(furthest, next.furthest))
+			Ok(next) => {
+				next_len = next.rest.len()
+				if next_len == $len {
+					# No progress: repeating would loop forever on the same input.
+					return Ok({ value: $values, rest: $input, furthest: further($furthest, next.furthest) })
+				}
+				if $values.is_empty() {
+					# Reserve only after progress. The first element's input use
+					# estimates cardinality, with bounded speculative capacity.
+					consumed = minus($len, next_len)
+					estimate = if (consumed == 0) 1 else $len // consumed
+					$values = List.with_capacity(if (estimate > 16) 16 else estimate)
+				}
+				$values = $values.append(next.value)
+				$input = next.rest
+				$len = next_len
+				$furthest = further($furthest, next.furthest)
 			}
 		}
 	}
@@ -650,6 +670,13 @@ expect {
 	Parser.run(Parser.chomp_until('\n'), []).is_err()
 }
 
+# Custom error offsets remain clamped to the input length.
+expect {
+	parser : Parser(List(U8), {}, [PastInput])
+	parser = Parser.custom(|_| Err(ParseError({ problem: PastInput, offset: 99 })))
+	Parser.run(parser, ['a', 'b']) == Err(ParseError({ problem: PastInput, offset: 2 }))
+}
+
 # Chomping while a predicate holds leaves the first non-matching byte.
 expect {
 	input : List(U8)
@@ -665,6 +692,26 @@ expect {
 expect {
 	result = Parser.run(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
 	result == { value: [['a', 'a']], rest: ['b'] }
+}
+
+# A repeated element can inspect further than the bytes it accepts. Keep the
+# failure of the stopping element, including after earlier successful items.
+expect {
+	element = Parser.custom(
+		|input| match input {
+			['a', .. as rest] => Ok({ value: 'a', rest })
+			_ => Err(ParseError({ problem: RepeatedLookahead, offset: 1 }))
+		},
+	)
+	Parser.parse(Parser.many(element), "abc".to_utf8()) == Err(ParseError({ problem: RepeatedLookahead, offset: 2 }))
+}
+
+# A successful fallback that consumes nothing still carries the earlier
+# alternative's failure, but contributes no value to the repetition.
+expect {
+	lookahead = Parser.custom(|_| Err(ParseError({ problem: FallbackLookahead, offset: 1 })))
+	element = lookahead.alt(Parser.const('x'))
+	Parser.parse(Parser.many(element), "ab".to_utf8()) == Err(ParseError({ problem: FallbackLookahead, offset: 1 }))
 }
 
 # Separated repetition stops when separator and element consume nothing.

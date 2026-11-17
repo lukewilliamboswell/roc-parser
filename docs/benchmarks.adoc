@@ -80,6 +80,10 @@ measurements are needed. This measurement cache is separate from the shared
 <<correctness-oracle-cache,correctness oracle cache>>: performance depends on runtime, hardware and
 measurement conditions as well as the input.
 
+Reference receipts persist in the local cache. A different machine configuration
+reports `ReferenceUnavailable` and requires an explicit reference refresh rather
+than reusing timings from another machine. Cross-language comparisons run locally.
+
 [#streaming-performance]
 == Measure streaming performance and elapsed-time targets
 
@@ -143,7 +147,8 @@ $ python3 scripts/readme_throughput.py --cpu 3 --refresh-references  # explicit 
 The runner builds Roc drivers serially with `--opt=speed --debug`, then pins
 the timed runs to that CPU. It parses one deterministic document for each
 concrete README format, constructs the result and consumes a
-checksum. CSV, QIF and OFX use whole-document collection; the markup formats
+checksum. CSV collects string rows with `CSV.parse_string_records`; QIF and
+OFX use whole-document collection. The markup formats
 use validated fragments with explicit namespace roots for SVG and MathML.
 Documents are about 64 KiB, except HTTP, which uses a
 555-byte browser GET request with realistic headers and no body. Opaque body
@@ -192,10 +197,19 @@ document a given number of times, stops the clock, and prints one JSON line:
 
 Process start-up, reading the input and printing are outside the timed region.
 Collection comparators build their in-memory result and fold over it into a
-checksum. CSV comparators labelled `consume` discard each completed record and
-reuse buffers where the library permits. Compare collection and consumption
-workloads separately. These drivers preload the source: their RSS includes the
-complete input and does not establish bounded file-source memory.
+checksum. Comparators labelled `consume` discard each completed record and
+reuse buffers where the library permits. Roc's CSV, QIF and OFX consumption
+drivers pass preloaded input through the public streaming APIs in 64 KiB
+chunks, validate each record, and consume the same decoded field checksums as
+their collection drivers without collecting a document. Compare collection
+and consumption workloads separately; the financial references currently
+provide collection comparisons only.
+
+These drivers preload the source: their RSS includes the complete input and
+does not establish bounded file-source memory. Use
+`bench/roc/csv-file-stream.roc` for a file/stdin source that retains bounded
+read buffers and includes reading in its timing. Its checksum weights raw
+field bytes directly, including bytes that are not valid UTF-8.
 
 QIF compares typed bank transactions with Quiffen and Rust `qif_parser`.
 Rust QIF retains borrowed strings and uses `f64` amounts rather than Roc’s
@@ -401,14 +415,8 @@ In the per-document table, check these before trusting a number:
 
 == Continuous integration
 
-link:{src}/.github/workflows/bench.yml[`.github/workflows/bench.yml`] runs the
-full comparison with `--allocations`, through Blueprint
-(<<benchmarks-blueprint>>), on `ubuntu-latest` every Monday and on
-demand (*Actions → Benchmarks → Run workflow*), with the latest Roc nightly. It
-publishes `report.md` as the job summary and uploads the reports as the
-`bench-<run id>` artifact for 90 days. GitHub's shared runners vary by a few
-tens of percent between runs, so compare ratios within one run rather than
-absolute times across runs.
+Cross-language performance and correctness comparisons are local-only. CI,
+nightly compatibility checks and releases do not build or run the references.
 
 Every pull request runs `--quick --langs roc --fail-on-error` as the `bench`
 section of `blueprint run check` (see <<contributing>>). It fails only when a
@@ -420,10 +428,10 @@ catches a parser that has turned quadratic without gating on noisy timings.
 
 link:{src}/Blueprint.roc[`Blueprint.roc`] at the repository root describes the
 `bench` environment for
-https://github.com/lukewilliamboswell/roc-blueprint[roc-blueprint] 0.6.0: Go,
+https://github.com/lukewilliamboswell/roc-blueprint[roc-blueprint] 0.13.0: Go,
 Rust (cargo and rustc), Python and Git from Nix, at the nixpkgs revision the
 committed `Blueprint.lock` records, and Roc from your machine. It declares
-`x86_64-linux` (CI) and `aarch64-darwin` (Apple silicon Macs), and needs Nix
+`x86_64-linux` and `aarch64-darwin` (Apple silicon Macs), and needs Nix
 with flakes enabled. Install the `blueprint` binary as <<contributing>>
 describes, put the latest Roc nightly on `PATH` as `roc`, and run:
 
@@ -441,9 +449,8 @@ Generated files go to `.blueprint/`, which is not committed. Leave `ROC` unset
 when you run `blueprint`: Blueprint reads `ROC` to choose the compiler that
 evaluates `Blueprint.roc` itself.
 
-*Compiler.* Roc is not pinned. The tasks use `roc` from your `PATH`, which in CI
-is the latest nightly, so a benchmark run measures the compiler the package is
-tested with that day. The report names it.
+*Compiler.* Roc is not pinned. The local tasks use `roc` from your `PATH`; the
+report names the compiler measured. Use the latest nightly to match package CI.
 
 Go, Rust and Python follow the nixpkgs revision in `Blueprint.lock`. Library
 versions are pinned by `Cargo.lock`, `go.sum` and `requirements.txt` as above,
@@ -457,10 +464,6 @@ packages go into one virtual environment per interpreter, under
 `Blueprint.lock` and the nixpkgs revision it pins; a run without the flag says
 `outside blueprint`. Both record the path of each toolchain, so you can check
 that it came from `/nix/store`.
-
-*CI.* The benchmark workflow installs Blueprint and Nix with roc-automation's
-`setup-blueprint` action and runs `blueprint run bench`, so CI and a Mac use the
-same pins.
 
 Without Nix, install the toolchains yourself and run `scripts/bench.py` as
 shown in <<benchmarks>>; the report records every version either way.
@@ -572,9 +575,8 @@ host is busy: those families run 1.1 to 1.35 times the reference's instructions.
 Use `--replay failures/<hash>-<mode>.json` to time a saved input again.
 
 `--smoke` selects only two tiny inputs and one one-millisecond sample, checks the
-protocol and correctness, and disables ratio assertions. This is the intended CI
-freshness check. Broad runtime ratchets remain an explicit local activity because
-shared CI timing is noisy. Routine checks build the reference oracle with
+protocol and correctness, and disables ratio assertions. Both smoke and full
+reference comparisons are explicit local activities. Build the reference oracle with
 `ReleaseFast`, also required for a full ratio comparison. Its build receipt must
 match the binary hash and immutable compiler revision. The smoke permits an
 explicit `ReleaseSafe` build for optional safety checks.

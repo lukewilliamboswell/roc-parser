@@ -13,7 +13,7 @@ OFX := { statements : List(OFX.Statement) }.{
 	to_hash : _
 
 	## Original encoded byte offset and one-based line and byte column.
-	Problem : [IncompleteDocument, UnfinishedStatement, HeaderTooLarge(U64), TokenTooLarge(U64), FieldTooLarge(U64), RecordTooLarge(U64), TrailingContent, NonAsciiHeader, SyntaxMismatch, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(Streaming.EncodingError), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestingTooDeep(U64), NestedScalar, NestedStatement, InvalidParent(Str), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag(Str), MalformedRecord, TooManyFields(U64), EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Str), MissingAccountId, MissingBankId, InvalidStartTimestamp(Str), InvalidEndTimestamp(Str), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Str), InvalidAmount(Str), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), ExtensionTooDeep(U64), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
+	Problem : [IncompleteDocument, UnfinishedStatement, HeaderTooLarge(U64), TokenTooLarge(U64), FieldTooLarge(U64), RecordTooLarge(U64), TrailingContent, NonAsciiHeader, SyntaxMismatch, SelfClosingEndTag, EmptyTagName, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(Streaming.EncodingError), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestingTooDeep(U64), NestedScalar, NestedStatement, InvalidParent(Str), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag(Str), MalformedRecord, TooManyFields(U64), EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Str), MissingAccountId, MissingBankId, InvalidStartTimestamp(Str), InvalidEndTimestamp(Str), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Str), InvalidAmount(Str), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), ExtensionTooDeep(U64), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
 	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Writer wire syntax; readers detect either family.
@@ -63,34 +63,9 @@ OFX := { statements : List(OFX.Statement) }.{
 	## Collect a complete encoded document with encounter-order fail-fast errors.
 	parse_bytes : List(U8), Props -> Try(OFX, [InvalidOfx(Error)])
 	parse_bytes = |bytes, props| {
-		var $state = initial(props)
-		var $at = 0
-		var $statements = []
-		var $current = empty_statement(empty_context)
-		while True {
-			result = advance($state, bytes.drop_first($at), Final)
-			$state = result.state
-			$at = $at + result.consumed
-			match result.outcome {
-				Item(StatementStart(context)) => {
-					$current = empty_statement(context)
-				}
-				Item(Transaction(transaction)) => {
-					$current = { ..$current, transactions: $current.transactions.append(transaction) }
-				}
-				Item(LedgerBalance(balance)) => {
-					$current = { ..$current, ledger_balance: Ok(balance) }
-				}
-				Item(AvailableBalance(balance)) => {
-					$current = { ..$current, available_balance: Ok(balance) }
-				}
-				Item(StatementEnd) => {
-					$statements = $statements.append($current)
-				}
-				Failed(error) | RecordError(error) => return Err(InvalidOfx(error))
-				Done => return Ok(OFX.{ statements: $statements })
-				NeedInput => return Err(InvalidOfx(located_problem($state, IncompleteDocument)))
-			}
+		match xml_whole(bytes, props) {
+			Ok(document) => Ok(document)
+			Err(UseStreaming) => collect_bytes(bytes, props)
 		}
 	}
 
@@ -161,7 +136,9 @@ finish_writer = |state| {
 
 Frame : { name : Str, offset : U64 }
 
-State : { props : OFX.Props, offset : U64, line : U64, column : U64, last_cr : Bool, token : List(U8), token_mode : Bool, quote : U8, header : List(U8), header_done : Bool, syntax : OFX.Syntax, encoding : [Utf8, Windows1252, Ascii], stack : List(Frame), capture : List(U8), capture_tag : Str, capture_depth : U64, leaf : List(U8), context : OFX.Context, started : Bool, in_statement : Bool, root_seen : Bool, root_closed : Bool, header_info : OFX.Header, wrapper_id : Str, wrapper_status : OFX.Status, status_seen : Bool, context_seen : List(Str), balances_seen : List(Str), terminal : Bool }
+# Statement metadata changes rarely while tokens are consumed. Keep it behind
+# shared boxes so moving the lexical state does not copy all its strings.
+State : { props : OFX.Props, offset : U64, line : U64, column : U64, last_cr : Bool, token : List(U8), token_mode : Bool, quote : U8, header : List(U8), header_done : Bool, syntax : OFX.Syntax, encoding : [Utf8, Windows1252, Ascii], stack : List(Frame), capture : List(U8), capture_tag : Str, capture_depth : U64, leaf : List(U8), context : Box(OFX.Context), started : Bool, in_statement : Bool, root_seen : Bool, root_closed : Bool, header_info : Box(OFX.Header), wrapper_id : Str, wrapper_status : Box(OFX.Status), status_seen : Bool, context_seen : List(Str), balances_seen : List(Str), terminal : Bool }
 
 WriteState : { props : OFX.WriteProps, opened : Bool, statement : Bool, list_open : Bool, kind : [Bank, CreditCard], balances : List(Str), header : OFX.Header }
 
@@ -177,8 +154,41 @@ empty_header = { old_uid: "NONE", new_uid: "NONE", server_date: "20000101000000"
 empty_statement : OFX.Context -> OFX.Statement
 empty_statement = |context| { context, transactions: [], ledger_balance: Err(Missing), available_balance: Err(Missing) }
 
+collect_bytes : List(U8), OFX.Props -> Try(OFX, [InvalidOfx(OFX.Error)])
+collect_bytes = |bytes, props| {
+	var $state = initial(props)
+	var $at = 0
+	var $statements = []
+	var $current = empty_statement(empty_context)
+	while True {
+		result = advance($state, bytes.drop_first($at), Final)
+		$state = result.state
+		$at = $at + result.consumed
+		match result.outcome {
+			Item(StatementStart(context)) => {
+				$current = empty_statement(context)
+			}
+			Item(Transaction(transaction)) => {
+				$current = { ..$current, transactions: $current.transactions.append(transaction) }
+			}
+			Item(LedgerBalance(balance)) => {
+				$current = { ..$current, ledger_balance: Ok(balance) }
+			}
+			Item(AvailableBalance(balance)) => {
+				$current = { ..$current, available_balance: Ok(balance) }
+			}
+			Item(StatementEnd) => {
+				$statements = $statements.append($current)
+			}
+			Failed(error) | RecordError(error) => return Err(InvalidOfx(error))
+			Done => return Ok(OFX.{ statements: $statements })
+			NeedInput => return Err(InvalidOfx(located_problem($state, IncompleteDocument)))
+		}
+	}
+}
+
 initial : OFX.Props -> State
-initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: empty_context, started: False, in_statement: False, root_seen: False, root_closed: False, header_info: empty_header, wrapper_id: "", wrapper_status: { code: "", severity: "", message: "" }, status_seen: False, context_seen: [], balances_seen: [], terminal: False }
+initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: Box.box(empty_context), started: False, in_statement: False, root_seen: False, root_closed: False, header_info: Box.box(empty_header), wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False, context_seen: [], balances_seen: [], terminal: False }
 
 located_problem : State, Parser.Problem(OFX.Problem) -> OFX.Error
 located_problem = |state, detail| { offset: state.offset, line: state.line, column: state.column, problem: detail }
@@ -199,6 +209,85 @@ move = |state, byte| {
 	}
 }
 
+markup_start : Utf8.ByteClass
+markup_start = Utf8.ByteClass.from_bytes(['<'])
+
+# Apply source coordinates once per span, visiting only its line endings.
+# In particular, CRLF remains one line ending even when split between calls.
+move_span : State, List(U8), U64, U64 -> State
+move_span = |state, bytes, start, end| {
+	# A short token must not rescan the rest of a compact source chunk.
+	span_bytes = bytes.take_first(end)
+	var $at = start
+	var $line = state.line
+	var $column = state.column
+	var $last_cr = state.last_cr
+	while $at < end {
+		next = Utf8.find_line_end(span_bytes, $at)
+		if next >= end {
+			break
+		}
+		if next > $at {
+			$last_cr = False
+		}
+		byte = bytes.get(next) ?? 0
+		if byte == '\r' {
+			$line = $line + 1
+			$last_cr = True
+		} else {
+			$line = $line + (if ($last_cr) 0 else 1)
+			$last_cr = False
+		}
+		$column = 1
+		$at = next + 1
+	}
+	if $at < end {
+		$column = $column + end - $at
+		$last_cr = False
+	}
+	{ ..state, offset: state.offset + end - start, line: $line, column: $column, last_cr: $last_cr }
+}
+
+# Include at most the first excess byte so limit errors keep their original
+# offset and the unfinished buffer never grows to the rest of a large chunk.
+bounded_end : U64, U64, U64, U64 -> U64
+bounded_end = |start, end, retained, limit| {
+	allowance = if (retained >= limit) 0 else limit - retained
+	if end - start > allowance {
+		start + allowance + 1
+	} else {
+		end
+	}
+}
+
+# Keep the scanner's cursor and quote state in small locals. Materialize one
+# token per call rather than updating the full decoder for every byte.
+scan_token : List(U8), List(U8), U64, U64, U8 -> { token : List(U8), at : U64, quote : U8, complete : Bool }
+scan_token = |prefix, bytes, start, end, quote| {
+	joined = |index| if (index < prefix.len()) prefix.get(index) ?? 0 else bytes.get(start + index - prefix.len()) ?? 0
+	available = prefix.len() + end - start
+	comment = available >= 4 and joined(0) == '<' and joined(1) == '!' and joined(2) == '-' and joined(3) == '-'
+	cdata = available >= 9 and joined(0) == '<' and joined(1) == '!' and joined(2) == '[' and joined(3) == 'C' and joined(4) == 'D' and joined(5) == 'A' and joined(6) == 'T' and joined(7) == 'A' and joined(8) == '['
+	pi = available >= 2 and joined(0) == '<' and joined(1) == '?'
+	var $at = start
+	var $quote = quote
+	while $at < end {
+		byte = bytes.get($at) ?? 0
+		$at = $at + 1
+		if byte == '"' or byte == '\'' {
+			$quote = if ($quote == 0) byte else if ($quote == byte) 0 else $quote
+		}
+		if byte == '>' {
+			len = prefix.len() + $at - start
+			complete = if (comment) len >= 3 and joined(len - 2) == '-' and joined(len - 3) == '-' else if (cdata) len >= 3 and joined(len - 2) == ']' and joined(len - 3) == ']' else if (pi) len >= 2 and joined(len - 2) == '?' else $quote == 0
+			if complete {
+				return { token: prefix.concat(bytes.sublist({ start, len: $at - start })), at: $at, quote: $quote, complete: True }
+			}
+		}
+	}
+	{ token: prefix.concat(bytes.sublist({ start, len: $at - start })), at: $at, quote: $quote, complete: False }
+}
+
 advance : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, OFX.Event, OFX.Error)
 advance = |state, bytes, ending| {
 	if state.terminal {
@@ -206,35 +295,21 @@ advance = |state, bytes, ending| {
 	}
 	var $s = state
 	var $at = 0
+	var $borrowed_leaf = False
 	while $at < bytes.len() {
 		byte = bytes.get($at) ?? 0
-		$s = move($s, byte)
-		$at = $at + 1
-		if !$s.header_done {
-			if byte == '<' {
-				match read_header($s) {
-					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
-					Ok(next) => {
-						$s = { ..next, token_mode: True, token: ['<'] }
-					}
-				}
-			} else {
-				$s = { ..$s, header: $s.header.append(byte) }
-				if $s.header.len() > $s.props.max_token_bytes {
-					return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, HeaderTooLarge(state.props.max_token_bytes))) }
-				}
-			}
-		} else if $s.token_mode {
-			$s = { ..$s, token: $s.token.append(byte) }
+		if $s.header_done and $s.token_mode {
+			end = bounded_end($at, bytes.len(), $s.token.len(), $s.props.max_token_bytes)
+			scanned = scan_token($s.token, bytes, $at, end, $s.quote)
+			$s = move_span($s, bytes, $at, scanned.at)
+			$at = scanned.at
+			$s = { ..$s, token: scanned.token, quote: scanned.quote }
 			if $s.token.len() > $s.props.max_token_bytes {
 				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, TokenTooLarge($s.props.max_token_bytes))) }
 			}
-			if byte == '"' or byte == '\'' {
-				$s = { ..$s, quote: if ($s.quote == 0) byte else if ($s.quote == byte) 0 else $s.quote }
-			}
-			if token_complete($s.token, $s.quote) {
+			if scanned.complete {
 				match consume_token($s) {
-					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
+					Err(failure) => return { state: { ..failure.state, terminal: True }, consumed: $at, outcome: Failed(failure.error) }
 					Ok({ state: next, outcome }) => {
 						$s = { ..next, token: [], token_mode: False, quote: 0 }
 						match outcome {
@@ -245,23 +320,46 @@ advance = |state, bytes, ending| {
 					}
 				}
 			}
-		} else if byte == '<' {
-			if !$s.capture_tag.is_empty() {
-				$s = { ..$s, capture: $s.capture.concat($s.leaf) }
-			}
-			else if !$s.leaf.is_empty() {
-				match consume_text($s) {
-					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
-					Ok(next) => {
-						$s = next
-					}
-				}
-			}
-			$s = { ..$s, leaf: [], token_mode: True, token: ['<'] }
-		} else {
-			$s = { ..$s, leaf: $s.leaf.append(byte) }
+		} else if $s.header_done and byte != '<' {
+			end = bounded_end($at, bounded_end($at, Utf8.find_any(bytes, $at, markup_start), $s.leaf.len(), $s.props.max_token_bytes), $s.capture.len() + $s.leaf.len(), $s.props.max_record_bytes)
+			$borrowed_leaf = $s.leaf.is_empty()
+			$s = move_span($s, bytes, $at, end)
+			$s = { ..$s, leaf: $s.leaf.concat(bytes.sublist({ start: $at, len: end - $at })) }
+			$at = end
 			if $s.leaf.len() > $s.props.max_token_bytes {
 				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, FieldTooLarge($s.props.max_token_bytes))) }
+			}
+		} else {
+			$s = move($s, byte)
+			$at = $at + 1
+			if !$s.header_done {
+				if byte == '<' {
+					match read_header($s) {
+						Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
+						Ok(next) => {
+							$s = { ..next, token_mode: True, token: ['<'] }
+						}
+					}
+				} else {
+					$s = { ..$s, header: $s.header.append(byte) }
+					if $s.header.len() > $s.props.max_token_bytes {
+						return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, HeaderTooLarge(state.props.max_token_bytes))) }
+					}
+				}
+			} else {
+				if !$s.capture_tag.is_empty() {
+					$s = { ..$s, capture: $s.capture.concat($s.leaf) }
+				}
+				else if !$s.leaf.is_empty() {
+					match consume_text($s) {
+						Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
+						Ok(next) => {
+							$s = next
+						}
+					}
+				}
+				$s = { ..$s, leaf: [], token_mode: True, token: ['<'] }
+				$borrowed_leaf = False
 			}
 		}
 		if $s.capture.len() + $s.leaf.len() > $s.props.max_record_bytes {
@@ -277,23 +375,16 @@ advance = |state, bytes, ending| {
 		}
 		{ state: { ..$s, terminal: True }, consumed: $at, outcome: Done }
 	} else {
+		if $borrowed_leaf {
+			# A complete field may borrow its current chunk, but an unfinished
+			# field must not keep that entire allocation alive across pulls.
+			var $owned = List.with_capacity($s.leaf.len())
+			for byte in $s.leaf {
+				$owned = $owned.append(byte)
+			}
+			$s = { ..$s, leaf: $owned }
+		}
 		{ state: $s, consumed: $at, outcome: NeedInput }
-	}
-}
-
-token_complete : List(U8), U8 -> Bool
-token_complete = |bytes, quote| {
-	if bytes.starts_with("<!--".to_utf8()) {
-		bytes.ends_with("-->".to_utf8())
-	}
-	else if bytes.starts_with("<![CDATA[".to_utf8()) {
-		bytes.ends_with("]]>".to_utf8())
-	}
-	else if bytes.starts_with("<?".to_utf8()) {
-		bytes.ends_with("?>".to_utf8())
-	}
-	else {
-		bytes.last() == Ok('>') and quote == 0
 	}
 }
 
@@ -320,7 +411,7 @@ read_header = |state| {
 	var $charset = "NONE"
 	var $version = ""
 	var $seen = []
-	var $header_info = state.header_info
+	var $header_info = Box.unbox(state.header_info)
 	for line in text.replace_each("\r", "").split_on("\n").keep_if(|s| !s.trim().is_empty()) {
 		parts = line.split_on(":")
 		if parts.len() != 2 {
@@ -380,7 +471,7 @@ read_header = |state| {
 	if (state.props.encoding == Utf8 and $encoding == Windows1252) or (state.props.encoding == Windows1252 and $encoding != Windows1252) {
 		return Err(located_problem(state, HeaderEncodingMismatch))
 	}
-	Ok({ ..state, header_done: True, syntax: Sgml102, encoding: $encoding, header: [], header_info: $header_info })
+	Ok({ ..state, header_done: True, syntax: Sgml102, encoding: $encoding, header: [], header_info: Box.box($header_info) })
 }
 
 decode : State, List(U8) -> Try(Str, OFX.Error)
@@ -402,38 +493,45 @@ consume_text = |state| {
 		return Ok(state)
 	}
 	decoded = Xml.parse_str("<v>${text}</v>").map_err(|_| located_problem(state, InvalidCharacterData))?.root.text().trim()
+	consume_field(state, top, decoded)
+}
+
+# Both byte-chunk parsing and the validated XML source fold reach this handler
+# with decoded, normalized field content.
+consume_field : State, Str, Str -> Try(State, OFX.Error)
+consume_field = |state, top, decoded| {
 	if ["CURDEF", "DTSTART", "DTEND"].contains(top) {
 		if state.started or state.context_seen.contains(top) {
 			return Err(located_problem(state, ContextOrder(top)))
 		}
 	}
-	context = state.context
+	context = Box.unbox(state.context)
 	if ["DTSERVER", "LANGUAGE", "ORG", "FID"].contains(top) {
 		if state.started {
 			return Err(located_problem(state, SignonOrder))
 		}
-		header = state.header_info
+		header = Box.unbox(state.header_info)
 		next_header = match top {
 			"DTSERVER" => { ..header, server_date: decoded }
 			"LANGUAGE" => { ..header, language: decoded }
 			"ORG" => { ..header, org: decoded }
 			_ => { ..header, fid: decoded }
 		}
-		return Ok({ ..state, header_info: next_header })
+		return Ok({ ..state, header_info: Box.box(next_header) })
 	}
 	match top {
-		"CURDEF" => Ok({ ..state, context_seen: state.context_seen.append(top), context: { ..context, currency: decoded } })
-		"DTSTART" => Ok({ ..state, context_seen: state.context_seen.append(top), context: { ..context, start: decoded } })
-		"DTEND" => Ok({ ..state, context_seen: state.context_seen.append(top), context: { ..context, end: decoded } })
+		"CURDEF" => Ok({ ..state, context_seen: state.context_seen.append(top), context: Box.box({ ..context, currency: decoded }) })
+		"DTSTART" => Ok({ ..state, context_seen: state.context_seen.append(top), context: Box.box({ ..context, start: decoded }) })
+		"DTEND" => Ok({ ..state, context_seen: state.context_seen.append(top), context: Box.box({ ..context, end: decoded }) })
 		"TRNUID" => Ok({ ..state, wrapper_id: decoded })
 		"CODE" => {
 			if decoded != "0" {
 				return Err(located_problem(state, UnsuccessfulResponse(decoded)))
 			}
-			Ok({ ..state, wrapper_status: { ..state.wrapper_status, code: decoded } })
+			Ok({ ..state, wrapper_status: Box.box({ ..Box.unbox(state.wrapper_status), code: decoded }) })
 		}
-		"SEVERITY" => Ok({ ..state, wrapper_status: { ..state.wrapper_status, severity: decoded } })
-		"MESSAGE" => Ok({ ..state, wrapper_status: { ..state.wrapper_status, message: decoded } })
+		"SEVERITY" => Ok({ ..state, wrapper_status: Box.box({ ..Box.unbox(state.wrapper_status), severity: decoded }) })
+		"MESSAGE" => Ok({ ..state, wrapper_status: Box.box({ ..Box.unbox(state.wrapper_status), message: decoded }) })
 		_ => Ok(state)
 	}
 }
@@ -442,79 +540,107 @@ Action : [Quiet, Emitted(OFX.Event), Rejected(OFX.Error)]
 
 Consumed : { state : State, outcome : Action }
 
-consume_token : State -> Try(Consumed, OFX.Error)
+# Keep the failure state in the result so callers can consume the input state
+# without retaining aliases for a cold error arm.
+TokenFailure : { state : State, error : OFX.Error }
+
+token_failure : State, Parser.Problem(OFX.Problem) -> TokenFailure
+token_failure = |state, detail| { state, error: located_problem(state, detail) }
+
+consume_token : State -> Try(Consumed, TokenFailure)
 consume_token = |state| {
-	text = decode(state, state.token)?
+	text = decode(state, state.token).map_err(|error| { state, error })?
 	if text.starts_with("<!DOCTYPE") or text.starts_with("<!ENTITY") {
-		return Err(located_problem(state, DtdUnsupported))
+		return Err(token_failure(state, DtdUnsupported))
 	}
 	if text.starts_with("<!--") or text.starts_with("<![CDATA[") {
+		if text.starts_with("<![CDATA[") and text.count_utf8_bytes() < 12 {
+			return Err(token_failure(state, MalformedCommentOrCdata))
+		}
 		if text.starts_with("<![CDATA[") and ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(state.stack.last().map_ok(|frame| frame.name) ?? "") {
 			content = Str.from_utf8_lossy(text.to_utf8().sublist({ start: 9, len: text.count_utf8_bytes() - 12 }))
 			if content != content.trim() {
-				return Err(located_problem(state, PaddedCdataUnsupported))
+				return Err(token_failure(state, PaddedCdataUnsupported))
 			}
 		}
-		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| located_problem(state, MalformedCommentOrCdata))?
+		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| token_failure(state, MalformedCommentOrCdata))?
 		if state.syntax == Sgml102 {
-			return Err(located_problem(state, SgmlCommentUnsupported))
+			return Err(token_failure(state, SgmlCommentUnsupported))
 		}
 		if !state.capture_tag.is_empty() {
 			return Ok({ state: { ..state, capture: state.capture.concat(state.token) }, outcome: Quiet })
 		}
 		if text.starts_with("<![CDATA[") {
-			return Err(located_problem(state, CdataPlacementUnsupported))
+			return Err(token_failure(state, CdataPlacementUnsupported))
 		}
 		return Ok({ state, outcome: Quiet })
 	}
 	if text.starts_with("<?") {
 		if state.root_seen {
-			return Err(located_problem(state, ProcessingInstructionPlacement))
+			return Err(token_failure(state, ProcessingInstructionPlacement))
 		}
 		if state.syntax == Sgml102 {
-			return Err(located_problem(state, SyntaxMismatch))
+			return Err(token_failure(state, SyntaxMismatch))
 		}
 		low = lower(text)
 		marker = if (low.starts_with("<?xml ")) "xml" else "ofx"
 		if state.context_seen.contains(marker) or (marker == "xml" and state.context_seen.contains("ofx")) {
-			return Err(located_problem(state, PrologueOrder))
+			return Err(token_failure(state, PrologueOrder))
 		}
 		if marker == "xml" {
-			_ = Xml.parse_str("${text}<v/>").map_err(|_| located_problem(state, MalformedXmlDeclaration))?
+			_ = Xml.parse_str("${text}<v/>").map_err(|_| token_failure(state, MalformedXmlDeclaration))?
 			if !state.header.is_empty() and state.header != [239, 187, 191] {
-				return Err(located_problem(state, XmlDeclarationOrder))
+				return Err(token_failure(state, XmlDeclarationOrder))
 			}
 		}
 		var $next = state
 		if low.starts_with("<?xml ") {
-			declared = xml_encoding(text).map_err(|detail| located_problem(state, detail))?
+			declared = xml_encoding(text).map_err(|detail| token_failure(state, detail))?
 			$next = { ..state, encoding: declared }
 			if (state.props.encoding == Utf8 and $next.encoding == Windows1252) or (state.props.encoding == Windows1252 and $next.encoding != Windows1252) {
-				return Err(located_problem(state, DeclarationEncodingMismatch))
+				return Err(token_failure(state, DeclarationEncodingMismatch))
 			}
 		} else if text.starts_with("<?OFX ") {
-			attrs = Str.from_utf8_lossy(state.token.sublist({ start: 6, len: state.token.len() - 8 }))
-			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| located_problem(state, MalformedProcessingInstruction))?.root
-			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
-				return Err(located_problem(state, UnsupportedXmlHeader))
+			if state.token.len() < 8 {
+				return Err(token_failure(state, MalformedProcessingInstruction))
 			}
-			$next = { ..$next, header_info: { ..$next.header_info, old_uid: node.attribute("OLDFILEUID") ?? "NONE", new_uid: node.attribute("NEWFILEUID") ?? "NONE" } }
+			attrs = Str.from_utf8_lossy(state.token.sublist({ start: 6, len: state.token.len() - 8 }))
+			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| token_failure(state, MalformedProcessingInstruction))?.root
+			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
+				return Err(token_failure(state, UnsupportedXmlHeader))
+			}
+			$next = { ..$next, header_info: Box.box({ ..Box.unbox($next.header_info), old_uid: node.attribute("OLDFILEUID") ?? "NONE", new_uid: node.attribute("NEWFILEUID") ?? "NONE" }) }
 		} else {
-			return Err(located_problem(state, UnknownProcessingInstruction))
+			return Err(token_failure(state, UnknownProcessingInstruction))
 		}
 		return Ok({ state: { ..$next, context_seen: state.context_seen.append(marker) }, outcome: Quiet })
 	}
 	if text.starts_with("<!") {
-		return Err(located_problem(state, UnsupportedDeclaration))
+		return Err(token_failure(state, UnsupportedDeclaration))
 	}
 	closing = text.starts_with("</")
 	self_closed = text.ends_with("/>")
+	if closing and self_closed {
+		return Err(token_failure(state, SelfClosingEndTag))
+	}
 	start = if (closing) 2 else 1
 	end = text.count_utf8_bytes() - (if (self_closed) 2 else 1)
+	if end < start {
+		return Err(token_failure(state, EmptyTagName))
+	}
 	name = Str.from_utf8_lossy(state.token.sublist({ start, len: end - start })).trim()
 	if !valid_name(name) {
-		return Err(located_problem(state, InvalidTagName(name)))
+		return Err(token_failure(state, InvalidTagName(name)))
 	}
+	# Retaining the original record just to access its token would also keep
+	# capture/stack aliases alive and force copies on every append below.
+	token = state.token
+	token_len = token.len()
+	consume_name(state, name, closing, self_closed, token, token_len, text)
+}
+
+consume_name : State, Str, Bool, Bool, List(U8), U64, Str -> Try(Consumed, TokenFailure)
+consume_name = |state, name, closing, self_closed, token, token_len, text| {
 	var $s = state
 	top = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if $s.syntax == Sgml102 and leaf_tag(top) and !(closing and name == top) {
@@ -524,124 +650,129 @@ consume_token = |state| {
 		$s = { ..$s, stack: $s.stack.drop_last(1) }
 	}
 	if closing {
-		return close_tag($s, name, text)
+		return close_tag($s, name, text, Err(Missing))
 	}
 	if $s.root_closed {
-		return Err(located_problem($s, TrailingContent))
+		return Err(token_failure($s, TrailingContent))
 	}
 	if !$s.root_seen {
 		if name != "OFX" {
-			return Err(located_problem($s, ExpectedRoot))
+			return Err(token_failure($s, ExpectedRoot))
 		}
 		$s = { ..$s, root_seen: True }
 	} else if $s.stack.is_empty() {
-		return Err(located_problem($s, MultipleRoots))
+		return Err(token_failure($s, MultipleRoots))
 	}
 	if name == "INVSTMTMSGSRSV1" or name == "INVSTMTRS" {
-		return Err(located_problem($s, InvestmentUnsupported))
+		return Err(token_failure($s, InvestmentUnsupported))
 	}
 	if $s.syntax == Xml203 and $s.capture_tag.is_empty() and !aggregate_tag(name) and !leaf_tag(name) {
-		return Err(located_problem($s, UnsupportedElement(name)))
+		return Err(token_failure($s, UnsupportedElement(name)))
 	}
 	if $s.syntax == Sgml102 and !aggregate_tag(name) and !leaf_tag(name) {
-		return Err(located_problem($s, UnknownSgmlTag(name)))
+		return Err(token_failure($s, UnknownSgmlTag(name)))
 	}
 	if $s.stack.len() >= $s.props.max_depth {
-		return Err(located_problem($s, NestingTooDeep($s.props.max_depth)))
+		return Err(token_failure($s, NestingTooDeep($s.props.max_depth)))
 	}
 	if leaf_tag($s.stack.last().map_ok(|frame| frame.name) ?? "") {
-		return Err(located_problem($s, NestedScalar))
+		return Err(token_failure($s, NestedScalar))
 	}
 	if name == "STMTTRNRS" or name == "CCSTMTTRNRS" {
-		$s = { ..$s, wrapper_id: "", wrapper_status: { code: "", severity: "", message: "" }, status_seen: False }
+		$s = { ..$s, wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False }
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if $s.in_statement {
-			return Err(located_problem($s, NestedStatement))
+			return Err(token_failure($s, NestedStatement))
 		}
-		$s = { ..$s, context: { ..empty_context, kind: if (name == "STMTRS") Bank else CreditCard, transaction_id: $s.wrapper_id, status: $s.wrapper_status, header: $s.header_info }, started: False, in_statement: True, context_seen: [], balances_seen: [] }
+		$s = { ..$s, context: Box.box({ ..empty_context, kind: if (name == "STMTRS") Bank else CreditCard, transaction_id: $s.wrapper_id, status: Box.unbox($s.wrapper_status), header: Box.unbox($s.header_info) }), started: False, in_statement: True, context_seen: [], balances_seen: [] }
 	}
 	parent = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !placement(name, parent) {
-		return Err(located_problem($s, InvalidParent(name)))
+		return Err(token_failure($s, InvalidParent(name)))
 	}
 	if name == "BANKACCTFROM" or name == "CCACCTFROM" {
 		if $s.started or $s.context_seen.contains("account") {
-			return Err(located_problem($s, AccountOrder))
+			return Err(token_failure($s, AccountOrder))
 		}
 		$s = { ..$s, context_seen: $s.context_seen.append("account") }
 	}
 	if name == "LEDGERBAL" or name == "AVAILBAL" {
 		if $s.balances_seen.contains(name) or (name == "LEDGERBAL" and $s.balances_seen.contains("AVAILBAL")) {
-			return Err(located_problem($s, DuplicateBalance(name)))
+			return Err(token_failure($s, DuplicateBalance(name)))
 		}
 		$s = { ..$s, balances_seen: $s.balances_seen.append(name) }
 	}
 	if capture_tag(name) {
 		if !$s.capture_tag.is_empty() {
-			return Err(located_problem($s, NestedRecord))
+			return Err(token_failure($s, NestedRecord))
 		}
 		$s = { ..$s, capture_tag: name, capture_depth: $s.stack.len(), capture: [] }
 	}
 	if !$s.capture_tag.is_empty() {
-		$s = { ..$s, capture: $s.capture.concat(state.token) }
+		$s = { ..$s, capture: $s.capture.concat(token) }
 	}
-	$s = { ..$s, stack: $s.stack.append({ name, offset: $s.offset - state.token.len() }) }
+	$s = { ..$s, stack: $s.stack.append({ name, offset: $s.offset - token_len }) }
 	if self_closed {
-		return close_tag($s, name, "")
+		return close_tag($s, name, "", Err(Missing))
 	}
 	if name == "STMTTRN" or name == "LEDGERBAL" or name == "AVAILBAL" {
 		if !$s.in_statement {
-			return Err(located_problem($s, RecordOutsideStatement))
+			return Err(token_failure($s, RecordOutsideStatement))
 		}
 		if !$s.started {
-			validate_context($s.context).map_err(|detail| located_problem($s, detail))?
+			validate_context(Box.unbox($s.context)).map_err(|detail| token_failure($s, detail))?
 			$s = { ..$s, started: True }
-			return Ok({ state: $s, outcome: Emitted(StatementStart($s.context)) })
+			return Ok({ state: $s, outcome: Emitted(StatementStart(Box.unbox($s.context))) })
 		}
 	}
 	Ok({ state: $s, outcome: Quiet })
 }
 
-close_tag : State, Str, Str -> Try(Consumed, OFX.Error)
-close_tag = |state, name, text| {
+close_tag : State, Str, Str, Try(Xml.Node, [Missing]) -> Try(Consumed, TokenFailure)
+close_tag = |state, name, text, parsed| {
 	if state.stack.last().map_ok(|frame| frame.name) != Ok(name) {
-		return Err(located_problem(state, MismatchedClosingTag(name)))
+		return Err(token_failure(state, MismatchedClosingTag(name)))
 	}
 	var $s = { ..state, stack: state.stack.drop_last(1) }
 	if !$s.capture_tag.is_empty() {
 		$s = { ..$s, capture: $s.capture.concat(text.to_utf8()) }
 		if $s.stack.len() == $s.capture_depth {
 			if $s.capture.len() > $s.props.max_record_bytes {
-				return Err(located_problem($s, RecordTooLarge($s.props.max_record_bytes)))
+				return Err(token_failure($s, RecordTooLarge($s.props.max_record_bytes)))
 			}
-			captured = decode($s, $s.capture)?
-			root = Xml.parse_str(captured).map_err(|_| located_problem($s, MalformedRecord))?.root
+			root = match parsed {
+				Ok(node) => node
+				Err(Missing) => {
+					captured = decode($s, $s.capture).map_err(|error| { state: $s, error })?
+					Xml.parse_str(captured).map_err(|_| token_failure($s, MalformedRecord))?.root
+				}
+			}
 			$s = { ..$s, capture: [], capture_tag: "" }
 			if name == "STMTTRN" {
 				if children(root).len() > $s.props.max_fields {
-					return Err(located_problem($s, TooManyFields($s.props.max_fields)))
+					return Err(token_failure($s, TooManyFields($s.props.max_fields)))
 				}
 				match transaction(root) {
 					Ok(value) => return Ok({ state: $s, outcome: Emitted(Transaction(value)) })
 					Err(detail) => return Ok({ state: $s, outcome: Rejected(located_problem($s, detail)) })
 				}
 			} else if name == "BANKACCTFROM" or name == "CCACCTFROM" {
-				account = account_from(root).map_err(|detail| located_problem($s, detail))?
-				$s = { ..$s, context: { ..$s.context, account } }
+				account = account_from(root).map_err(|detail| token_failure($s, detail))?
+				$s = { ..$s, context: Box.box({ ..Box.unbox($s.context), account }) }
 			} else {
-				balance = balance_from(root).map_err(|detail| located_problem($s, detail))?
+				balance = balance_from(root).map_err(|detail| token_failure($s, detail))?
 				return Ok({ state: $s, outcome: Emitted(if (name == "LEDGERBAL") LedgerBalance(balance) else AvailableBalance(balance)) })
 			}
 		}
 	}
 	if name == "BANKTRANLIST" and !$s.started {
-		validate_context($s.context).map_err(|detail| located_problem($s, detail))?
-		return Ok({ state: { ..$s, started: True }, outcome: Emitted(StatementStart($s.context)) })
+		validate_context(Box.unbox($s.context)).map_err(|detail| token_failure($s, detail))?
+		return Ok({ state: { ..$s, started: True }, outcome: Emitted(StatementStart(Box.unbox($s.context))) })
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if !$s.started {
-			return Err(located_problem($s, EmptyStatement))
+			return Err(token_failure($s, EmptyStatement))
 		}
 		return Ok({ state: { ..$s, in_statement: False }, outcome: Emitted(StatementEnd) })
 	}
@@ -654,14 +785,395 @@ close_tag = |state, name, text| {
 	Ok({ state: $s, outcome: Quiet })
 }
 
+# A whole UTF-8 XML document is lexed once. The same logical handlers validate
+# its hierarchy and values; only the current captured record needs XML nodes.
+# Any refusal falls back to the byte reader, which owns public diagnostics.
+CurrentInfo : { context : OFX.Context, ledger_balance : Try(OFX.Balance, [Missing]), available_balance : Try(OFX.Balance, [Missing]) }
+
+Current : { info : Box(CurrentInfo), transactions : List(OFX.Transaction) }
+
+WholeLimits : { token : U64, record : U64, depth : U64 }
+
+CaptureFrame : { name : Str, first : U64, offset : U64, leaf : Bool, core : U8 }
+
+Scalars : { values : List(Str), seen : U8 }
+
+empty_scalars : Scalars
+empty_scalars = { values: [], seen: 0 }
+
+Whole : { reader : Box(State), limits : WholeLimits, nodes : List(Xml.Node), frames : List(CaptureFrame), capture_base : U64, capture_start : U64, scalars : Scalars, current : Current, statements : List(OFX.Statement) }
+
+current_statement : OFX.Context -> Current
+current_statement = |context| { info: Box.box({ context, ledger_balance: Err(Missing), available_balance: Err(Missing) }), transactions: [] }
+
+xml_whole : List(U8), OFX.Props -> Try(OFX, [UseStreaming])
+xml_whole = |bytes, props| {
+	if props.syntax == Sgml or props.encoding == Windows1252 {
+		return Err(UseStreaming)
+	}
+	source = Str.from_utf8(bytes).map_err(|_| UseStreaming)?
+	opened = { reader: Box.box(initial(props)), limits: { token: props.max_token_bytes, record: props.max_record_bytes, depth: props.max_depth }, nodes: [], frames: [], capture_base: 0, capture_start: 0, scalars: empty_scalars, current: current_statement(empty_context), statements: [] }
+	match Xml.fold_source(source, { max_depth: props.max_depth, max_elements: 18446744073709551615, max_attributes: 0 }, opened, |state, event| whole_event(bytes, state, event)) {
+		Folded(value) => {
+			reader = Box.unbox(value.reader)
+			if !reader.root_closed or reader.in_statement or !reader.stack.is_empty() or !value.frames.is_empty() {
+				return Err(UseStreaming)
+			}
+			Ok(OFX.{ statements: value.statements })
+		}
+		Failed(_) | Rejected(_, _) => Err(UseStreaming)
+	}
+}
+
+whole_span : Xml.SourceEvent -> Xml.SourceSpan
+whole_span = |event| match event {
+	Start(value) => value.span
+	End(span) | Declaration(span) | Gap(span) => span
+	Text(value) | CData(value) | Comment(value) => value.span
+	ProcessingInstruction(value) => value.span
+}
+
+whole_event : List(U8), Whole, Xml.SourceEvent -> Try(Whole, [UseStreaming])
+whole_event = |bytes, input, event| {
+	span = whole_span(event)
+	width = span.end - span.start
+	if width > input.limits.token {
+		return Err(UseStreaming)
+	}
+	if !input.frames.is_empty() {
+		if span.end < input.capture_start or span.end - input.capture_start > input.limits.record {
+			return Err(UseStreaming)
+		}
+		return capture_event(input, event, span)
+	}
+	whole_outer(bytes, input, event, span)
+}
+
+# Outside a captured record the existing handlers own all context/header
+# transitions. The reader remains boxed and untouched during captured content.
+whole_outer : List(U8), Whole, Xml.SourceEvent, Xml.SourceSpan -> Try(Whole, [UseStreaming])
+whole_outer = |bytes, input, event, span| {
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	width = span.end - span.start
+	var $reader = { ..Box.unbox(reader), offset: span.end }
+	match event {
+		Gap(_) if !$reader.header_done => {
+			$reader = { ..$reader, header: $reader.header.concat(bytes.sublist({ start: span.start, len: width })) }
+			if $reader.header.len() > limits.token {
+				return Err(UseStreaming)
+			}
+			return Ok({ reader: Box.box($reader), limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
+		}
+		_ => {}
+	}
+	if !$reader.header_done {
+		$reader = read_header($reader).map_err(|_| UseStreaming)?
+	}
+	whole = { reader: Box.box($reader), limits, nodes, frames, capture_base, capture_start, scalars, current, statements }
+	match event {
+		Start(value) => {
+			if !value.attributes.is_empty() or (!leaf_tag(value.name) and !aggregate_tag(value.name) and !valid_name(value.name)) {
+				return Err(UseStreaming)
+			}
+			whole_start(whole, value.name, value.empty, span)
+		}
+		End(_) => whole_outer_close(whole)
+		Text(value) => {
+			if width > limits.record {
+				return Err(UseStreaming)
+			}
+			whole_outer_text(whole, value.value)
+		}
+		CData(_) => Err(UseStreaming)
+		Comment(_) => Ok(whole)
+		Gap(_) => {
+			if width > limits.record {
+				return Err(UseStreaming)
+			}
+			Ok(whole)
+		}
+		Declaration(_) | ProcessingInstruction(_) => {
+			{ reader: prior, limits: caps, nodes: ns, frames: fs, capture_base: base, capture_start: start, scalars: sv, current: statement, statements: complete } = whole
+			consumed = consume_token({ ..Box.unbox(prior), token: bytes.sublist({ start: span.start, len: width }) }).map_err(|_| UseStreaming)?
+			if consumed.state.encoding != Utf8 {
+				return Err(UseStreaming)
+			}
+			whole_action({ reader: Box.box({ ..consumed.state, token: [] }), limits: caps, nodes: ns, frames: fs, capture_base: base, capture_start: start, scalars: sv, current: statement, statements: complete }, consumed.outcome)
+		}
+	}
+}
+
+whole_start : Whole, Str, Bool, Xml.SourceSpan -> Try(Whole, [UseStreaming])
+whole_start = |input, name, empty, span| {
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	consumed = consume_name(Box.unbox(reader), name, False, False, [], span.end - span.start, "").map_err(|_| UseStreaming)?
+	{ state: next, outcome } = consumed
+	active = !next.capture_tag.is_empty()
+	if active and (span.end - span.start > limits.record or next.stack.is_empty()) {
+		return Err(UseStreaming)
+	}
+	base = if (active) next.capture_depth else capture_base
+	whole = whole_action({ reader: Box.box(next), limits, nodes, frames: if (active) [{ name, first: nodes.len(), offset: span.start, leaf: False, core: 7 }] else frames, capture_base: base, capture_start: if (active) span.start else capture_start, scalars: if (active and name == "STMTTRN") { values: List.repeat("", 7), seen: 0 } else scalars, current, statements }, outcome)?
+	if empty {
+		if active {
+			capture_close(whole, span)
+		} else {
+			whole_outer_close(whole)
+		}
+	} else {
+		Ok(whole)
+	}
+}
+
+# Captured content needs only the syntax stack and nodes. Control names whose
+# legacy transitions can alter outer state deliberately use the original reader.
+capture_event : Whole, Xml.SourceEvent, Xml.SourceSpan -> Try(Whole, [UseStreaming])
+capture_event = |input, event, span| match event {
+	Start(value) => {
+		{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+		parent = frames.last().map_err(|_| UseStreaming)?
+		name = value.name
+		core = if (!scalars.values.is_empty() and frames.len() == 1) core_slot(name) else 7
+		if !value.attributes.is_empty() or parent.leaf or capture_base + frames.len() >= limits.depth {
+			return Err(UseStreaming)
+		}
+		# Scalars are initialized only for a STMTTRN capture root. These seven
+		# literal names are valid leaves placed directly under that root; none
+		# can open another capture or change the outer reader's control state.
+		leaf = if core < 7 {
+			True
+		} else {
+			known_leaf = leaf_tag(name)
+			if (!known_leaf and !aggregate_tag(name) and !valid_name(name)) or !placement(name, parent.name) or capture_tag(name) {
+				return Err(UseStreaming)
+			}
+			match name {
+				"OFX" | "STMTTRNRS" | "CCSTMTTRNRS" | "STMTRS" | "CCSTMTRS" | "STATUS" | "INVSTMTMSGSRSV1" | "INVSTMTRS" => return Err(UseStreaming)
+				_ => {}
+			}
+			known_leaf
+		}
+		var $seen = scalars.seen
+		if core < 7 {
+			mask = (1.U8).shl_wrap(core)
+			if $seen.bitwise_and(mask) != 0 {
+				return Err(UseStreaming)
+			}
+			$seen = $seen.bitwise_or(mask)
+		}
+		next = { reader, limits, nodes, frames: frames.append({ name, first: nodes.len(), offset: span.start, leaf, core }), capture_base, capture_start, scalars: { values: scalars.values, seen: $seen }, current, statements }
+		if value.empty {
+			capture_close(next, span)
+		} else {
+			Ok(next)
+		}
+	}
+	End(_) => capture_close(input, span)
+	Text(value) => capture_text(input, value.value)
+	CData(value) => {
+		top = input.frames.last().map_err(|_| UseStreaming)?.name
+		if ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(top) and value.value != value.value.trim() {
+			return Err(UseStreaming)
+		}
+		capture_text(input, value.value)
+	}
+	Comment(_) => Ok(input)
+	Gap(_) | Declaration(_) | ProcessingInstruction(_) => Err(UseStreaming)
+}
+
+capture_text : Whole, Str -> Try(Whole, [UseStreaming])
+capture_text = |input, value| {
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	if !scalars.values.is_empty() and frames.len() == 1 {
+		if !value.trim().is_empty() {
+			return Err(UseStreaming)
+		}
+		return Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
+	}
+	Ok({ reader, limits, nodes: if (value.is_empty()) nodes else nodes.append(Text(value)), frames, capture_base, capture_start, scalars, current, statements })
+}
+
+core_slot : Str -> U8
+core_slot = |name| match name {
+	"TRNTYPE" => 0
+	"DTPOSTED" => 1
+	"TRNAMT" => 2
+	"FITID" => 3
+	"NAME" => 4
+	"MEMO" => 5
+	"CHECKNUM" => 6
+	_ => 7
+}
+
+# Known scalar children need text, not an intermediate Element or child list.
+# Joining a fragmented field once keeps comment/CDATA-heavy fields linear.
+core_text : List(Xml.Node), U64 -> Try(Str, [UseStreaming])
+core_text = |nodes, first| {
+	if nodes.len() == first {
+		return Ok("")
+	}
+	if nodes.len() == first + 1 {
+		return match nodes.get(first) {
+			Ok(Text(value)) => Ok(value.trim().release_excess_capacity())
+			_ => Err(UseStreaming)
+		}
+	}
+	var $parts = List.with_capacity(nodes.len() - first)
+	var $at = first
+	while $at < nodes.len() {
+		match nodes.get($at) {
+			Ok(Text(value)) => {
+				$parts = $parts.append(value)
+			}
+			_ => return Err(UseStreaming)
+		}
+		$at = $at + 1
+	}
+	Ok(Str.join_with($parts, "").trim().release_excess_capacity())
+}
+
+capture_close : Whole, Xml.SourceSpan -> Try(Whole, [UseStreaming])
+capture_close = |input, span| {
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	frame = frames.last().map_err(|_| UseStreaming)?
+	remaining = frames.drop_last(1)
+	if frame.core < 7 {
+		value = core_text(nodes, frame.first)?
+		{ values: prior, seen } = scalars
+		values = prior.set(frame.core.to_u64(), value).map_err(|_| UseStreaming)?
+		return Ok({ reader, limits, nodes: nodes.take_first(frame.first), frames: remaining, capture_base, capture_start, scalars: { values, seen }, current, statements })
+	}
+	if remaining.is_empty() and !scalars.values.is_empty() {
+		state = Box.unbox(reader)
+		extensions = whole_children(nodes, frame.first)
+		if scalars.seen.count_one_bits().to_u64() + extensions.len() > state.props.max_fields {
+			return Err(UseStreaming)
+		}
+		value = { type: scalars.values.get(0) ?? "", posted: scalars.values.get(1) ?? "", amount: scalars.values.get(2) ?? "", id: scalars.values.get(3) ?? "", name: scalars.values.get(4) ?? "", memo: scalars.values.get(5) ?? "", check_number: scalars.values.get(6) ?? "", extensions }
+		# Every core slot came from core_text (or the empty default), so its
+		# joined text already has normalized edge whitespace.
+		validate_normalized_transaction_fields(value, True).map_err(|_| UseStreaming)?
+		if state.capture_tag != "STMTTRN" or state.stack.last().map_ok(|entry| entry.name) != Ok("STMTTRN") {
+			return Err(UseStreaming)
+		}
+		next = { ..state, offset: span.end, stack: state.stack.drop_last(1), capture: [], capture_tag: "" }
+		return whole_action({ reader: Box.box(next), limits, nodes: nodes.take_first(frame.first), frames: remaining, capture_base: 0, capture_start: 0, scalars: empty_scalars, current, statements }, Emitted(Transaction(value)))
+	}
+	node = Element({ name: frame.name, attributes: [], children: whole_children(nodes, frame.first) })
+	prefix = nodes.take_first(frame.first)
+	if !remaining.is_empty() {
+		return Ok({ reader, limits, nodes: prefix.append(node), frames: remaining, capture_base, capture_start, scalars, current, statements })
+	}
+	consumed = close_tag({ ..Box.unbox(reader), offset: span.end }, frame.name, "", Ok(node)).map_err(|_| UseStreaming)?
+	whole_action({ reader: Box.box(consumed.state), limits, nodes: prefix, frames: remaining, capture_base: 0, capture_start: 0, scalars: empty_scalars, current, statements }, consumed.outcome)
+}
+
+# Adjacent text across comments/CDATA has the same coalescing as Xml.parse_str.
+# Join a run once at close, so many small segments remain linear.
+whole_children : List(Xml.Node), U64 -> List(Xml.Node)
+whole_children = |nodes, first| {
+	var $out = List.with_capacity(nodes.len() - first)
+	var $at = first
+	var $single = ""
+	var $parts = []
+	while $at < nodes.len() {
+		match nodes.get($at) {
+			Ok(Text(value)) => {
+				if !value.is_empty() {
+					if $single.is_empty() {
+						$single = value
+					} else {
+						$parts = $parts.append(value)
+					}
+				}
+			}
+			Ok(node) => {
+				if !$single.is_empty() {
+					$out = $out.append(Text(if ($parts.is_empty()) $single else Str.join_with($parts.prepend($single), "")))
+					$single = ""
+					$parts = []
+				}
+				$out = $out.append(node)
+			}
+			Err(_) => {}
+		}
+		$at = $at + 1
+	}
+	if !$single.is_empty() {
+		$out = $out.append(Text(if ($parts.is_empty()) $single else Str.join_with($parts.prepend($single), "")))
+	}
+	$out
+}
+
+whole_outer_close : Whole -> Try(Whole, [UseStreaming])
+whole_outer_close = |input| {
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	state = Box.unbox(reader)
+	name = state.stack.last().map_err(|_| UseStreaming)?.name
+	consumed = close_tag(state, name, "", Err(Missing)).map_err(|_| UseStreaming)?
+	whole_action({ reader: Box.box(consumed.state), limits, nodes, frames, capture_base, capture_start, scalars, current, statements }, consumed.outcome)
+}
+
+whole_outer_text : Whole, Str -> Try(Whole, [UseStreaming])
+whole_outer_text = |input, value| {
+	{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+	state = Box.unbox(reader)
+	top = state.stack.last().map_ok(|frame| frame.name) ?? ""
+	if !leaf_tag(top) {
+		if !value.trim().is_empty() {
+			return Err(UseStreaming)
+		}
+		return Ok({ reader: Box.box(state), limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
+	}
+	next = consume_field(state, top, value.trim()).map_err(|_| UseStreaming)?
+	Ok({ reader: Box.box(next), limits, nodes, frames, capture_base, capture_start, scalars, current, statements })
+}
+
+whole_action : Whole, Action -> Try(Whole, [UseStreaming])
+whole_action = |input, action| {
+	match action {
+		Quiet => Ok(input)
+		Rejected(_) => Err(UseStreaming)
+		Emitted(event) => {
+			{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
+			match event {
+				StatementStart(context) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: current_statement(context), statements })
+				Transaction(value) => {
+					# Keep the growing list outside its metadata box: unboxing a
+					# statement must not leave a second owner during append.
+					{ info, transactions } = current
+					Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: { info, transactions: transactions.append(value) }, statements })
+				}
+				LedgerBalance(value) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: { info: Box.box({ ..Box.unbox(current.info), ledger_balance: Ok(value) }), transactions: current.transactions }, statements })
+				AvailableBalance(value) => Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: { info: Box.box({ ..Box.unbox(current.info), available_balance: Ok(value) }), transactions: current.transactions }, statements })
+				StatementEnd => {
+					{ info, transactions } = current
+					metadata = Box.unbox(info)
+					statement = { context: metadata.context, transactions, ledger_balance: metadata.ledger_balance, available_balance: metadata.available_balance }
+					Ok({ reader, limits, nodes, frames, capture_base, capture_start, scalars, current: current_statement(empty_context), statements: statements.append(statement) })
+				}
+			}
+		}
+	}
+}
+
 capture_tag : Str -> Bool
-capture_tag = |name| ["STMTTRN", "BANKACCTFROM", "CCACCTFROM", "LEDGERBAL", "AVAILBAL"].contains(name)
+capture_tag = |name| match name {
+	"STMTTRN" | "BANKACCTFROM" | "CCACCTFROM" | "LEDGERBAL" | "AVAILBAL" => True
+	_ => False
+}
 
 aggregate_tag : Str -> Bool
-aggregate_tag = |name| ["OFX", "SIGNONMSGSRSV1", "SONRS", "STATUS", "FI", "BANKMSGSRSV1", "STMTTRNRS", "STMTRS", "BANKACCTFROM", "BANKTRANLIST", "STMTTRN", "LEDGERBAL", "AVAILBAL", "CREDITCARDMSGSRSV1", "CCSTMTTRNRS", "CCSTMTRS", "CCACCTFROM", "CURRENCY", "ORIGCURRENCY", "PAYEE", "BANKACCTTO", "CCACCTTO"].contains(name)
+aggregate_tag = |name| match name {
+	"OFX" | "SIGNONMSGSRSV1" | "SONRS" | "STATUS" | "FI" | "BANKMSGSRSV1" | "STMTTRNRS" | "STMTRS" | "BANKACCTFROM" | "BANKTRANLIST" | "STMTTRN" | "LEDGERBAL" | "AVAILBAL" | "CREDITCARDMSGSRSV1" | "CCSTMTTRNRS" | "CCSTMTRS" | "CCACCTFROM" | "CURRENCY" | "ORIGCURRENCY" | "PAYEE" | "BANKACCTTO" | "CCACCTTO" => True
+	_ => False
+}
 
 leaf_tag : Str -> Bool
-leaf_tag = |name| ["CODE", "SEVERITY", "MESSAGE", "DTSERVER", "LANGUAGE", "ORG", "FID", "TRNUID", "CLTCOOKIE", "CURDEF", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "DTSTART", "DTEND", "TRNTYPE", "DTPOSTED", "DTUSER", "DTAVAIL", "TRNAMT", "FITID", "CORRECTFITID", "CORRECTACTION", "SRVRTID", "CHECKNUM", "REFNUM", "NAME", "MEMO", "SIC", "PAYEEID", "BALAMT", "DTASOF", "CURRENCYRATE", "CURSYM", "ADDR1", "ADDR2", "ADDR3", "CITY", "STATE", "POSTALCODE", "COUNTRY", "PHONE", "USERKEY", "INTU.BID"].contains(name)
+leaf_tag = |name| match name {
+	"CODE" | "SEVERITY" | "MESSAGE" | "DTSERVER" | "LANGUAGE" | "ORG" | "FID" | "TRNUID" | "CLTCOOKIE" | "CURDEF" | "BANKID" | "BRANCHID" | "ACCTID" | "ACCTTYPE" | "ACCTKEY" | "DTSTART" | "DTEND" | "TRNTYPE" | "DTPOSTED" | "DTUSER" | "DTAVAIL" | "TRNAMT" | "FITID" | "CORRECTFITID" | "CORRECTACTION" | "SRVRTID" | "CHECKNUM" | "REFNUM" | "NAME" | "MEMO" | "SIC" | "PAYEEID" | "BALAMT" | "DTASOF" | "CURRENCYRATE" | "CURSYM" | "ADDR1" | "ADDR2" | "ADDR3" | "CITY" | "STATE" | "POSTALCODE" | "COUNTRY" | "PHONE" | "USERKEY" | "INTU.BID" => True
+	_ => False
+}
 
 children : Xml.Node -> List(Xml.Node)
 children = |node| match node {
@@ -670,7 +1182,36 @@ children = |node| match node {
 }
 
 field : Xml.Node, Str -> Str
-field = |node, name| node.children_named(name).first().map_ok(|child| child.text().trim()) ?? ""
+field = |node, name| node.children_named(name).first().map_ok(scalar_text) ?? ""
+
+# XML parsing coalesces scalar text into one child. Avoid a generic work-list
+# traversal, and detach long slices so a small retained field cannot pin a
+# discarded record or caller chunk.
+scalar_text : Xml.Node -> Str
+scalar_text = |node| match node {
+	Element(element) => match element.children {
+		[] => ""
+		[Text(value)] => value.trim().release_excess_capacity()
+		_ => node.text().trim()
+	}
+	Text(value) => value.trim().release_excess_capacity()
+}
+
+has_element_children : Xml.Node -> Bool
+has_element_children = |node| match node {
+	Text(_) => False
+	Element(element) => {
+		var $at = 0.U64
+		while $at < element.children.len() {
+			match element.children.get($at) {
+				Ok(Element(_)) => return True
+				_ => {}
+			}
+			$at = $at + 1
+		}
+		False
+	}
+}
 
 unique : Xml.Node -> Try({}, Parser.Problem(OFX.Problem))
 unique = |node| {
@@ -693,17 +1234,81 @@ account_from = |node| {
 }
 
 transaction : Xml.Node -> Try(OFX.Transaction, Parser.Problem(OFX.Problem))
-transaction = |node| {
-	unique(node)?
-	if !aggregate_whitespace(node) {
-		return Err(UnexpectedTransactionText)
+transaction = |node| match node {
+	Text(_) => Err(UnexpectedTransactionText)
+	Element(element) => {
+		var $names = []
+		var $aggregate_ok = element.attributes.is_empty()
+		var $nested = False
+		var $type = ""
+		var $posted = ""
+		var $amount = ""
+		var $id = ""
+		var $name = ""
+		var $memo = ""
+		var $check_number = ""
+		var $extensions = []
+		var $at = 0.U64
+		while $at < element.children.len() {
+			match element.children.get($at) {
+				Ok(Text(value)) => {
+					if !value.trim().is_empty() {
+						$aggregate_ok = False
+					}
+				}
+				Ok(child) => {
+					name = child.name() ?? ""
+					if $names.contains(name) {
+						return Err(DuplicateField(name))
+					}
+					$names = $names.append(name)
+					if leaf_tag(name) and has_element_children(child) {
+						$nested = True
+					}
+					match name {
+						"TRNTYPE" => {
+							$type = scalar_text(child)
+						}
+						"DTPOSTED" => {
+							$posted = scalar_text(child)
+						}
+						"TRNAMT" => {
+							$amount = scalar_text(child)
+						}
+						"FITID" => {
+							$id = scalar_text(child)
+						}
+						"NAME" => {
+							$name = scalar_text(child)
+						}
+						"MEMO" => {
+							$memo = scalar_text(child)
+						}
+						"CHECKNUM" => {
+							$check_number = scalar_text(child)
+						}
+						_ => {
+							$extensions = $extensions.append(child)
+						}
+					}
+				}
+				Err(_) => {}
+			}
+			$at = $at + 1
+		}
+		# Match the existing diagnostic precedence even though these checks are
+		# gathered in one pass: duplicates, aggregate text, nested scalars, values.
+		if !$aggregate_ok {
+			return Err(UnexpectedTransactionText)
+		}
+		if $nested {
+			return Err(NestedTransactionScalar)
+		}
+		value = { type: $type, posted: $posted, amount: $amount, id: $id, name: $name, memo: $memo, check_number: $check_number, extensions: $extensions }
+		# Both callers supply a tree constructed by the XML character validators.
+		validate_transaction_fields(value, True)?
+		Ok(value)
 	}
-	if children(node).any(|child| leaf_tag(child.name() ?? "") and !children(child).is_empty()) {
-		return Err(NestedTransactionScalar)
-	}
-	value = { type: field(node, "TRNTYPE"), posted: field(node, "DTPOSTED"), amount: field(node, "TRNAMT"), id: field(node, "FITID"), name: field(node, "NAME"), memo: field(node, "MEMO"), check_number: field(node, "CHECKNUM"), extensions: children(node).keep_if(|child| !["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].contains(child.name() ?? "")) }
-	validate_transaction(value)?
-	Ok(value)
 }
 
 validate_context : OFX.Context -> Try({}, Parser.Problem(OFX.Problem))
@@ -742,10 +1347,20 @@ validate_context = |context| {
 }
 
 validate_transaction : OFX.Transaction -> Try({}, Parser.Problem(OFX.Problem))
-validate_transaction = |value| {
-	if [value.id, value.name, value.memo, value.check_number].any(|text| text != text.trim()) {
+validate_transaction = |value| validate_transaction_fields(value, False)
+
+validate_transaction_fields : OFX.Transaction, Bool -> Try({}, Parser.Problem(OFX.Problem))
+validate_transaction_fields = |value, checked_xml| {
+	if value.id != value.id.trim() or value.name != value.name.trim() or value.memo != value.memo.trim() or value.check_number != value.check_number.trim() {
 		return Err(UnnormalizedTransaction)
 	}
+	validate_normalized_transaction_fields(value, checked_xml)
+}
+
+# The direct XML projection establishes normalized values in core_text. Other
+# callers retain the whitespace guard above, including its diagnostic priority.
+validate_normalized_transaction_fields : OFX.Transaction, Bool -> Try({}, Parser.Problem(OFX.Problem))
+validate_normalized_transaction_fields = |value, checked_xml| {
 	var $extension_names = []
 	var $rank = 0
 	for node in value.extensions {
@@ -761,10 +1376,10 @@ validate_transaction = |value| {
 			$rank = field_rank(name)
 		}
 	}
-	if ![value.type, value.posted, value.amount, value.id, value.name, value.memo, value.check_number].all(valid_text) {
+	if !checked_xml and (!valid_text(value.type) or !valid_text(value.posted) or !valid_text(value.amount) or !valid_text(value.id) or !valid_text(value.name) or !valid_text(value.memo) or !valid_text(value.check_number)) {
 		return Err(InvalidTransactionCharacter)
 	}
-	if !["CREDIT", "DEBIT", "INT", "DIV", "FEE", "SRVCHG", "DEP", "ATM", "POS", "XFER", "CHECK", "PAYMENT", "CASH", "DIRECTDEP", "DIRECTDEBIT", "REPEATPMT", "HOLD", "OTHER"].contains(value.type) {
+	if !transaction_type(value.type) {
 		return Err(InvalidTransactionType(value.type))
 	}
 	if !timestamp(value.posted) {
@@ -779,6 +1394,12 @@ validate_transaction = |value| {
 	Ok({})
 }
 
+transaction_type : Str -> Bool
+transaction_type = |value| match value {
+	"CREDIT" | "DEBIT" | "INT" | "DIV" | "FEE" | "SRVCHG" | "DEP" | "ATM" | "POS" | "XFER" | "CHECK" | "PAYMENT" | "CASH" | "DIRECTDEP" | "DIRECTDEBIT" | "REPEATPMT" | "HOLD" | "OTHER" => True
+	_ => False
+}
+
 balance_from : Xml.Node -> Try(OFX.Balance, Parser.Problem(OFX.Problem))
 balance_from = |node| {
 	unique(node)?
@@ -791,20 +1412,64 @@ balance_from = |node| {
 }
 
 digits : Str -> Bool
-digits = |text| !text.is_empty() and text.to_utf8().all(|b| b >= '0' and b <= '9')
+digits = |text| digit_bytes(text.to_utf8())
+
+digit_bytes : List(U8) -> Bool
+digit_bytes = |bytes| {
+	if bytes.is_empty() {
+		return False
+	}
+	var $at = 0.U64
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte < '0' or byte > '9' {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
+}
 
 decimal : Str -> Bool
 decimal = |text| {
-	if text.count_utf8_bytes() > 128 {
+	bytes = text.to_utf8()
+	if bytes.len() > 128 {
 		return False
 	}
-	unsigned = if (text.starts_with("-") or text.starts_with("+")) Str.from_utf8_lossy(text.to_utf8().drop_first(1)) else text
-	parts = unsigned.split_on(".")
-	(parts.len() == 1 or parts.len() == 2) and parts.all(digits)
+	var $at = if (bytes.first() == Ok('-') or bytes.first() == Ok('+')) 1 else 0
+	var $digits = 0.U64
+	var $point = False
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte >= '0' and byte <= '9' {
+			$digits = $digits + 1
+		} else if byte == '.' and !$point and $digits > 0 {
+			$point = True
+			$digits = 0
+		} else {
+			return False
+		}
+		$at = $at + 1
+	}
+	$digits > 0
 }
 
 timestamp : Str -> Bool
 timestamp = |text| {
+	len = text.count_utf8_bytes()
+	if len == 8 or len == 10 or len == 12 or len == 14 {
+		bytes = text.to_utf8()
+		if digit_bytes(bytes) {
+			return timestamp_calendar(bytes)
+		}
+	}
+	timestamp_general(text)
+}
+
+# Fractional seconds and timezone spellings retain the general grammar. Both
+# paths share the same calendar and clock validation after checking digits.
+timestamp_general : Str -> Bool
+timestamp_general = |text| {
 	parts = text.split_on("[")
 	if parts.len() > 2 {
 		return False
@@ -818,17 +1483,7 @@ timestamp = |text| {
 	if base.len() == 2 and (len != 14 or !digits(base.last() ?? "")) {
 		return False
 	}
-	bytes = date.to_utf8()
-	num = |at, count| U64.from_str(Str.from_utf8_lossy(bytes.sublist({ start: at, len: count }))) ?? 0
-	year = num(0, 4)
-	month = num(4, 2)
-	day = num(6, 2)
-	if year == 0 or month == 0 or month > 12 {
-		return False
-	}
-	leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
-	maxday = [31, if (leap) 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].get(month - 1) ?? 0
-	if day == 0 or day > maxday or (len >= 10 and num(8, 2) > 23) or (len >= 12 and num(10, 2) > 59) or (len >= 14 and num(12, 2) > 60) {
+	if !timestamp_calendar(date.to_utf8()) {
 		return False
 	}
 	if parts.len() == 2 {
@@ -850,6 +1505,35 @@ timestamp = |text| {
 		}
 	}
 	True
+}
+
+# `bytes` contains exactly 8, 10, 12 or 14 ASCII digits, established by either
+# caller. Avoid building a month-length list for each transaction timestamp.
+timestamp_calendar : List(U8) -> Bool
+timestamp_calendar = |bytes| {
+	len = bytes.len()
+	num = |at, count| {
+		var $value = 0.U64
+		var $pos = at
+		while $pos < at + count {
+			$value = $value * 10 + ((bytes.get($pos) ?? '0') - '0').to_u64()
+			$pos = $pos + 1
+		}
+		$value
+	}
+	year = num(0, 4)
+	month = num(4, 2)
+	day = num(6, 2)
+	if year == 0 or month == 0 or month > 12 {
+		return False
+	}
+	leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+	maxday = match month {
+		2 => if (leap) 29 else 28
+		4 | 6 | 9 | 11 => 30
+		_ => 31
+	}
+	!(day == 0 or day > maxday or (len >= 10 and num(8, 2) > 23) or (len >= 12 and num(10, 2) > 59) or (len >= 14 and num(12, 2) > 60))
 }
 
 escape : Str -> Str
@@ -1045,7 +1729,23 @@ expect decimal("-0.000001") and !decimal("NaN") and !decimal("1e3")
 expect timestamp("20240229120000.123[5.5:IST]") and !timestamp("20230229")
 
 valid_text : Str -> Bool
-valid_text = |value| Xml.parse_str("<v>${escape(value)}</v>").is_ok()
+valid_text = |value| {
+	# Str already guarantees UTF-8. XML 1.0 excludes ASCII controls other than
+	# tab/newline/CR, and the two BMP noncharacters U+FFFE and U+FFFF.
+	bytes = value.to_utf8()
+	var $at = 0
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte < 0x20 and byte != '\t' and byte != '\n' and byte != '\r' {
+			return False
+		}
+		if byte == 0xEF and bytes.get($at + 1) == Ok(0xBF) and (bytes.get($at + 2) == Ok(0xBE) or bytes.get($at + 2) == Ok(0xBF)) {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
+}
 
 placement : Str, Str -> Bool
 placement = |name, parent| match name {
@@ -1165,8 +1865,20 @@ expect OFX.parse_str(" <?xml version=\"1.0\"?>${sample_xml}").is_err()
 
 valid_name : Str -> Bool
 valid_name = |name| {
-	first = name.to_utf8().first() ?? 0
-	((first >= 'A' and first <= 'Z') or first == '_' or first == ':') and name.to_utf8().all(|byte| (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '.' or byte == '_' or byte == ':')
+	bytes = name.to_utf8()
+	first = bytes.first() ?? 0
+	if !((first >= 'A' and first <= 'Z') or first == '_' or first == ':') {
+		return False
+	}
+	var $at = 1.U64
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if !((byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '.' or byte == '_' or byte == ':') {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
 }
 expect {
 	document = OFX.parse_str(sample_xml)?
@@ -1231,4 +1943,201 @@ expect OFX.parse_str(sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA
 expect {
 	document = OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "  ordinary  "))?
 	document.statements.first()?.transactions.first()?.name == "ordinary"
+}
+
+expect ["", "\t\r\n", "plain & < > ]]> text", "Café 日本", "\u(20)\u(D7FF)\u(E000)\u(FFFD)", "\u(10000)\u(10FFFF)", "\u(0)", "\u(8)", "\u(B)", "\u(C)", "\u(1F)", "\u(FFFE)", "\u(FFFF)"].all(|value| valid_text(value) == Xml.parse_str("<v>${escape(value)}</v>").is_ok())
+expect ["0", "+0", "-1", "123456789012345678901234567890.0001", "0.00"].all(decimal)
+expect ["", "+", "-", ".5", "1.", "1.2.3", "1e2", " 1", "1 ", "1\n"].all(|value| !decimal(value))
+
+expect ["", "plain", "\r", "\n", "\r\n", "a\r\nb\rc\nd", "\n\r\n\r"].all(
+	|text| {
+		bytes = text.to_utf8()
+		base = move(initial({}), '\r')
+		var $same = True
+		for first in (0.U64).to(bytes.len()) {
+			start = bytes.take_first(first).fold(base, move)
+			for last in first.to(bytes.len()) {
+				bulk = move_span(start, bytes, first, last)
+				individual = bytes.sublist({ start: first, len: last - first }).fold(start, move)
+				$same = $same and { offset: bulk.offset, line: bulk.line, column: bulk.column, last_cr: bulk.last_cr } == { offset: individual.offset, line: individual.line, column: individual.column, last_cr: individual.last_cr }
+			}
+		}
+		$same
+	},
+)
+
+# Short spans ignore a distant line ending in an otherwise compact source;
+# the span that actually contains it still advances the physical line.
+expect {
+	bytes = List.repeat('x', 131072).append('\n')
+	first = move_span(initial({}), bytes, 0, 16)
+	second = move_span(first, bytes, 16, 32)
+	last = move_span(second, bytes, 32, bytes.len())
+	first.offset == 16 and first.line == 1 and first.column == 17 and second.offset == 32 and second.line == 1 and second.column == 33 and last.offset == bytes.len() and last.line == 2 and last.column == 1 and !last.last_cr
+}
+
+expect {
+	bytes = sample_xml.replace_each(">", ">\r\n").replace_each("-12.30", "bad").to_utf8()
+	List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({}))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({})))
+}
+
+expect {
+	source = sample_xml.replace_each("Café &amp; tea", "<![CDATA[a>b]]>").replace_each("<MEMO>", "<!-- > ' \" -->\r\n<MEMO>")
+	bytes = source.to_utf8()
+	List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({}))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({}))) and OFX.parse_str(source)?.statements.first()?.transactions.first()?.name == "a>b"
+}
+
+expect {
+	bytes = "\r\n${sample_xml}".to_utf8()
+	[0, 1, 3, 7, 8, 16].all(|limit| List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({ max_token_bytes: limit }))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({ max_token_bytes: limit }))))
+}
+
+expect {
+	bytes = sample_xml.to_utf8()
+	body = Str.from_utf8(bytes.sublist({ start: 5, len: bytes.len() - 11 }))?
+	second = body.replace_each("<TRNUID>0", "<TRNUID>2").replace_each("<CURDEF>AUD", "<CURDEF>USD").replace_each("<ACCTID>000123", "<ACCTID>000456")
+	document = OFX.parse_str("<OFX>${body}${second}</OFX>")?
+	first = document.statements.first()?.context
+	last = document.statements.last()?.context
+	document.statements.len() == 2 and first.account.account_id == "000123" and first.currency == "AUD" and first.transaction_id == "0" and last.account.account_id == "000456" and last.currency == "USD" and last.transaction_id == "2"
+}
+
+expect {
+	failed = OFX.decoder({}).step("<OFX></BAD>".to_utf8(), Final)
+	match failed.outcome {
+		Failed(error) => {
+			after = failed.state.step("unread".to_utf8(), Final)
+			error.offset == 11 and error.line == 1 and error.column == 12 and error.problem == MismatchedClosingTag("BAD") and after.consumed == 0 and after.outcome == Done
+		}
+		_ => False
+	}
+}
+
+expect ["</>", "<OFX></>", "<OFX></OFX/>", "<OFX></ />", "<OFX><//>", "<OFX><>", "<?OFX?>", "<?OFX ?>", "<?xml?>", "<?xml ?>", "<![CDATA[>", "<![CDATA[]]>", "<OFX><![CDATA[]]></OFX>"].all(|source| OFX.parse_str(source).is_err())
+
+expect {
+	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[]]></MEMO>")
+	OFX.parse_str(source)?.statements.first()?.transactions.first()?.memo == ""
+}
+
+expect xml_whole(sample_xml.to_utf8(), {}).is_ok()
+
+expect [sample_xml, "\u(feff)${sample_xml}", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}", sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>one<!-- gap --><![CDATA[two]]>&amp;three</MEMO>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR><ITEM>one<!-- gap --><![CDATA[two]]>&amp;three<INNER/>four</ITEM></VENDOR></STMTTRN>"), sample_xml.replace_each("-12.30", "bad"), sample_xml.replace_each("</NAME>", "</WRONG>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[ padded ]]></MEMO>"), "<OFX></OFX/>", "<OFX/>", "<!--before--><OFX/><!--after-->"].all(|source| OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
+
+expect {
+	bytes = sample_xml.to_utf8()
+	[0, 1, 8, 64, 128, 512, 1024].all(|limit| OFX.parse_bytes(bytes, { max_token_bytes: limit }) == collect_bytes(bytes, { max_token_bytes: limit }) and OFX.parse_bytes(bytes, { max_record_bytes: limit }) == collect_bytes(bytes, { max_record_bytes: limit }))
+}
+
+expect {
+	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO><MEMO>duplicate</MEMO></STMTTRN>")?.root
+	transaction(node) == Err(DuplicateField("MEMO"))
+}
+
+expect {
+	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO></STMTTRN>")?.root
+	transaction(node) == Err(UnexpectedTransactionText)
+}
+
+expect {
+	node = Xml.parse_str("<STMTTRN><MEMO><EXTRA/></MEMO></STMTTRN>")?.root
+	transaction(node) == Err(NestedTransactionScalar)
+}
+
+expect {
+	statement = OFX.parse_str(sample_xml)?.statements.first()?
+	value = statement.transactions.first()?
+	opened = write_event(initial_writer({}), StatementStart(statement.context))?
+	write_event(opened.writer, Transaction({ ..value, name: "bad\u(0)" })).is_err() and write_event(opened.writer, Transaction({ ..value, memo: "bad\u(FFFF)" })).is_err()
+}
+
+expect [Text(" direct "), Element({ name: "V", attributes: [], children: [] }), Element({ name: "V", attributes: [], children: [Text(" Café 日本 ")] }), Element({ name: "V", attributes: [], children: [Text(" a"), Element({ name: "B", attributes: [], children: [Text("b")] }), Text("c ")] })].all(|node| scalar_text(node) == node.text().trim())
+
+expect {
+	prefix = Str.repeat("x", 4096)
+	source = "${prefix} 01234567890123456789012345678901 \r\n"
+	slice = source.drop_first_bytes(prefix.count_utf8_bytes())?
+	node = Element({ name: "FITID", attributes: [], children: [Text(slice)] })
+	scalar_text(node) == "01234567890123456789012345678901"
+}
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<VENDOR><VALUE>a<INNER/>b</VALUE><![CDATA[ padded ]]></VENDOR></STMTTRN>")
+	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+}
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<VENDOR><OFX/></VENDOR></STMTTRN>").replace_each("<LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260201</DTASOF></LEDGERBAL>", "")
+	xml_whole(source.to_utf8(), {}).is_err() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+}
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<VENDOR><VALUE><INNER/></VALUE></VENDOR></STMTTRN>")
+	bytes = source.to_utf8()
+	[0, 1, 5, 6, 7, 8, 9, 10, 16].all(|limit| OFX.parse_bytes(bytes, { max_depth: limit }) == collect_bytes(bytes, { max_depth: limit }))
+}
+
+expect {
+	source = sample_xml.replace_each("<NAME>Café &amp; tea</NAME>", "<NAME>Café <!-- gap --><![CDATA[& tea]]></NAME>").replace_each("<MEMO>One</MEMO>", "<MEMO/><CHECKNUM>00042</CHECKNUM><PAYEE><NAME>Other</NAME></PAYEE><VENDOR>extension</VENDOR>")
+	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+}
+
+expect [sample_xml.replace_each("</STMTTRN>", "<NAME/></STMTTRN>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><VENDOR/></MEMO>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO bad='attribute'>One</MEMO>"), sample_xml.replace_each("</STMTTRN>", "unexpected text</STMTTRN>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR/><VENDOR/></STMTTRN>"), sample_xml.replace_each("<FITID>00001</FITID>", ""), sample_xml.replace_each("<TRNAMT>-12.30</TRNAMT>", "<TRNAMT>invalid</TRNAMT>")].all(|source| OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
+
+expect {
+	bytes = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM/><VENDOR/></STMTTRN>").to_utf8()
+	[0, 1, 5, 6, 7, 8, 9, 1024].all(|limit| OFX.parse_bytes(bytes, { max_fields: limit }) == collect_bytes(bytes, { max_fields: limit }))
+}
+
+expect {
+	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>a<!--1-->b<![CDATA[c]]><!--2-->d</MEMO>")
+	document = OFX.parse_str(source)?
+	document.statements.first()?.transactions.first()?.memo == "abcd" and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+}
+
+expect ["00010101", "19000228", "20000229", "20240229", "24000229", "20260101", "2026010123", "202601012359", "20260101235960", "20260228235959", "99991231235960"].all(|value| timestamp(value) and timestamp_general(value))
+
+expect ["", "2026010", "202601010", "20260101000", "2026010100000", "202601010000000", "00000101", "19000229", "20230229", "20260431", "20260001", "20261301", "20260100", "20260132", "2026010124", "202601012360", "20260101235961", "2026é01", "２０２６０１０１", "202601 1", "2026\u(0)101"].all(|value| !timestamp(value) and !timestamp_general(value))
+
+expect ["20260101[+1]", "20260101[-12:WEST]", "20260101[14:]", "20260101235960.001[-5:EST]", "20260101000000.5[5.5:IST]", "20260101[15]", "20260101[-13]", "20260101[5.]"].all(|value| timestamp(value) == timestamp_general(value)) and timestamp("20260101[+1]") and timestamp("20260101235960.001[-5:EST]") and !timestamp("20260101[15]") and !timestamp("20260101[-13]")
+
+expect ["DEBIT", "DIRECTDEBIT", "OTHER"].all(transaction_type) and ["", "credit", "DEBIT ", "INVALID"].all(|value| !transaction_type(value))
+
+expect ["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(|name| core_slot(name) < 7 and leaf_tag(name) and valid_name(name) and placement(name, "STMTTRN") and !capture_tag(name))
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
+	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
+		|name| {
+			padded = source.replace_each("<${name}>", "<${name}>\t\u(2003)\r\n").replace_each("</${name}>", "\u(A0) </${name}>")
+			xml_whole(padded.to_utf8(), {}).is_ok() and OFX.parse_str(padded) == OFX.parse_str(source) and OFX.parse_str(padded) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
+		},
+	)
+}
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
+	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
+		|name| {
+			padded = source.replace_each("<${name}>", "<${name}><![CDATA[ \u(2003)]]>")
+			xml_whole(padded.to_utf8(), {}).is_err() and OFX.parse_str(padded).is_err() and OFX.parse_str(padded) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
+		},
+	)
+}
+
+expect {
+	statement = OFX.parse_str(sample_xml)?.statements.first()?
+	value = statement.transactions.first()?
+	opened = write_event(initial_writer({}), StatementStart(statement.context))?
+	padded = "\u(2003)padded\u(A0)"
+	[{ ..value, type: "INVALID", id: padded }, { ..value, type: "INVALID", name: padded }, { ..value, type: "INVALID", memo: padded }, { ..value, type: "INVALID", check_number: padded }].all(|changed| validate_transaction_fields(changed, True) == Err(UnnormalizedTransaction) and write_event(opened.writer, Transaction(changed)).is_err())
+}
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
+	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
+		|name| {
+			[source.replace_each("<${name}>", "<${name} forbidden='attribute'>"), source.replace_each("</${name}>", "<INNER/></${name}>"), source.replace_each("</STMTTRN>", "<${name}/></STMTTRN>")].all(|invalid| xml_whole(invalid.to_utf8(), {}).is_err() and OFX.parse_str(invalid) == collect_bytes(invalid.to_utf8(), { encoding: Utf8 }))
+		},
+	)
 }

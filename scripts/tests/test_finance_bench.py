@@ -1,5 +1,6 @@
 """Financial benchmark inputs must be comparable across independent models."""
 import importlib.util
+import os
 import random
 import sys
 import unittest
@@ -21,7 +22,7 @@ class FinancialCorpora(unittest.TestCase):
             self.assertEqual(len(identifiers), len(set(identifiers)))
             self.assertTrue(all(tx.findtext("DTPOSTED") for tx in transactions))
 
-    @unittest.skipUnless(importlib.util.find_spec("quiffen"), "pinned QIF oracle unavailable")
+    @unittest.skipUnless(os.environ.get("ROC_PARSER_RUN_ORACLE_TESTS") == "1" and not os.environ.get("CI") and importlib.util.find_spec("quiffen"), "local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 with the pinned QIF oracle")
     def test_quiffen_checksum_matches_independent_generated_records(self):
         text = bench.qif_doc(random.Random(1), 4096)
         records = text.split("\n^\n")[:-1]
@@ -33,7 +34,7 @@ class FinancialCorpora(unittest.TestCase):
             expected += 1 + bench_python.field_checksum(payee) + bench_python.field_checksum(memo)
         self.assertEqual(bench_python.finance_parser("quiffen")(text), expected)
 
-    @unittest.skipUnless(importlib.util.find_spec("ofxtools") and importlib.util.find_spec("ofxparse"), "pinned OFX oracles unavailable")
+    @unittest.skipUnless(os.environ.get("ROC_PARSER_RUN_ORACLE_TESTS") == "1" and not os.environ.get("CI") and importlib.util.find_spec("ofxtools") and importlib.util.find_spec("ofxparse"), "local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 with the pinned OFX oracles")
     def test_ofx_comparators_match_independent_xml_projection(self):
         import xml.etree.ElementTree as ET
         text = bench.ofx_doc(random.Random(1), 4096)

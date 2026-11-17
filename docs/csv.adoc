@@ -13,7 +13,7 @@ endif::[]
 
 This chapter shows how to turn comma-separated text into Roc values: as
 records chosen by the type you ask for, as tuples when the file has no
-header, as raw fields, and with hand-built record parsers when a column needs
+header, as text or raw fields, and with hand-built record parsers when a column needs
 custom handling. It also shows how to tell the user which row was wrong. It
 is for Roc programmers who have added `parser` to their app's dependencies.
 
@@ -134,6 +134,28 @@ include::examples/csv-guide.roc[tag=headerless,indent=0]
 ----
 include::examples/csv-guide.expected[lines=7]
 ----
+
+== Read every field as text
+
+Use `CSV.parse_string_records` to collect a table as `List(List(Str))` when
+every column should remain text. The first row stays in the result, fields
+remain untrimmed, and CSV quoting is decoded:
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=text-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/csv-guide.expected[lines=19..20]
+----
+
+It accepts the same dialect and reports the same syntax errors as
+`CSV.parse_records`. Empty input gives no rows; a blank line gives one empty
+field. Use `CSV.parse` when a header should select typed record fields, or
+`CSV.parse_with` when a column needs a custom parser.
 
 == Read every field as raw bytes
 
@@ -333,8 +355,9 @@ link:{api}CSV[CSV API reference].
 [#csv-performance]
 == Performance
 
-Whole-document raw scanning uses SIMD delimiter searches and can share field
-slices with the input. Incremental scanning owns unfinished records so completed
+Whole-document scanning uses SIMD delimiter searches and can share field
+slices with the input. `CSV.parse_string_records` collects text fields directly
+while scanning. Incremental scanning owns unfinished records so completed
 records do not pin old source chunks. Typed decoding adds each conversion's
 cost, and whole-document collection retains the resulting values.
 

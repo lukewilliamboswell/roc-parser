@@ -35,7 +35,16 @@ QifCheck :: [].{
 		if one != many {
 			crash "QIF chunk scheduling changed results"
 		}
-		match QIF.parse_bytes(bytes, {}) {
+		whole = QIF.parse_bytes(bytes, {})
+		match Str.from_utf8(bytes) {
+			Ok(text) => match (QIF.parse_str(text), whole) {
+				(Ok(a), Ok(b)) if a.events == b.events => {}
+				(Err(InvalidQif(a)), Err(InvalidQif(b))) if a == b => {}
+				_ => crash "QIF Str and UTF-8 byte entrypoints disagree"
+			}
+			Err(_) => {}
+		}
+		match whole {
 			Ok(doc) => {
 				got = Streaming.collect(Streaming.read_iter([[], bytes, []].iter(), QIF.decoder({}))) ?? crash "raw/iter acceptance mismatch"
 				if got != doc.events {

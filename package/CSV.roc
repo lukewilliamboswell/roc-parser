@@ -23,12 +23,13 @@ import CSVReader
 ## - Rows may have different numbers of fields. A byte order mark is not
 ##   removed; it is part of the first field.
 ##
-## There are three ways to read a file:
+## Read a file as typed rows, text fields, or raw bytes:
 ##
 ## - [CSV.parse] decodes rows into records whose field names match the header
 ##   row, with the row type chosen by type inference;
 ## - [CSV.parse_with] runs a hand-built record parser (`record`, `field` and
 ##   `Parser.keep`) over every row, matching columns by position;
+## - [CSV.parse_string_records] returns every field as a `Str`;
 ## - [CSV.parse_records] returns the raw fields.
 ##
 ## ```roc
@@ -123,6 +124,25 @@ CSV := { records : List(CSV.Record) }.{
 		}
 	}
 
+	## Parse every field as text, including the header as an ordinary record.
+	##
+	## Fields are kept verbatim, with CSV quoting removed and doubled quotes
+	## decoded. Empty input has no records; a blank line has one empty field.
+	## Uses the same grammar and syntax diagnostics as [CSV.parse_records].
+	##
+	## ```roc
+	## expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n") == Ok([["name", "note"], ["Ada", "said \"hello\""]])
+	## ```
+	parse_string_records : Str -> Try(List(List(Str)), [InvalidCsv(Error)])
+	parse_string_records = |text| {
+		bytes = text.to_utf8()
+		len = bytes.len()
+		match scan_table_as(bytes, |field_bytes, start, next, quoted| string_field(text, len, field_bytes, start, next, quoted)) {
+			Ok(records) => Ok(records)
+			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
+		}
+	}
+
 	## A parser for a whole CSV file, for use inside larger parsers.
 	##
 	## It reads records until its input ends, so it consumes all of it or fails
@@ -174,15 +194,24 @@ CSV := { records : List(CSV.Record) }.{
 		var $values = []
 		var $pos = 0.U64
 		var $index = 0.U64
+		var $field_capacity = 0.U64
 		while $pos < bytes.len() {
-			match scan_record(bytes, $pos) {
+			match scan_record_sized(bytes, $pos, $field_capacity) {
 				Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
 				Ok({ fields, next }) => {
+					$field_capacity = smaller(fields.len(), 64)
 					match record_parser.run(fields) {
 						Ok({ value, rest }) if rest.is_empty() => {
 							$values = $values.append(value)
 						}
-						Ok({ rest, .. }) => return Err(InvalidRow(locate(bytes, leftover_error(record_parser, fields, rest.len(), $index + 1))))
+						Ok({ rest, .. }) => {
+							# Rebuild the row only for this error, so successful decoding
+							# can consume its fields without keeping another list alias.
+							match scan_record(bytes, $pos) {
+								Ok({ fields: again, .. }) => return Err(InvalidRow(locate(bytes, leftover_error(record_parser, again, rest.len(), $index + 1))))
+								Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
+							}
+						}
 						Err(ParseError({ problem, offset })) => return Err(InvalidRow(locate(bytes, { record: $index + 1, field: offset + 1, line: 0, column: 0, problem: ParserFailure(problem) })))
 					}
 					$pos = after_break(bytes, next)
@@ -768,10 +797,12 @@ decode_table = |text, parse_row, mode| {
 	var $index = 0.U64
 	var $pos = 0.U64
 	var $values = []
+	var $field_capacity = 0.U64
 	while $pos < bytes.len() {
-		match scan_record(bytes, $pos) {
+		match scan_record_sized(bytes, $pos, $field_capacity) {
 			Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
 			Ok({ fields: row, next }) => {
+				$field_capacity = smaller(row.len(), 64)
 				if $index == 0 and mode != Headerless {
 					$header = row.map(|field| if (mode == HeaderNormalized) normalize_name(field) else Str.from_utf8_lossy(field))
 				} else if row != [[]] {
@@ -1068,16 +1099,21 @@ after_break = |bytes, at| {
 
 ## Scan records until the input ends.
 scan_table : List(U8) -> Try(List(CSV.Record), BadField)
-scan_table = |bytes| {
+scan_table = |bytes| scan_table_as(bytes, |field, _, _, _| field)
+
+scan_table_as : List(U8), (List(U8), U64, U64, Bool -> a) -> Try(List(List(a)), BadField)
+scan_table_as = |bytes, convert| {
 	len = bytes.len()
 	var $records = []
 	var $pos = 0
+	var $field_capacity = 0.U64
 	while $pos < len {
-		match scan_record(bytes, $pos) {
+		match scan_record_as(bytes, $pos, $field_capacity, convert) {
 			Err({ field, at, problem }) => {
 				return Err({ record: $records.len(), field, at, problem })
 			}
 			Ok({ fields, next }) => {
+				$field_capacity = smaller(fields.len(), 64)
 				$records = $records.append(fields)
 				$pos = after_break(bytes, next)
 			}
@@ -1090,13 +1126,25 @@ scan_table = |bytes| {
 ## the end of input). Fails with the index, offset and problem of a malformed
 ## quoted field.
 scan_record : List(U8), U64 -> Try({ fields : CSV.Record, next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
-scan_record = |bytes, start| {
+scan_record = |bytes, start| scan_record_sized(bytes, start, 0)
+
+# The previous row's width avoids repeated growth for regular tables. The
+# callers cap the hint so an unusually wide row does not force a large
+# allocation for the following row. Width remains unconstrained.
+scan_record_sized : List(U8), U64, U64 -> Try({ fields : CSV.Record, next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
+scan_record_sized = |bytes, start, field_capacity| scan_record_as(bytes, start, field_capacity, |field, _, _, _| field)
+
+# Convert fields as they are scanned, without materializing an intermediate
+# byte-field row when the caller needs another representation.
+scan_record_as : List(U8), U64, U64, (List(U8), U64, U64, Bool -> a) -> Try({ fields : List(a), next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
+scan_record_as = |bytes, start, field_capacity, convert| {
 	len = bytes.len()
-	var $fields = []
+	var $fields = List.with_capacity(field_capacity)
 	var $pos = start
 	while True {
+		quoted = bytes.get($pos) == Ok('"')
 		scanned =
-			if bytes.get($pos) == Ok('"') {
+			if quoted {
 				scan_quoted(bytes, $pos)
 			} else {
 				end = scan_unquoted(bytes, $pos)
@@ -1107,7 +1155,7 @@ scan_record = |bytes, start| {
 				return Err({ field: $fields.len(), at, problem })
 			}
 			Ok({ field, next }) => {
-				$fields = $fields.append(field)
+				$fields = $fields.append(convert(field, $pos, next, quoted))
 				if next < len and bytes.get(next) == Ok(',') {
 					$pos = next + 1
 				} else {
@@ -1118,16 +1166,97 @@ scan_record = |bytes, start| {
 	}
 }
 
+# Delimiters and quotes are ASCII, so the scanner's field boundaries cannot
+# split a UTF-8 code point in a Str input. Unescaped fields can be sliced
+# directly; doubled quotes require the scanner's decoded bytes instead.
+string_field : Str, U64, List(U8), U64, U64, Bool -> Str
+string_field = |text, len, field, start, next, quoted| {
+	content_start = if (quoted) start + 1 else start
+	content_end = if (quoted) next - 1 else next
+	if quoted and field.len() != content_end - content_start {
+		return Str.from_utf8_lossy(field)
+	}
+	match text.drop_first_bytes(content_start) {
+		Ok(suffix) => suffix.drop_last_bytes(len - content_end) ?? Str.from_utf8_lossy(field)
+		Err(_) => Str.from_utf8_lossy(field)
+	}
+}
+
 ## Offset of the first `,`, CR or LF at or after `start`, or the input length.
 scan_unquoted : List(U8), U64 -> U64
-scan_unquoted = |bytes, start| Utf8.find_any(bytes, start, delimiters)
+scan_unquoted = |bytes, start| {
+	comma = U8x16.splat(',')
+	cr = U8x16.splat('\r')
+	lf = U8x16.splat('\n')
+	var $pos = start
+	while True {
+		match U8x16.load(bytes, $pos) {
+			Ok(lanes) => {
+				mask = lanes.eq_lanes(comma).bitwise_or(lanes.eq_lanes(cr)).bitwise_or(lanes.eq_lanes(lf)).to_bitmask()
+				if mask != 0 {
+					return $pos + mask.count_trailing_zero_bits().to_u64()
+				}
+				$pos = $pos + 16
+			}
+			Err(_) => break
+		}
+	}
+	while $pos < bytes.len() {
+		if is_delimiter(bytes.get($pos) ?? 0) {
+			break
+		}
+		$pos = $pos + 1
+	}
+	$pos
+}
 
-# Bytes that end an unquoted field, found 16 at a time.
-delimiters : Utf8.ByteClass
-delimiters = Utf8.ByteClass.from_bytes([',', '\r', '\n'])
+find_quote : List(U8), U64 -> U64
+find_quote = |bytes, start| {
+	quote = U8x16.splat('"')
+	var $pos = start
+	while True {
+		match U8x16.load(bytes, $pos) {
+			Ok(lanes) => {
+				mask = lanes.eq_lanes(quote).to_bitmask()
+				if mask != 0 {
+					return $pos + mask.count_trailing_zero_bits().to_u64()
+				}
+				$pos = $pos + 16
+			}
+			Err(_) => break
+		}
+	}
+	while $pos < bytes.len() {
+		if bytes.get($pos) == Ok('"') {
+			break
+		}
+		$pos = $pos + 1
+	}
+	$pos
+}
 
-quote : Utf8.ByteClass
-quote = Utf8.ByteClass.from_bytes(['"'])
+# Exercise every vector lane, the scalar tail, and non-ASCII bytes without
+# depending on UTF-8 decoding or on the streaming scanner's implementation.
+expect [0, 'x', 0x80, 0xFF].all(
+	|fill| [',', '\r', '\n'].all(
+		|delimiter| (0..=48).iter().fold(
+			True,
+			|good, at| {
+				bytes = List.repeat(fill, at).append(delimiter).concat(List.repeat(fill, 19))
+				good and scan_unquoted(bytes, 0) == at and scan_unquoted(bytes, at + 1) == bytes.len()
+			},
+		),
+	),
+)
+expect [0, 'x', 0x80, 0xFF].all(
+	|fill| (0..=48).iter().fold(
+		True,
+		|good, at| {
+			bytes = List.repeat(fill, at).append('"').concat(List.repeat(fill, 19))
+			good and find_quote(bytes, 0) == at and find_quote(bytes, at + 1) == bytes.len()
+		},
+	),
+)
 
 is_delimiter : U8 -> Bool
 is_delimiter = |byte| byte == ',' or byte == '\r' or byte == '\n'
@@ -1138,7 +1267,7 @@ scan_quoted = |bytes, start| {
 	len = bytes.len()
 	var $field = []
 	var $chunk_start = start + 1
-	var $pos = Utf8.find_any(bytes, start + 1, quote)
+	var $pos = find_quote(bytes, start + 1)
 	while $pos < len {
 		if bytes.get($pos) == Ok('"') {
 			chunk = bytes.sublist({ start: $chunk_start, len: $pos - $chunk_start })
@@ -1147,7 +1276,7 @@ scan_quoted = |bytes, start| {
 			if bytes.get($pos + 1) == Ok('"') {
 				$field = $field.append('"')
 				$chunk_start = $pos + 2
-				$pos = Utf8.find_any(bytes, $pos + 2, quote)
+				$pos = find_quote(bytes, $pos + 2)
 			} else {
 				after = $pos + 1
 				if after >= len or is_delimiter(bytes.get(after) ?? 0) {
@@ -1156,7 +1285,7 @@ scan_quoted = |bytes, start| {
 				return Err({ at: after, problem: TextAfterQuote })
 			}
 		} else {
-			$pos = Utf8.find_any(bytes, $pos + 1, quote)
+			$pos = find_quote(bytes, $pos + 1)
 		}
 	}
 	Err({ at: start, problem: Unterminated })
@@ -1246,6 +1375,32 @@ row_error_of = |result| match result {
 	Err(InvalidRow(error)) => Ok(error)
 	_ => Err(NoError)
 }
+# Text collection has the same rows and exact syntax diagnostics as raw and
+# generic string decoding, including the header, BOM, and relaxed quote rules.
+expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n") == Ok([["name", "note"], ["Ada", "said \"hello\""]])
+expect ["", "\n", "\r\n", ",", "\"\"", "\"\",", "a,b\r\nc,d", "a\r\n\nb", "é,😀", "\u(feff)a", "a\"b, \"c\" ", "\"a\r\nb\",\"x\"\"y\"\n", "a,\"b", "x\n\"a\"b,c", "a,b,c,d\nx\n,,\n\"a,b\",c\n"].all(
+	|text| {
+		expected = records(text)
+		generic_agrees = match (CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text), expected) {
+			(Ok(actual), Ok(wanted)) => actual == wanted
+			(Err(InvalidCsv(actual)), Err(InvalidCsv(wanted))) => actual == wanted
+			_ => False
+		}
+		CSV.parse_string_records(text) == expected and generic_agrees
+	},
+)
+
+# Quoted and doubled-quote UTF-8 fields at every vector lane keep complete
+# code points and the same decoded text, including adjacent empty fields.
+expect (0..=48).iter().fold(
+	True,
+	|good, width| {
+		prefix = Str.from_utf8_lossy(List.repeat('x', width))
+		plain = "${prefix},\"é,😀\",\r\n"
+		escaped = "${prefix},\"é,😀\"\"q\",\r\n"
+		good and CSV.parse_string_records(plain) == Ok([[prefix, "é,😀", ""]]) and CSV.parse_string_records(escaped) == Ok([[prefix, "é,😀\"q", ""]])
+	},
+)
 
 error_of : Try(a, [InvalidCsv(CSV.Error), ..others]) -> Try(CSV.Error, [NoError])
 error_of = |result| {
@@ -1310,11 +1465,22 @@ user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string({}))).ke
 
 expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 
+# Row widths can grow or shrink between records, including empty fields.
+expect {
+	text = "a,b,c,d\nx\n,,\n\"a,b\",c\n"
+	expected = [["a", "b", "c", "d"], ["x"], ["", "", ""], ["a,b", "c"]]
+	records(text) == Ok(expected) and CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text) == Ok(expected)
+}
+
 # A field that does not decode names its record, field and position.
 expect row_error_of(CSV.parse_with(user, "Ada,36\nAlan,forty\n")) == Ok({ record: 2, field: 2, line: 2, column: 6, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: "forty".to_utf8() }) })) })
 
 # Extra fields are an error carrying the record number.
 expect row_error_of(CSV.parse_with(user, "Ada,36\n\"Al\nan\",41,x\n")) == Ok({ record: 2, field: 3, line: 3, column: 8, problem: UnreadFields({ found: 3, read: 2 }) })
+
+# A repetition's rejected field keeps its problem and quoted-field position
+# when the row is rebuilt for the leftover diagnostic. Later syntax loses to it.
+expect row_error_of(CSV.parse_with(Parser.many(CSV.field(CSV.u64({}))), "1,2\r\n3,\"4\",nope\r\n\"unterminated")) == Ok({ record: 2, field: 3, line: 2, column: 7, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: "nope".to_utf8() }) })) })
 
 # Too few fields is an error too.
 expect row_error_of(CSV.parse_with(user, "Ada")) == Ok({ record: 1, field: 2, line: 1, column: 1, problem: ParserFailure(MissingField) })

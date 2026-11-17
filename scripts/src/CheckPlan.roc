@@ -9,10 +9,6 @@ CheckPlan := [].{
 		{ name: "examples", summary: "the repository's examples against the working tree, compared with tests/spec.json", commands: [["release-package", "test-examples"]] },
 		{ name: "docs", summary: "the manual's executable Roc examples", commands: [["scripts/check_doc_examples.roc"]] },
 		{ name: "fuzz", summary: "build CI-enabled fuzz targets and run a short smoke campaign from their seeds", commands: [["python3", "scripts/run_fuzz.py", "smoke", "--ci", "all"]] },
-		{ name: "conformance", summary: "the fast conformance checks against each format's pinned reference implementation", commands: [["scripts/check_conformance.roc", "--"]] },
-		{ name: "markup", summary: "deterministic HTML, SVG and MathML conformance against independent oracles", commands: [["python3", "scripts/review_markup.py", "check"]] },
-		{ name: "asciidoc", summary: "AsciiDoc against the pinned Asciidoctor, and the performance harness smoke run", commands: [["scripts/check_asciidoc.roc", "--"]] },
-		{ name: "roc-syntax", summary: "RocSyntax against the compiler's own parser, recovery, mutations and the performance protocol", commands: [["python3", "scripts/check_roc_syntax.py", "--skip-fuzz", "--reference-performance", "smoke"]] },
 		{ name: "bench", summary: "benchmark smoke run of the roc-parser drivers; timings here are not measurements", commands: [["python3", "scripts/bench.py", "--quick", "--langs", "roc", "--timeout", "60", "--fail-on-error"]] },
 	]
 

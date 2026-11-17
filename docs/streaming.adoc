@@ -114,6 +114,11 @@ transient execution failures are never stored. Cached answers remain usable
 without installed oracle packages when their version receipt matches the
 requested dependency pins.
 
+These comparisons and their caches are local-only. Share the cache directory
+across local runs to reuse unchanged reference answers; each comparison still
+builds and executes the current Roc probe.
+
+
 [#_implement_another_chunk_decoder]
 == Implement another chunk decoder
 

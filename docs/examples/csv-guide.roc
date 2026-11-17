@@ -173,5 +173,12 @@ main! = |_args| {
 	Stdout.line!(describe("Airplane!,1980,Robert Hays,extra"))?
 	# end::errors-run[]
 
+	# tag::text-run[]
+	text_rows = CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n")?
+	for row in text_rows {
+		Stdout.line!(Str.join_with(row, " | "))?
+	}
+	# end::text-run[]
+
 	Ok({})
 }

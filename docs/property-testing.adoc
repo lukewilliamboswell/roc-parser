@@ -301,10 +301,9 @@ python3 -m venv .venv
 `scripts/http/`, `scripts/markdown/` and `scripts/yaml/` each have a
 `requirements.txt` with every dependency pinned, so `--no-deps` installs
 exactly the reviewed versions; CSV, XML and JSON use the Python standard
-library. Then run the same checks as the `Conformance` jobs of the scheduled
-`fuzz.yml` workflow. `scripts/check_conformance.roc --` does all of this in
-one environment: with no arguments it runs the fast checks that every pull
-request runs, and `all` adds the robustness campaigns:
+library. Cross-language comparisons run locally. `blueprint run conformance`
+does all of this in one environment: with no arguments it runs the fast checks,
+and `all` adds the robustness campaigns:
 
 [source,bash]
 ----
@@ -323,8 +322,7 @@ whose raw targets also start from every short case and suite input. It gives
 the rest to a seeded differential loop that generates documents and option
 sets, mutates them, and compares the probe with the oracle. It writes a report, and a reproducer
 for each kind of disagreement, under `.roc-parser-tmp/json-review/campaign/`.
-`--smoke` runs a short, iteration-bounded version, as CI does; for a longer
-local run, pass a budget and a seed, and replay a reproducer once you have a
+`--smoke` runs a short, iteration-bounded local comparison; for a longer run, pass a budget and a seed, and replay a reproducer once you have a
 fix:
 
 [source,bash]

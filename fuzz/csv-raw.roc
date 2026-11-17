@@ -23,6 +23,8 @@ import parser.Utf8
 ## Every input, UTF-8 or not, also goes through the byte-level CSV.parser({}) and
 ## CSV.decode with string and number field parsers, which must not crash on
 ## fields that are not UTF-8 and must agree with CSV.parse_records on text.
+## Direct text collection also matches raw and generic string decoding,
+## including complete syntax diagnostics for rejected CSV text.
 ## An input starting with byte 0x01 has its 0xC3 bytes removed first, so that
 ## reviewable UTF-8 seeds such as "\u(1)é,x" reach those paths with stray
 ## continuation bytes.
@@ -40,6 +42,20 @@ parse = |text| {
 		Ok(rows) => Ok(rows)
 		Err(InvalidCsv(_)) => Err(Rejected)
 	}
+}
+
+check_text_records : Str -> {}
+check_text_records = |text| {
+	expected = CSV.parse_records(text).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy)))
+	generic_agrees = match (CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text), expected) {
+		(Ok(actual), Ok(wanted)) => actual == wanted
+		(Err(InvalidCsv(actual)), Err(InvalidCsv(wanted))) => actual == wanted
+		_ => False
+	}
+	if CSV.parse_string_records(text) != expected or !generic_agrees {
+		crash "CSV text, raw, and generic collection disagree\n${Str.inspect(text)}"
+	}
+	{}
 }
 
 ## Decode raw bytes with the byte-level parser and field parsers that can
@@ -194,13 +210,14 @@ pathological = |bytes| {
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
 	if bytes.len() == 3 and bytes.first() == Ok(0xFF) {
-		_ = parse(pathological(bytes))
+		check_text_records(pathological(bytes))
 		Fuzz.keep
 	} else {
 		check_bytes(if (bytes.first() == Ok(0x01)) bytes.drop_if(|b| b == 0xC3) else bytes)
 		match Str.from_utf8(bytes) {
 			Err(_) => Fuzz.reject
 			Ok(input) => {
+				check_text_records(input)
 				match parse(input) {
 					Err(Rejected) => {}
 					Ok(rows) => {

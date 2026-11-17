@@ -1,10 +1,9 @@
-name: Property and conformance campaigns
+name: Roc property campaigns
 
-# Long searches on the latest Roc nightly: ten minutes per fuzz target, every
-# conformance review including the robustness campaigns, and RocSyntax and
-# AsciiDoc explorations with a new recorded seed. Pull requests run smoke-sized
-# versions of all of these in ci.yml (`blueprint run check`). The fuzz corpus
-# grows in the Actions cache, keyed by target, nightly and fuzz sources.
+# Native Roc coverage-guided campaigns on the latest nightly: ten minutes per
+# target. Pull requests run smoke-sized campaigns in ci.yml. Cross-language
+# oracle and performance comparisons run locally. The fuzz corpus grows in the
+# Actions cache, keyed by target, nightly and fuzz sources.
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -138,132 +137,5 @@ jobs:
             .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}/
             .roc-parser-tmp/fuzz/runs/${{ matrix.target }}/
           if-no-files-found: warn
-          retention-days: 14
-
-  conformance:
-    name: Conformance ${{ matrix.review }}
-    needs: nightly
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        # Every review registered in scripts/src/HarnessPlan.roc.
-        review:
-          - yaml
-          - yaml-robustness
-          - markdown-inline
-          - markdown-blocks
-          - xml
-          - json
-          - json-robustness
-          - ofx
-          - ofx-robustness
-          - qif
-          - qif-robustness
-          - csv
-          - http
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.13'
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
-      - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
-        with:
-          download-method: asset-api
-          version: nightly
-          nightly-tag: ${{ needs.nightly.outputs.tag }}
-      - env:
-          REVIEW: ${{ matrix.review }}
-        run: blueprint run conformance -- "$REVIEW"
-      - name: Upload review evidence
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: conformance-evidence-${{ matrix.review }}
-          path: |
-            .roc-parser-tmp/
-            !.roc-parser-tmp/oracle-venv/
-          if-no-files-found: warn
-          retention-days: 14
-
-  roc-syntax:
-    name: RocSyntax exploration
-    needs: nightly
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
-        with:
-          cache: 'true'
-          cache-workload: oracles
-      - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
-        with:
-          download-method: asset-api
-          version: nightly
-          nightly-tag: ${{ needs.nightly.outputs.tag }}
-      - name: Restore the raw syntax corpus for oracle mutations
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .roc-parser-tmp/fuzz/corpus/roc-syntax-raw
-          key: fuzz-${{ runner.os }}-roc-syntax-raw-${{ needs.nightly.outputs.tag }}-${{ hashFiles('fuzz/**') }}-${{ github.run_id }}
-          restore-keys: fuzz-${{ runner.os }}-roc-syntax-raw-${{ needs.nightly.outputs.tag }}-
-      - name: Explore with a new recorded seed
-        run: blueprint run roc-syntax -- --seed "$GITHUB_RUN_ID" --generated 10000 --mutation-runs 10000 --reference-performance smoke
-      - name: Upload syntax validation evidence
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: roc-syntax-validation
-          path: |
-            .roc-parser-tmp/roc-syntax-validation/
-            !.roc-parser-tmp/roc-syntax-validation/oracle/
-            !.roc-parser-tmp/roc-syntax-validation/performance-oracle/
-          if-no-files-found: warn
-          retention-days: 14
-
-  asciidoc:
-    name: AsciiDoc exploration
-    needs: nightly
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
-        with:
-          cache: 'true'
-          cache-workload: oracles
-          install-nix: 'true'
-      - name: Activate the locked Ruby oracle runtime
-        run: blueprint env oracle-ruby --github-path >> "$GITHUB_PATH"
-      - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
-        with:
-          download-method: asset-api
-          version: nightly
-          nightly-tag: ${{ needs.nightly.outputs.tag }}
-      - name: Explore with a new recorded seed
-        run: blueprint run asciidoc -- --generated 2000 --mutations 2000 --seed "$GITHUB_RUN_ID"
-      - name: Upload oracle evidence and reproducers
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: asciidoc-validation
-          path: |
-            .roc-parser-tmp/asciidoc/
-            !.roc-parser-tmp/asciidoc/gems/
-          if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
