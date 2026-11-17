@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Streaming
 import JsonConfig
 import Diagnostic
@@ -446,7 +447,7 @@ fail = |offset, problem| Err(JsonFail({ offset, problem }))
 locate : Str, U64, JsonValue.Problem -> JsonValue.Error
 locate = |input, offset, problem| {
 	position = Parser.Quotation.position(input, offset)
-	Diagnostic.{ location: Text({ offset, line: position.line, column: position.column }), path: [], problem }
+	Diagnostic.{ location: Text({ offset, line: position.line, column: position.column }), path: [], problem: own_json_problem(problem) }
 }
 
 ## An array or object whose closing bracket has not been read yet, saved
@@ -2448,7 +2449,7 @@ encoding_error : JsonConfig.WriteError -> [InvalidJsonValue(JsonValue.Error)]
 encoding_error = |problem| {
 	detail = match problem {
 		InvalidNumber(text) => InvalidNumber(Diagnostic.excerpt(text.to_utf8()))
-		DuplicateKey(key) => DuplicateKey(key)
+		DuplicateKey(key) => DuplicateKey(DiagnosticOwnership.own_text(key))
 		TooDeep => LimitExceeded({ resource: Nesting, max: 128, observed: AtLeast((128) + 1) })
 		TooLarge(max) => LimitExceeded({ resource: DocumentBytes, max: max, observed: AtLeast((max) + 1) })
 	}
@@ -2636,4 +2637,12 @@ write_text = |value, options| {
 	_ = measure_value(value, options.indent, 0, 0, options.max_bytes)?
 	bytes = write_value(List.with_capacity(256), value, options.sort_keys, options.indent, 0)?
 	Ok(Str.from_utf8(bytes) ?? "")
+}
+
+own_json_problem : JsonValue.Problem -> JsonValue.Problem
+own_json_problem = |problem| match problem {
+	DuplicateKey(key) => DuplicateKey(DiagnosticOwnership.own_text(key))
+	ConflictingDuplicateKey(key) => ConflictingDuplicateKey(DiagnosticOwnership.own_text(key))
+	NonInteroperableNumber(detail) => NonInteroperableNumber({ text: DiagnosticOwnership.own_text(detail.text), reason: detail.reason })
+	other => other
 }

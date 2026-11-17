@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Diagnostic
 import Parser
 import Streaming
@@ -90,7 +91,7 @@ CSV := { records : List(CSV.Record) }.{
 	## malformed CSV. Header checks compare normalized names in `Normalized`
 	## mode; `Absent` does not interpret any record as column names.
 	validate : ValidationProps -> Try(List(Record), [InvalidCsv(Error)])
-	validate = |props| checked_records(props.source, props.header, props.lints).map_err(|InvalidCsv(error)| InvalidCsv({ ..error, path: error.path.append(Source(props.name)) }))
+	validate = |props| checked_records(props.source, props.header, props.lints).map_err(|InvalidCsv(error)| InvalidCsv({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Validate and decode rows into the inferred Roc type. `Exact` and
 	## `Normalized` use a header; `Absent` decodes headerless tuples.
@@ -101,7 +102,7 @@ CSV := { records : List(CSV.Record) }.{
 		Row : row
 		decode_records(props.source.to_utf8(), records, Row.parser_for(CsvFormat.Default), decoding_mode(props.header)).map_err(
 			|failure| match failure {
-				InvalidCsv(error) => InvalidCsv({ ..error, path: error.path.append(Source(props.name)) })
+				InvalidCsv(error) => InvalidCsv({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) })
 				other => other
 			},
 		)
@@ -978,7 +979,7 @@ check_headers = |bytes, records, header, lints| {
 				return Err(InvalidCsv(locate(bytes, csv_error({ record: 1, field: $index + 1, line: 0, column: 0, problem: EmptyHeader }))))
 			}
 			if lints.duplicate_headers and $seen.contains(field) {
-				return Err(InvalidCsv(locate(bytes, csv_error({ record: 1, field: $index + 1, line: 0, column: 0, problem: DuplicateHeader(field) }))))
+				return Err(InvalidCsv(locate(bytes, csv_error({ record: 1, field: $index + 1, line: 0, column: 0, problem: DuplicateHeader(DiagnosticOwnership.own_text(field)) }))))
 			}
 			$seen = $seen.insert(field)
 			$index = $index + 1

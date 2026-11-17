@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Diagnostic
 import Streaming
 import Xml
@@ -87,7 +88,7 @@ OFX := { statements : List(OFX.Statement) }.{
 
 	## Validate imported or quoted OFX.
 	validate : ValidationProps -> Try(OFX, [InvalidOfx(Error)])
-	validate = |props| parse_bytes(props.source.to_utf8(), { ..props.options, encoding: Utf8 }).map_err(|InvalidOfx(error)| InvalidOfx({ ..error, path: [Source(props.name)].concat(error.path) }))
+	validate = |props| parse_bytes(props.source.to_utf8(), { ..props.options, encoding: Utf8 }).map_err(|InvalidOfx(error)| InvalidOfx({ ..error, path: [Source(DiagnosticOwnership.own_text(props.name))].concat(error.path) }))
 
 	## Checked literal conversion.
 	from_quote : Str -> Try(OFX, [BadQuotedBytes(Str)])
@@ -199,10 +200,10 @@ initial : OFX.Props -> State
 initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: Box.box(empty_context), started: False, in_statement: False, root_seen: False, root_closed: False, header_info: Box.box(empty_header), wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False, context_seen: [], balances_seen: [], terminal: False }
 
 located_problem : State, OFX.Problem -> OFX.Error
-located_problem = |state, detail| Diagnostic.{ location: Text({ offset: state.offset, line: state.line, column: state.column }), path: [], problem: detail }
+located_problem = |state, detail| Diagnostic.{ location: Text({ offset: state.offset, line: state.line, column: state.column }), path: [], problem: own_ofx_problem(detail) }
 
 write_error : OFX.Problem -> OFX.Error
-write_error = |detail| Diagnostic.{ location: Unavailable(GeneratedValue), path: [], problem: detail }
+write_error = |detail| Diagnostic.{ location: Unavailable(GeneratedValue), path: [], problem: own_ofx_problem(detail) }
 
 move : State, U8 -> State
 move = |state, byte| {
@@ -697,7 +698,7 @@ consume_name = |state, name, closing, self_closed, token, token_len, text| {
 	}
 	parent = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !placement(name, parent) {
-		return Err(token_failure($s, InvalidParent({ element: own_identifier(name), parent: own_identifier(parent) })))
+		return Err(token_failure($s, InvalidParent({ element: name, parent: parent })))
 	}
 	if name == "BANKACCTFROM" or name == "CCACCTFROM" {
 		if $s.started or $s.context_seen.contains("account") {
@@ -740,7 +741,7 @@ consume_name = |state, name, closing, self_closed, token, token_len, text| {
 close_tag : State, Str, Str, Try(Xml.Node, [Missing]) -> Try(Consumed, TokenFailure)
 close_tag = |state, name, text, parsed| {
 	if state.stack.last().map_ok(|frame| frame.name) != Ok(name) {
-		return Err(token_failure(state, MismatchedClosingTag({ actual: own_identifier(name), expected: state.stack.last().map_ok(|frame| own_identifier(frame.name)).map_err(|_| NoOpenElement) })))
+		return Err(token_failure(state, MismatchedClosingTag({ actual: name, expected: state.stack.last().map_ok(|frame| frame.name).map_err(|_| NoOpenElement) })))
 	}
 	var $s = { ..state, stack: state.stack.drop_last(1) }
 	if !$s.capture_tag.is_empty() {
@@ -2156,12 +2157,33 @@ text_position = |error| match error.location {
 	_ => crash "OFX: text coordinates requested for a non-source diagnostic"
 }
 
-own_identifier : Str -> Str
-own_identifier = |text| {
-	source = text.to_utf8()
-	var $copy = List.with_capacity(source.len())
-	for byte in source {
-		$copy = $copy.append(byte)
-	}
-	Str.from_utf8($copy) ?? crash "owned UTF-8 identifier changed its bytes"
+# Own complete failure identifiers while leaving successful fields source-backed.
+own_ofx_problem : OFX.Problem -> OFX.Problem
+own_ofx_problem = |problem| match problem {
+	MalformedHeaderField(text) => MalformedHeaderField(DiagnosticOwnership.own_text(text))
+	DuplicateHeaderField(text) => DuplicateHeaderField(DiagnosticOwnership.own_text(text))
+	UnsupportedHeader(text) => UnsupportedHeader(DiagnosticOwnership.own_text(text))
+	UnsupportedDataFormat(text) => UnsupportedDataFormat(DiagnosticOwnership.own_text(text))
+	UnsupportedEncoding(text) => UnsupportedEncoding(DiagnosticOwnership.own_text(text))
+	UnknownHeaderField(text) => UnknownHeaderField(DiagnosticOwnership.own_text(text))
+	UnsupportedCharset(text) => UnsupportedCharset(DiagnosticOwnership.own_text(text))
+	InvalidTagName(text) => InvalidTagName(DiagnosticOwnership.own_text(text))
+	UnsupportedElement(text) => UnsupportedElement(DiagnosticOwnership.own_text(text))
+	UnknownSgmlTag(text) => UnknownSgmlTag(DiagnosticOwnership.own_text(text))
+	DuplicateBalance(text) => DuplicateBalance(DiagnosticOwnership.own_text(text))
+	DuplicateExtension(text) => DuplicateExtension(DiagnosticOwnership.own_text(text))
+	ExtensionOrder(text) => ExtensionOrder(DiagnosticOwnership.own_text(text))
+	InvalidTransactionType(text) => InvalidTransactionType(DiagnosticOwnership.own_text(text))
+	InvalidExtensionText(text) => InvalidExtensionText(DiagnosticOwnership.own_text(text))
+	InvalidExtensionName(text) => InvalidExtensionName(DiagnosticOwnership.own_text(text))
+	UnknownSgmlExtension(text) => UnknownSgmlExtension(DiagnosticOwnership.own_text(text))
+	UnrepresentableCharacter(text) => UnrepresentableCharacter(DiagnosticOwnership.own_text(text))
+	UnsupportedScalarField(text) => UnsupportedScalarField(DiagnosticOwnership.own_text(text))
+	ContextOrder(text) => ContextOrder(DiagnosticOwnership.own_text(text))
+	UnsuccessfulResponse(text) => UnsuccessfulResponse(DiagnosticOwnership.own_text(text))
+	DuplicateField(text) => DuplicateField(DiagnosticOwnership.own_text(text))
+	InvalidParent(detail) => InvalidParent({ element: DiagnosticOwnership.own_text(detail.element), parent: DiagnosticOwnership.own_text(detail.parent) })
+	MismatchedClosingTag(detail) => MismatchedClosingTag({ actual: DiagnosticOwnership.own_text(detail.actual), expected: detail.expected.map_ok(DiagnosticOwnership.own_text) })
+	InvalidBalance(value) => InvalidBalance({ amount: DiagnosticOwnership.own_text(value.amount), as_of: DiagnosticOwnership.own_text(value.as_of) })
+	other => other
 }

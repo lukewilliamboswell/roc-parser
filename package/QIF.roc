@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Diagnostic
 import Streaming
 import Parser
@@ -50,7 +51,7 @@ QIF := { events : List(QIF.Event) }.{
 
 	## Validate a complete UTF-8 source for quotation or file import.
 	validate : ValidationProps -> Try(QIF, [InvalidQif(Error)])
-	validate = |props| parse_str(props.source, props.options).map_err(|InvalidQif(error)| InvalidQif({ ..error, path: [Source(props.name)].concat(error.path) }))
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidQif(error)| InvalidQif({ ..error, path: [Source(DiagnosticOwnership.own_text(props.name))].concat(error.path) }))
 
 	## Convert a checked source quotation.
 	from_quote : Str -> Try(QIF, [BadQuotedBytes(Str)])
@@ -130,7 +131,7 @@ QIF := { events : List(QIF.Event) }.{
 	## Decode one completely framed bank, cash, or credit-card record.
 	decode : Record, Props -> Try(Transaction, [InvalidQif(Error)])
 	decode = |record, props| {
-		bad = |problem| InvalidQif(Diagnostic.{ location: source_location({ offset: record.at.offset, line: record.at.line, column: record.at.column }), path: [], problem: problem })
+		bad = |problem| InvalidQif(Diagnostic.{ location: source_location({ offset: record.at.offset, line: record.at.line, column: record.at.column }), path: [], problem: own_qif_problem(problem) })
 		if record.section != "Bank" and record.section != "Cash" and record.section != "CCard" {
 			return Err(bad(UnsupportedSection(record.section)))
 		}
@@ -246,7 +247,7 @@ QIF := { events : List(QIF.Event) }.{
 	## Encode a header or complete raw record atomically.
 	write_event : Event, WriteProps -> Try(List(U8), [InvalidQif(Error)])
 	write_event = |event, props| {
-		bad = |problem| InvalidQif(Diagnostic.{ location: Unavailable(GeneratedValue), path: [], problem: problem })
+		bad = |problem| InvalidQif(Diagnostic.{ location: Unavailable(GeneratedValue), path: [], problem: own_qif_problem(problem) })
 		ending = match props.line_ending {
 			Lf => "\n"
 			CrLf => "\r\n"
@@ -279,7 +280,7 @@ QIF := { events : List(QIF.Event) }.{
 
 	## Validate each complete event atomically before emitting bytes.
 	encoder : WriteProps -> Streaming.Encoder({ section : Str, account : Str }, Event, [InvalidQif(Error)])
-	encoder = |props| Streaming.encoder({ initial_state: { section: "", account: "" }, encode: |state, event| encode_event(state, event, props).map_err(|InvalidQif(error)| InvalidQif({ ..error, location: Unavailable(GeneratedValue) })), finish: |_| Ok([]), chunk_bytes: props.chunk_bytes })
+	encoder = |props| Streaming.encoder({ initial_state: { section: "", account: "" }, encode: |state, event| encode_event(state, event, props).map_err(|InvalidQif(error)| InvalidQif({ ..error, location: Unavailable(GeneratedValue), problem: own_qif_problem(error.problem) })), finish: |_| Ok([]), chunk_bytes: props.chunk_bytes })
 
 	## Write a complete document; streaming writers use the same per-record encoder.
 	encode : QIF, WriteProps -> Try(List(U8), [InvalidQif(Error), InvalidChunkSize(Diagnostic(Streaming.ChunkSizeProblem))])
@@ -1088,3 +1089,16 @@ source_location = |position| if (position.line > 0 and position.column > 0) Text
 
 qif_text : QIF -> Try(Str, [InvalidQif(QIF.Error), InvalidChunkSize(Diagnostic(Streaming.ChunkSizeProblem))])
 qif_text = |document| document.encode({}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "UTF-8 QIF encoding produced invalid UTF-8")
+
+# Error payloads must outlive their source without owning unrelated document bytes.
+own_qif_problem : QIF.Problem -> QIF.Problem
+own_qif_problem = |problem| match problem {
+	UnsupportedSection(text) => UnsupportedSection(DiagnosticOwnership.own_text(text))
+	InvalidHeader(text) => InvalidHeader(DiagnosticOwnership.own_text(text))
+	InvalidField(field) => InvalidField({ code: field.code, value: DiagnosticOwnership.own_text(field.value) })
+	ContextMismatch(detail) => ContextMismatch({ expected: own_qif_context(detail.expected), actual: own_qif_context(detail.actual) })
+	other => other
+}
+
+own_qif_context : { section : Str, account : Str } -> { section : Str, account : Str }
+own_qif_context = |context| { section: DiagnosticOwnership.own_text(context.section), account: DiagnosticOwnership.own_text(context.account) }

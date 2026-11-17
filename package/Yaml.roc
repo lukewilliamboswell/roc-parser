@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Diagnostic
 import YamlSource
 import YamlScalar
@@ -232,7 +233,7 @@ Yaml := [
 						Text(position) => InputOffset(position.offset)
 						other => other
 					}
-					Err(ParseError({ problem: problem.problem, location, path: problem.path }))
+					Err(ParseError({ problem: own_yaml_problem(problem.problem), location, path: DiagnosticOwnership.own_path(problem.path) }))
 				}
 			}
 		},
@@ -411,7 +412,11 @@ Yaml := [
 				}
 				match parsed {
 					Ok(value) => Ok({ value, rest: [] })
-					Err(failure) => {
+					Err(unowned_failure) => {
+						failure = match unowned_failure {
+							InvalidYaml(error) => InvalidYaml(own_yaml_error(error))
+							other => other
+						}
 						location = match failure {
 							InvalidYaml(error) => match error.location {
 								LineColumn(position) => InputOffset(offset_of(bytes, position.line, position.column))
@@ -4034,13 +4039,19 @@ expect {
 
 ## Upgrade retained line/column information only when its original source is present.
 yaml_at_source : Str, Yaml.Error -> Yaml.Error
-yaml_at_source = |source, error| match error.location {
-	LineColumn(position) => {
-		offset = offset_of(source.to_utf8(), position.line, position.column)
-		physical = Parser.Quotation.position(source, offset)
-		{ ..error, location: Text({ offset, line: physical.line, column: physical.column }) }
+yaml_at_source = |source, error| {
+	owned = own_yaml_error(error)
+	match owned.location {
+		LineColumn(position) => {
+			offset = offset_of(source.to_utf8(), position.line, position.column)
+			physical = Parser.Quotation.position(source, offset)
+			{ ..owned, location: Text({ offset, line: physical.line, column: physical.column }) }
+		}
+		InputOffset(offset) => { ..owned, location: InputOffset(offset) }
+		ByteOffset(offset) => { ..owned, location: ByteOffset(offset) }
+		Text(position) => { ..owned, location: Text(position) }
+		Unavailable(reason) => { ..owned, location: Unavailable(reason) }
 	}
-	_ => error
 }
 
 ## Preserve authored source identity while adding byte coordinates that are known here.
@@ -4053,7 +4064,7 @@ yaml_at_named_source = |source, name, error| {
 			_ => False
 		},
 	)
-	{ ..located, path: if (has_source) located.path else [Source(name)].concat(located.path) }
+	{ ..located, path: if (has_source) located.path else [Source(DiagnosticOwnership.own_text(name))].concat(located.path) }
 }
 
 # Native failures retain only YAML problems and original positions at complete-source boundaries.
@@ -4110,3 +4121,28 @@ expect {
 		Ok(_) => False
 	}
 }
+
+own_yaml_problem : Yaml.Problem -> Yaml.Problem
+own_yaml_problem = |problem| match problem {
+	TypeMismatch(detail) => TypeMismatch({ expected: detail.expected, actual: own_yaml_actual(detail.actual) })
+	UnknownTag(text) => UnknownTag(DiagnosticOwnership.own_text(text))
+	UnknownKey(text) => UnknownKey(DiagnosticOwnership.own_text(text))
+	MissingRequiredField(text) => MissingRequiredField(DiagnosticOwnership.own_text(text))
+	LegacyBoolean(text) => LegacyBoolean(DiagnosticOwnership.own_text(text))
+	DuplicateKey(text) => DuplicateKey(DiagnosticOwnership.own_text(text))
+	InvalidEscape(text) => InvalidEscape(DiagnosticOwnership.own_text(text))
+	IntegerOutOfRange(detail) => IntegerOutOfRange({ value: DiagnosticOwnership.own_text(detail.value), target: detail.target })
+	NumberOutOfRange(detail) => NumberOutOfRange({ value: DiagnosticOwnership.own_text(detail.value), target: detail.target })
+	other => other
+}
+
+own_yaml_actual : Yaml.Actual -> Yaml.Actual
+own_yaml_actual = |actual| match actual {
+	MappingKey(text) => MappingKey(DiagnosticOwnership.own_text(text))
+	QuotedScalar(text) => QuotedScalar(DiagnosticOwnership.own_text(text))
+	PlainScalar(text) => PlainScalar(DiagnosticOwnership.own_text(text))
+	other => other
+}
+
+own_yaml_error : Yaml.Error -> Yaml.Error
+own_yaml_error = |error| Diagnostic.{ problem: own_yaml_problem(error.problem), location: error.location, path: DiagnosticOwnership.own_path(error.path) }
