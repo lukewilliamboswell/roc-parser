@@ -1,0 +1,80 @@
+= roc-parser 6.0.0-rc.4
+
+== Upgrade impact
+
+This release candidate previews 6.0.0 and its intentionally breaking API cleanup.
+The API may change again before the final release. Use the exact compiler named
+in the release record and basic-cli 0.28.1 for the maintained examples.
+
+Add the candidate to your application header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+Keep the package and its examples archive together. See the
+https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0-rc.4/docs/releases/6.0.0.adoc[combined upgrade notes]
+for the complete changes since 5.0.0.
+
+== Migrate public imports
+
+The package exports fifteen roots: `AsciiDoc`, `CSV`, `HTTP`, `Html`,
+`JsonValue`, `Markdown`, `Markup`, `MathML`, `OFX`, `Parser`, `QIF`,
+`RocSyntax`, `Svg`, `Xml` and `Yaml`.
+
+[cols="1,2",options="header"]
+|===
+|Previous root |Current owner
+|`Utf8`, `Literal` |`Parser.Utf8`, `Parser.Quotation`
+|`Streaming` |Decoder and encoder receiver methods; constructors under `Parser`
+|`JsonStream` |`JsonValue.record_decoder`, `JsonValue.record_encoder`
+|`XmlNs` |`Xml.Namespaced`
+|`SvgPath` |`Svg.Path`
+|`DomName`, `MarkupFacts` |`Markup.Name` constructors and receiver queries
+|`DomConstruction` |`Html.RepairContext`
+|`MarkupContext`, `MarkupTemplate` |`Markup.Context`, `Markup.Template`
+|===
+
+== Parsing and streaming
+
+Complete text parsers take `parse_str(source, props)`; pass `{}` for defaults.
+Parser values expose `.parse` for complete input and `.run` for a prefix, with
+text counterparts `.parse_str` and `.run_str`. HTTP request and response
+operations belong to `HTTP.Request` and `HTTP.Response`.
+
+CSV, QIF, OFX, JSON records, XML events and HTTP messages share decoder
+`.read_iter` and `.read_stream` methods. Recovery belongs in constructor props.
+Consume the final `Finished` event to validate EOF, or use `.collect`,
+`.collect_report` or `.values_stream` when appropriate. Supported writers
+expose `.write_iter` and `.write_stream`, with `chunk_bytes` in their props.
+
+CSV raw parsing returns a document with `.records`; derived decoding uses
+`CSV.decode_str`. YAML derived decoding uses `Yaml.decode_str` or
+`Yaml.value_parser`. Whole-document serialization uses `.encode(props)` where
+supported; AsciiDoc HTML conversion uses `.render_html()`.
+
+== Structured failures and ownership
+
+Native failures retain meaningful tags and a shared
+`Parser.Diagnostic(problem)` payload with typed `problem`, `location` and
+logical `path`. Limits include the resource, maximum and observed count.
+Unavailable positions are explicit; offsets and indexes are zero-based, while
+lines, columns, records and fields are one-based.
+
+Diagnostic excerpts own at most forty source bytes and retain their original
+length. Complete names and values have independent ownership, so small errors
+do not retain unrelated input buffers. Runtime validation returns typed errors;
+quotation hooks render compiler-required text.
+
+Markup names, source/tree queries and context operations use their owning
+values. Template plans and inherited context state are opaque. Safe shared
+tree validation is `Markup.validate_tree`; internal template exemptions and
+syntax helpers are private.
+
+== Performance status
+
+This candidate preserves native allocation checks and includes the existing
+performance work. It does not establish that the 1.5-times-fastest reference
+target is met. Whole-document and streaming comparisons remain separate local
+workloads; final performance acceptance is still pending.

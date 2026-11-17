@@ -978,7 +978,8 @@ class Performance(unittest.TestCase):
         cases={case['family']:case for case in perf.geometric([8])}
         self.assertTrue(cases['long-prefix-strong']['source'].endswith('*strong*'))
         self.assertTrue(cases['long-prefix-link']['source'].endswith('link:https://example.test[label]'))
-        self.assertTrue(cases['long-prefix-url']['source'].endswith('https://example.test'))
+        self.assertEqual(cases['long-prefix-url']['source'],
+                         'ordinary ASCII ' * 8 + 'https://example.test')
 
     def test_stateful_and_plain_punctuation_scaling_families(self):
         cases={case['family']:case for case in perf.geometric([4,8]) if case['size']==8}

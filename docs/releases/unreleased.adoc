@@ -1,4 +1,6 @@
 = Unreleased changes
 
-Changes prepared for the next release are collected in the
-{src}/docs/releases/6.0.0.adoc[6.0.0 upgrade notes], covering the changes since 5.0.0.
+The current preview is described in the
+{src}/docs/releases/6.0.0-rc.4.adoc[6.0.0-rc.4 notes]. The
+{src}/docs/releases/6.0.0.adoc[upcoming 6.0.0 upgrade notes] collect changes since
+5.0.0 for the final release.
