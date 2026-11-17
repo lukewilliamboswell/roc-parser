@@ -124,11 +124,7 @@ RocSyntax := { source : List(U8), tokens : List(RocSyntax.Token), nodes : List(R
 	parse_bytes : List(U8) -> Parsed
 	parse_bytes = |source| parse_source(source, FileMode)
 
-	## Parse one expression. Extra significant tokens produce a diagnostic.
-	parse_expression : Str -> Parsed
-	parse_expression = |source| parse_source(source.to_utf8(), ExpressionMode)
-
-	## Parse one expression from UTF-8 text.
+	## Parse one expression from UTF-8 text. Extra significant tokens produce a diagnostic.
 	parse_expr_str : Str -> Parsed
 	parse_expr_str = |source| parse_source(source.to_utf8(), ExpressionMode)
 
@@ -970,7 +966,7 @@ expect {
 }
 
 expect {
-	p = RocSyntax.parse_expression("f(1, [2, 3]).field")
+	p = RocSyntax.parse_expr_str("f(1, [2, 3]).field")
 	p.status == Complete and p.nodes.any(|n| n.kind == Call) and p.nodes.any(|n| n.kind == FieldAccess) and p.nodes.any(|n| n.kind == ListLiteral)
 }
 
@@ -1114,35 +1110,35 @@ expect {
 }
 
 expect {
-	p = RocSyntax.parse_expression("if x > 0 { x } else { 0 - x }")
+	p = RocSyntax.parse_expr_str("if x > 0 { x } else { 0 - x }")
 	p.status == Complete and p.nodes.any(|n| n.kind == If) and p.nodes.any(|n| n.kind == Block)
 }
 
 expect {
-	p = RocSyntax.parse_expression("{ name: \"Roc\", count: 42, flag }")
+	p = RocSyntax.parse_expr_str("{ name: \"Roc\", count: 42, flag }")
 	p.status == Complete and p.nodes.any(|n| n.kind == Record) and p.nodes.keep_if(|n| n.kind == RecordField).len() == 3
 }
 
 expect {
-	p = RocSyntax.parse_expression("match item { Some(x) => x, None => 0 }")
+	p = RocSyntax.parse_expr_str("match item { Some(x) => x, None => 0 }")
 	p.status == Complete and p.nodes.keep_if(|n| n.kind == MatchBranch).len() == 2
 }
 
 expect {
-	p = RocSyntax.parse_expression("{ x = 1\n y = x + 2\n y }")
+	p = RocSyntax.parse_expr_str("{ x = 1\n y = x + 2\n y }")
 	p.status == Complete and p.nodes.keep_if(|n| n.kind == Declaration).len() == 2
 }
 
 expect {
-	RocSyntax.parse_expression("12cats").status == Recovered and RocSyntax.parse_expression("0x").status == Recovered and RocSyntax.parse_expression("01").status == Recovered and RocSyntax.parse_expression("1.2e-3").status == Complete and RocSyntax.parse_expression("0xFF").status == Complete
+	RocSyntax.parse_expr_str("12cats").status == Recovered and RocSyntax.parse_expr_str("0x").status == Recovered and RocSyntax.parse_expr_str("01").status == Recovered and RocSyntax.parse_expr_str("1.2e-3").status == Complete and RocSyntax.parse_expr_str("0xFF").status == Complete
 }
 
 expect {
-	RocSyntax.parse_expression("\"\\q\"").status == Recovered and RocSyntax.parse_expression("'ab'").status == Recovered and RocSyntax.parse_expression("'é'").status == Complete and RocSyntax.parse_expression("\"\\u(1F600)\"").status == Complete
+	RocSyntax.parse_expr_str("\"\\q\"").status == Recovered and RocSyntax.parse_expr_str("'ab'").status == Recovered and RocSyntax.parse_expr_str("'é'").status == Complete and RocSyntax.parse_expr_str("\"\\u(1F600)\"").status == Complete
 }
 
 expect {
-	p = RocSyntax.parse_expression("1 + 2 * 3")
+	p = RocSyntax.parse_expr_str("1 + 2 * 3")
 	# Nodes are postorder: the multiply covers 2 * 3, and is the right child
 	# of the addition, independently of the flattened tree storage order.
 	binaries = p.nodes.keep_if(|n| n.kind == Binary)
@@ -1151,12 +1147,12 @@ expect {
 
 expect {
 	# The pinned compiler makes equality right-associative.
-	p = RocSyntax.parse_expression("1 == 2 == 3")
+	p = RocSyntax.parse_expr_str("1 == 2 == 3")
 	p.nodes.keep_if(|n| n.kind == Binary).map(|n| (n.start, n.end)) == [(5, 11), (0, 11)]
 }
 
 expect {
-	RocSyntax.parse_str("a b").status == Recovered and RocSyntax.parse_expression("1 2").status == Recovered
+	RocSyntax.parse_str("a b").status == Recovered and RocSyntax.parse_expr_str("1 2").status == Recovered
 }
 
 can_end_expression : RocSyntax.TokenKind -> Bool

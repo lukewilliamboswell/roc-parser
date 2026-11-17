@@ -89,18 +89,21 @@ QIF := { events : List(QIF.Event) }.{
 		},
 	)
 
-	## An incremental decoder retains only context and the unfinished record.
-	Reader : { props : Props, offset : U64, line_number : U64, column : U64, line_start : U64, line_bytes : List(U8), skip_lf : Bool, fields : List(Field), section : Str, account : Str, record_at : Location, record_bytes : U64, done : Bool }
+	## Configured raw-event decoder. Scanner buffers and coordinates are private.
+	Decoder : Streaming.Decoder(DecoderState, Event, Error)
 
 	## Configure raw events for Streaming.read_iter or Streaming.read_stream.
-	decoder : Props -> Streaming.Decoder(Reader, Event, Error)
+	decoder : Props -> Decoder
 	decoder = |props| Streaming.decoder(initial_qif(props), qif_step)
 
 	## Typed events retain section and account context.
 	TransactionEvent : [Header(Str), Account(Record), Context(Record), Transaction(Transaction)]
 
+	## Configured transaction decoder with the same bounded scanner state.
+	TransactionDecoder : Streaming.Decoder(DecoderState, TransactionEvent, Error)
+
 	## Configure typed bank, cash, and card transactions.
-	transaction_decoder : Props -> Streaming.Decoder(Reader, TransactionEvent, Error)
+	transaction_decoder : Props -> TransactionDecoder
 	transaction_decoder = |props| Streaming.decoder(initial_qif(props), typed_step)
 
 	## Decode a complete document's bank/cash/card records without losing raw fields.
@@ -297,10 +300,12 @@ QIF := { events : List(QIF.Event) }.{
 	to_str = |doc| to_bytes(doc, {}).map_ok(Str.from_utf8_lossy)
 }
 
-initial_qif : QIF.Props -> QIF.Reader
-initial_qif = |props| { props, offset: 0, line_number: 1, column: 1, line_start: 0, line_bytes: [], skip_lf: False, fields: [], section: "", account: "", record_at: { offset: 0, line: 1, column: 1 }, record_bytes: 0, done: False }
+DecoderState :: { props : QIF.Props, offset : U64, line_number : U64, column : U64, line_start : U64, line_bytes : List(U8), skip_lf : Bool, fields : List(QIF.Field), section : Str, account : Str, record_at : QIF.Location, record_bytes : U64, done : Bool }
 
-qif_step : QIF.Reader, List(U8), Streaming.InputEnd -> Streaming.Step(QIF.Reader, QIF.Event, QIF.Error)
+initial_qif : QIF.Props -> DecoderState
+initial_qif = |props| DecoderState.{ props, offset: 0, line_number: 1, column: 1, line_start: 0, line_bytes: [], skip_lf: False, fields: [], section: "", account: "", record_at: { offset: 0, line: 1, column: 1 }, record_bytes: 0, done: False }
+
+qif_step : DecoderState, List(U8), Streaming.InputEnd -> Streaming.Step(DecoderState, QIF.Event, QIF.Error)
 qif_step = |initial, bytes, end| {
 	encoding = initial.props.encoding
 	step_with_decode(initial, bytes, end, |part, _| Streaming.decode_text(part, encoding))
@@ -330,7 +335,7 @@ encode_event = |state, event, props| {
 	Ok({ state: next, bytes })
 }
 
-typed_step : QIF.Reader, List(U8), Streaming.InputEnd -> Streaming.Step(QIF.Reader, QIF.TransactionEvent, QIF.Error)
+typed_step : DecoderState, List(U8), Streaming.InputEnd -> Streaming.Step(DecoderState, QIF.TransactionEvent, QIF.Error)
 typed_step = |state, bytes, end| {
 	raw = qif_step(state, bytes, end)
 	outcome = match raw.outcome {
@@ -375,12 +380,12 @@ parse_core = |bytes, props, decode| {
 # coordinates stay local until a public decoder step returns.
 LineState : { fields : List(QIF.Field), section : Str, account : Str, record_at : QIF.Location }
 
-decoder_at : QIF.Props, LineState, U64, U64, U64, U64, List(U8), Bool, U64 -> QIF.Reader
+decoder_at : QIF.Props, LineState, U64, U64, U64, U64, List(U8), Bool, U64 -> DecoderState
 decoder_at = |props, state, offset, line_number, column, line_start, line_bytes, skip_lf, record_bytes| {
-	{ props, offset, line_number, column, line_start, line_bytes, skip_lf, record_bytes, fields: state.fields, section: state.section, account: state.account, record_at: state.record_at, done: False }
+	DecoderState.{ props, offset, line_number, column, line_start, line_bytes, skip_lf, record_bytes, fields: state.fields, section: state.section, account: state.account, record_at: state.record_at, done: False }
 }
 
-step_with_decode : QIF.Reader, List(U8), Streaming.InputEnd, (List(U8), U64 -> Try(Str, [BadEncoding(Streaming.EncodingError)])) -> Streaming.Step(QIF.Reader, QIF.Event, QIF.Error)
+step_with_decode : DecoderState, List(U8), Streaming.InputEnd, (List(U8), U64 -> Try(Str, [BadEncoding(Streaming.EncodingError)])) -> Streaming.Step(DecoderState, QIF.Event, QIF.Error)
 step_with_decode = |initial, bytes, end, decode| {
 	if initial.done {
 		return { state: initial, consumed: 0, outcome: Done }
@@ -501,10 +506,10 @@ step_with_decode = |initial, bytes, end, decode| {
 	{ state: terminal(decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)), consumed: $pos, outcome: Done }
 }
 
-terminal : QIF.Reader -> QIF.Reader
+terminal : DecoderState -> DecoderState
 terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done: True }
 
-located_problem : QIF.Reader, Parser.Problem(QIF.Problem) -> QIF.Error
+located_problem : DecoderState, Parser.Problem(QIF.Problem) -> QIF.Error
 located_problem = |s, problem| { offset: s.offset, line: s.line_number, column: s.column, problem }
 
 process_line : LineState, List(U8), QIF.Location, QIF.Props, (List(U8), U64 -> Try(Str, [BadEncoding(Streaming.EncodingError)])) -> { state : LineState, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }

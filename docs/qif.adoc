@@ -15,6 +15,10 @@ accepts an effectful source of fallible byte chunks. The package remains platfor
 `examples/qif-stream.roc` connects basic-cli stdin chunks to the incremental
 parser and writer; it never collects the document.
 
+Use `QIF.Decoder` or `QIF.TransactionDecoder` when annotating the configured
+decoder's type. Both support the common `Streaming` operations; scanner state
+remains opaque.
+
 Results use `Streaming`'s `Value`, `Rejected` and `Finished` events. Default
 handling stops on the first error. Configure the decoder with
 `.with_errors({ error_policy: ReportInvalidRecords })` to receive diagnostics for fully framed records, or use

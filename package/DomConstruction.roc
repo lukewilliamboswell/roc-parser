@@ -6,6 +6,8 @@ import MarkupVocabulary
 ## DOM nodes. Names are already resolved: this module never folds spelling,
 ## infers a namespace, validates a vocabulary or reads an ancestor list.
 ## A successful check does not certify a complete serialization round trip.
+## No nodes are created or mutated. Use [MarkupContext] for canonical
+## source-authoring placement and HTML, SVG or MathML content models.
 DomConstruction :: [].{
 
 	## Opaque immediate-parent identity and finite inherited scope facts.

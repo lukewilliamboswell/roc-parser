@@ -39,7 +39,7 @@ drain = |n| {
 
 ## Return only a small pending decoder after discarding a large source header.
 ## Shapes retain a long field, a pending Account N, or committed account context.
-retain_pending : U8 -> Streaming.Decoder(QIF.Reader, QIF.Event, QIF.Error)
+retain_pending : U8 -> QIF.Decoder
 retain_pending = |shape| {
 	name = "An account name beyond short string storage"
 	value = "A field value beyond short string storage"
