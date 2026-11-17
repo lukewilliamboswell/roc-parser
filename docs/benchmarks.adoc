@@ -125,6 +125,11 @@ on an otherwise idle machine, retain the reported timing spread, and compare
 revisions on the same hardware and toolchains. The README runner below uses
 CPU affinity on Linux for its published figures.
 
+The {src}/bench/streaming-throughput.json[selected Apple M2 receipts] record
+whole-document and 4 KiB streaming measurements, implementation models, raw
+batch checksums and each 1.5x target decision. They include the remaining
+streaming target failures so improvements can be measured against the same cases.
+
 == Reproduce the README throughput table
 
 On Linux, choose an available logical CPU and run:

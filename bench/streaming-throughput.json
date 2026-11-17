@@ -1,0 +1,3275 @@
+{
+  "schema_version": 1,
+  "scope": "Selected whole-document collection and 4096-byte record/event consumption workloads on one Apple M2 host. Ownership and validation differences are recorded with each implementation.",
+  "whole_document": {
+    "metadata": {
+      "schema": 1,
+      "label": "final-whole",
+      "quick": false,
+      "date": "2026-11-17T07:00:57+00:00",
+      "machine": {
+        "description": "Apple M2 (8 CPUs, arm64)",
+        "cpu": "Apple M2",
+        "cpus": 8,
+        "arch": "arm64",
+        "os": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+        "python": "3.13.16"
+      },
+      "git": {
+        "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+        "dirty": false
+      },
+      "environment": {
+        "blueprint": true,
+        "tools": {
+          "roc": "/private/tmp/roc-parser-streaming-tools/roc",
+          "go": "/nix/store/zm3sm3zv21c2jz90bh16jc7rgqfcnivs-go-1.26.10/bin/go",
+          "cargo": "/nix/store/yyhrcj8z06lw33h4kln41zsgxp5kd14g-cargo-1.99.0/bin/cargo",
+          "rustc": "/nix/store/kivknb4q8cs9z7fjl5gjz4v9n1vm0gi4-rustc-wrapper-1.99.0/bin/rustc",
+          "python3": "/nix/store/igbn577l0ylqad4ks9asxlprkjavfvg0-python3-3.13.16/bin/python3"
+        },
+        "lock": {
+          "path": "Blueprint.lock",
+          "sha256": "470fa97cbf22dd87e37b4ce96bd09dc03958a1db9f8ed8a9d6f9fab26fc8f505",
+          "inputs": {
+            "nix": "github:NixOS/nixpkgs/nixos-unstable@1c89083e451e891152365b799595cf7790a43325"
+          }
+        }
+      },
+      "versions": {
+        "roc": "Roc compiler version nightly-2026-11-15-f25da45",
+        "rustc": "rustc 1.99.0 (b940084d7 2026-09-28) (built from a source tarball)",
+        "rust_crates": {
+          "comrak": "0.43.0",
+          "csv": "1.3.1",
+          "httparse": "1.10.1",
+          "ofx-rs": "0.2.0",
+          "pulldown-cmark": "0.13.0",
+          "qif_parser": "0.6.0",
+          "quick-xml": "0.38.3",
+          "roxmltree": "0.21.1",
+          "serde_json": "1.0.151",
+          "serde_yaml": "0.9.34+deprecated",
+          "unsafe-libyaml": "0.2.11",
+          "yaml-rust2": "0.10.3"
+        },
+        "go": "go version go1.26.10 darwin/arm64",
+        "go_modules": {
+          "github.com/yuin/goldmark": "v1.7.13",
+          "gopkg.in/yaml.v3": "v3.0.1",
+          "github.com/aclindsa/ofxgo": "v0.1.3",
+          "github.com/aclindsa/xml": "v0.0.0-20201125035057-bbd5c9ec99ac",
+          "golang.org/x/text": "v0.3.7"
+        },
+        "python": "Python 3.13.16",
+        "python_packages": [
+          "h11==0.16.0"
+        ],
+        "reference_profiles": {
+          "rust": {
+            "compiler": "rustc 1.99.0 (b940084d7 2026-09-28) (built from a source tarball)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: aarch64-apple-darwin\nrelease: 1.99.0\nLLVM version: 21.1.8",
+            "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+            "libraries": {
+              "comrak": "0.43.0",
+              "csv": "1.3.1",
+              "httparse": "1.10.1",
+              "ofx-rs": "0.2.0",
+              "pulldown-cmark": "0.13.0",
+              "qif_parser": "0.6.0",
+              "quick-xml": "0.38.3",
+              "roxmltree": "0.21.1",
+              "serde_json": "1.0.151",
+              "serde_yaml": "0.9.34+deprecated",
+              "unsafe-libyaml": "0.2.11",
+              "yaml-rust2": "0.10.3"
+            }
+          },
+          "go": {
+            "compiler": "go version go1.26.10 darwin/arm64",
+            "configuration": {
+              "CC": "clang",
+              "CGO_ENABLED": "1",
+              "CXX": "clang++",
+              "GOAMD64": "",
+              "GOARCH": "arm64",
+              "GOARM": "",
+              "GOEXPERIMENT": "",
+              "GOFLAGS": "",
+              "GOOS": "darwin",
+              "GOTOOLCHAIN": "local"
+            },
+            "libraries": {
+              "github.com/yuin/goldmark": "v1.7.13",
+              "gopkg.in/yaml.v3": "v3.0.1",
+              "github.com/aclindsa/ofxgo": "v0.1.3",
+              "github.com/aclindsa/xml": "v0.0.0-20201125035057-bbd5c9ec99ac",
+              "golang.org/x/text": "v0.3.7"
+            }
+          },
+          "python": {
+            "version": "3.13.16 (main, Sep 30 2026, 18:57:20) [Clang 21.1.8 ]",
+            "compiler": "Clang 21.1.8 ",
+            "build": [
+              "main",
+              "Sep 30 2026 18:57:20"
+            ],
+            "configuration": "'--prefix=/nix/store/igbn577l0ylqad4ks9asxlprkjavfvg0-python3-3.13.16' '--without-ensurepip' '--with-system-expat' '--with-system-libmpdec' '--with-openssl=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-openssl-3.5.9-dev' '--with-tzpath=/nix/store/v7pl3md4rm2iprj2smf9892wmgj5sh7m-tzdata-2026e/share/zoneinfo' '--with-lto' '--enable-shared' '--enable-gil' '--enable-loadable-sqlite-extensions' 'CC=clang' 'LDFLAGS=-L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-bzip2-1.0.8/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-libffi-40/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ncurses-6.6/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-xz-5.8.4/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-zlib-1.3.2/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-openssl-3.5.9/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-sqlite-3.53.3/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-mpdecimal-4.0.1/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-expat-2.9.0/lib -L/nix/store/v7pl3md4rm2iprj2smf9892wmgj5sh7m-tzdata-2026e/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-gdbm-1.26-lib/lib -L/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-readline-8.3p3/lib' 'LIBS=' 'CPPFLAGS=-I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-bzip2-1.0.8-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-libffi-40-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ncurses-6.6-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-xz-5.8.4-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-zlib-1.3.2-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-openssl-3.5.9-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-sqlite-3.53.3-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-mpdecimal-4.0.1-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-expat-2.9.0-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-tzdata-2026e-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-gdbm-1.26-dev/include -I/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-readline-8.3p3-dev/include'",
+            "executable_sha256": "c009b0cc3471b58d0e3bd7ce9253c33fce878833f825663ed2aa897553a55625",
+            "packages": [
+              [
+                "h11",
+                "0.16.0",
+                "69d029dc8ed7a45bb569e8917df553e0eb0c51c74856a309919b98a981392f46"
+              ],
+              [
+                "pip",
+                "26.2.1",
+                "71d32c4a6af3b08430ca1d6f3e7a5e781b3d77d0c2dbd0a5d288432ab1c274d4"
+              ]
+            ]
+          }
+        }
+      },
+      "skipped": {},
+      "repetitions": 7,
+      "target_ms": 200.0,
+      "implementations": [
+        {
+          "id": "roc/roc-parser",
+          "format": "json",
+          "workload": "collect",
+          "notes": "collect; roc build --opt=speed --debug"
+        },
+        {
+          "id": "roc/roc-parser",
+          "format": "xml",
+          "workload": "collect",
+          "notes": "collect; roc build --opt=speed --debug"
+        },
+        {
+          "id": "roc/roc-parser",
+          "format": "http",
+          "workload": "collect",
+          "notes": "collect; roc build --opt=speed --debug"
+        },
+        {
+          "id": "rust/serde_json",
+          "format": "json",
+          "workload": "collect",
+          "notes": "serde_json Value with preserve_order and arbitrary_precision: ordered, lossless"
+        },
+        {
+          "id": "rust/quick-xml",
+          "format": "xml",
+          "workload": "collect",
+          "notes": "quick-xml pull events built into an owned tree"
+        },
+        {
+          "id": "rust/roxmltree",
+          "format": "xml",
+          "workload": "collect-borrowed",
+          "notes": "roxmltree borrowed read-only DOM"
+        },
+        {
+          "id": "rust/httparse",
+          "format": "http",
+          "workload": "collect",
+          "notes": "httparse head plus Content-Length/chunked body framing, copied"
+        },
+        {
+          "id": "go/encoding-json",
+          "format": "json",
+          "workload": "collect",
+          "notes": "encoding/json Decoder.UseNumber into interface{}; maps are unordered"
+        },
+        {
+          "id": "go/encoding-xml",
+          "format": "xml",
+          "workload": "collect",
+          "notes": "encoding/xml tokens built into a tree"
+        },
+        {
+          "id": "go/net-http",
+          "format": "http",
+          "workload": "collect",
+          "notes": "net/http ReadRequest/ReadResponse plus io.ReadAll body"
+        },
+        {
+          "id": "python/json",
+          "format": "json",
+          "workload": "collect",
+          "notes": "stdlib json.loads (C scanner) into dicts and lists; numbers become int and float"
+        },
+        {
+          "id": "python/etree",
+          "format": "xml",
+          "workload": "collect",
+          "notes": "xml.etree.ElementTree.fromstring (expat)"
+        },
+        {
+          "id": "python/h11",
+          "format": "http",
+          "workload": "collect",
+          "notes": "h11 connection state machine"
+        }
+      ],
+      "streaming": false,
+      "chunk_bytes": null,
+      "maximum_slowdown": 1.5,
+      "corpus": [
+        {
+          "id": "json/generated-medium",
+          "kind": "medium",
+          "bytes": 65662,
+          "sha256": "c068ce25f54d9debd380b53e39c91c0cb37d1e71a6069d6a37de62ac7c29c01d",
+          "path": "json/generated-medium.json"
+        },
+        {
+          "id": "xml/generated-medium",
+          "kind": "medium",
+          "bytes": 65610,
+          "sha256": "4c91b73b33bc4a3ea8ca29ffb3702a24bf1603371c9b48f0165a8182fdddb45d",
+          "path": "xml/generated-medium.xml"
+        },
+        {
+          "id": "http/sample-browser-get",
+          "kind": "sample",
+          "bytes": 555,
+          "sha256": "c19ed6be46fd4b6fde0e851f5ffa4a75bca0b827c0165c37f11d1aa45bff440d",
+          "path": "http/sample-browser-get.http"
+        }
+      ],
+      "reference_cache": {
+        "mode": "refresh",
+        "directory": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/reference-cache"
+      },
+      "measurement": "in-process parse loop around an in-memory document; stdin, process start and output are outside the timed region; median of per-parse time over batches"
+    },
+    "results": [
+      {
+        "impl": "roc/roc-parser",
+        "lang": "roc",
+        "library": "roc-parser",
+        "doc": "json/generated-medium",
+        "kind": "medium",
+        "bytes": 65662,
+        "workload": "collect",
+        "median_ns": 457062.0,
+        "min_ns": 456213.776,
+        "max_ns": 462164.1093333333,
+        "stdev_ns": 2259.283706459381,
+        "spread_pct": 1.3018656841595482,
+        "mb_per_s": 143.66103504557367,
+        "iterations": 375,
+        "accepted": true,
+        "checksum": 24885750,
+        "peak_rss_bytes": 3375104,
+        "batch_elapsed_ns": [
+          173311541,
+          172473417,
+          171080166,
+          171163791,
+          171110250,
+          171908875,
+          171398250
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/roc-json"
+          ],
+          "measured_at": "2026-11-17T07:00:58+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 534334,
+            "successes": 1,
+            "checksum": 66362,
+            "peak_rss_bytes": 2719744
+          },
+          "warmup": {
+            "iterations": 375,
+            "elapsed_ns": 171936375,
+            "successes": 375,
+            "checksum": 24885750,
+            "peak_rss_bytes": 2686976
+          },
+          "batches": [
+            {
+              "iterations": 375,
+              "elapsed_ns": 173311541,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 3375104
+            },
+            {
+              "iterations": 375,
+              "elapsed_ns": 172473417,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 2932736
+            },
+            {
+              "iterations": 375,
+              "elapsed_ns": 171080166,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 2686976
+            },
+            {
+              "iterations": 375,
+              "elapsed_ns": 171163791,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 2686976
+            },
+            {
+              "iterations": 375,
+              "elapsed_ns": 171110250,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 2768896
+            },
+            {
+              "iterations": 375,
+              "elapsed_ns": 171908875,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 3047424
+            },
+            {
+              "iterations": 375,
+              "elapsed_ns": 171398250,
+              "successes": 375,
+              "checksum": 24885750,
+              "peak_rss_bytes": 2883584
+            }
+          ]
+        }
+      },
+      {
+        "impl": "rust/serde_json",
+        "lang": "rust",
+        "library": "serde_json",
+        "doc": "json/generated-medium",
+        "kind": "medium",
+        "bytes": 65662,
+        "workload": "collect",
+        "median_ns": 427278.90173410403,
+        "min_ns": 424908.7225433526,
+        "max_ns": 436541.6647398844,
+        "stdev_ns": 4609.036592591683,
+        "spread_pct": 2.722564149392752,
+        "mb_per_s": 153.67480054248387,
+        "iterations": 173,
+        "accepted": true,
+        "checksum": 11485297,
+        "peak_rss_bytes": 7946240,
+        "batch_elapsed_ns": [
+          73787750,
+          75209083,
+          75521708,
+          74212709,
+          73509209,
+          73919250,
+          73614000
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
+            "serde_json"
+          ],
+          "measured_at": "2026-11-17T07:00:59+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 1157959,
+            "successes": 1,
+            "checksum": 66389,
+            "peak_rss_bytes": 7634944
+          },
+          "warmup": {
+            "iterations": 173,
+            "elapsed_ns": 73990958,
+            "successes": 173,
+            "checksum": 11485297,
+            "peak_rss_bytes": 7929856
+          },
+          "batches": [
+            {
+              "iterations": 173,
+              "elapsed_ns": 73787750,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7946240
+            },
+            {
+              "iterations": 173,
+              "elapsed_ns": 75209083,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7946240
+            },
+            {
+              "iterations": 173,
+              "elapsed_ns": 75521708,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7913472
+            },
+            {
+              "iterations": 173,
+              "elapsed_ns": 74212709,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7913472
+            },
+            {
+              "iterations": 173,
+              "elapsed_ns": 73509209,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7946240
+            },
+            {
+              "iterations": 173,
+              "elapsed_ns": 73919250,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7929856
+            },
+            {
+              "iterations": 173,
+              "elapsed_ns": 73614000,
+              "successes": 173,
+              "checksum": 11485297,
+              "peak_rss_bytes": 7913472
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "0831904eeb37065798c214c3875de68e829938b9d0396d06a586741cf276420c",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:00:59+00:00"
+          }
+        }
+      },
+      {
+        "impl": "go/encoding-json",
+        "lang": "go",
+        "library": "encoding-json",
+        "doc": "json/generated-medium",
+        "kind": "medium",
+        "bytes": 65662,
+        "workload": "collect",
+        "median_ns": 668920.0450450451,
+        "min_ns": 664323.3873873873,
+        "max_ns": 673209.4594594594,
+        "stdev_ns": 3482.9498912312924,
+        "spread_pct": 1.3284206592244792,
+        "mb_per_s": 98.16120848281399,
+        "iterations": 222,
+        "accepted": true,
+        "checksum": 14732364,
+        "peak_rss_bytes": 18726912,
+        "batch_elapsed_ns": [
+          149452500,
+          147479792,
+          148035000,
+          147888834,
+          149245125,
+          149212916,
+          148500250
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/go-compare",
+            "encoding-json"
+          ],
+          "measured_at": "2026-11-17T07:01:00+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 901625,
+            "successes": 1,
+            "checksum": 66362,
+            "peak_rss_bytes": 13369344
+          },
+          "warmup": {
+            "iterations": 222,
+            "elapsed_ns": 149716959,
+            "successes": 222,
+            "checksum": 14732364,
+            "peak_rss_bytes": 19283968
+          },
+          "batches": [
+            {
+              "iterations": 222,
+              "elapsed_ns": 149452500,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 18579456
+            },
+            {
+              "iterations": 222,
+              "elapsed_ns": 147479792,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 18333696
+            },
+            {
+              "iterations": 222,
+              "elapsed_ns": 148035000,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 18432000
+            },
+            {
+              "iterations": 222,
+              "elapsed_ns": 147888834,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 18006016
+            },
+            {
+              "iterations": 222,
+              "elapsed_ns": 149245125,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 18726912
+            },
+            {
+              "iterations": 222,
+              "elapsed_ns": 149212916,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 17989632
+            },
+            {
+              "iterations": 222,
+              "elapsed_ns": 148500250,
+              "successes": 222,
+              "checksum": 14732364,
+              "peak_rss_bytes": 18317312
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "3708759179e68b78815c5a415144113710880fcc588d4f8eb4292e196c2e5fcb",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:00+00:00"
+          }
+        }
+      },
+      {
+        "impl": "python/json",
+        "lang": "python",
+        "library": "json",
+        "doc": "json/generated-medium",
+        "kind": "medium",
+        "bytes": 65662,
+        "workload": "collect",
+        "median_ns": 1246891.6083916083,
+        "min_ns": 1240591.4965034965,
+        "max_ns": 1257592.944055944,
+        "stdev_ns": 5553.016569144385,
+        "spread_pct": 1.3635064538110064,
+        "mb_per_s": 52.660551693582086,
+        "iterations": 143,
+        "accepted": true,
+        "checksum": 8705411,
+        "peak_rss_bytes": 18923520,
+        "batch_elapsed_ns": [
+          178042959,
+          177746500,
+          178820875,
+          179835791,
+          177404584,
+          178379333,
+          178305500
+        ],
+        "receipts": {
+          "command": [
+            ".roc-parser-tmp/performance/references/python/bin/python",
+            "/private/tmp/roc-parser-streaming-integration/scripts/bench_python.py",
+            "json"
+          ],
+          "measured_at": "2026-11-17T07:01:02+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 1407666,
+            "successes": 1,
+            "checksum": 60877,
+            "peak_rss_bytes": 18825216
+          },
+          "warmup": {
+            "iterations": 143,
+            "elapsed_ns": 177389917,
+            "successes": 143,
+            "checksum": 8705411,
+            "peak_rss_bytes": 18923520
+          },
+          "batches": [
+            {
+              "iterations": 143,
+              "elapsed_ns": 178042959,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18874368
+            },
+            {
+              "iterations": 143,
+              "elapsed_ns": 177746500,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18857984
+            },
+            {
+              "iterations": 143,
+              "elapsed_ns": 178820875,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18857984
+            },
+            {
+              "iterations": 143,
+              "elapsed_ns": 179835791,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18857984
+            },
+            {
+              "iterations": 143,
+              "elapsed_ns": 177404584,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18825216
+            },
+            {
+              "iterations": 143,
+              "elapsed_ns": 178379333,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18923520
+            },
+            {
+              "iterations": 143,
+              "elapsed_ns": 178305500,
+              "successes": 143,
+              "checksum": 8705411,
+              "peak_rss_bytes": 18857984
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "9becbdc9f5c86997b4af928ef255c31ebf3ebc6db77e16c3f4ffeff7a098ed96",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:02+00:00"
+          }
+        }
+      },
+      {
+        "impl": "roc/roc-parser",
+        "lang": "roc",
+        "library": "roc-parser",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "collect",
+        "median_ns": 365042.15764705883,
+        "min_ns": 364016.4705882353,
+        "max_ns": 366423.1364705882,
+        "stdev_ns": 790.35757041515,
+        "spread_pct": 0.659284368102985,
+        "mb_per_s": 179.73266546225892,
+        "iterations": 425,
+        "accepted": true,
+        "checksum": 20606975,
+        "peak_rss_bytes": 4489216,
+        "batch_elapsed_ns": [
+          155729833,
+          155328000,
+          154830625,
+          155125250,
+          155254083,
+          154707000,
+          155142917
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/roc-xml"
+          ],
+          "measured_at": "2026-11-17T07:01:03+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 471208,
+            "successes": 1,
+            "checksum": 48487,
+            "peak_rss_bytes": 2981888
+          },
+          "warmup": {
+            "iterations": 425,
+            "elapsed_ns": 155932583,
+            "successes": 425,
+            "checksum": 20606975,
+            "peak_rss_bytes": 2981888
+          },
+          "batches": [
+            {
+              "iterations": 425,
+              "elapsed_ns": 155729833,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 4489216
+            },
+            {
+              "iterations": 425,
+              "elapsed_ns": 155328000,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 4096000
+            },
+            {
+              "iterations": 425,
+              "elapsed_ns": 154830625,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 3915776
+            },
+            {
+              "iterations": 425,
+              "elapsed_ns": 155125250,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 3145728
+            },
+            {
+              "iterations": 425,
+              "elapsed_ns": 155254083,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 3522560
+            },
+            {
+              "iterations": 425,
+              "elapsed_ns": 154707000,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 2965504
+            },
+            {
+              "iterations": 425,
+              "elapsed_ns": 155142917,
+              "successes": 425,
+              "checksum": 20606975,
+              "peak_rss_bytes": 2932736
+            }
+          ]
+        }
+      },
+      {
+        "impl": "rust/quick-xml",
+        "lang": "rust",
+        "library": "quick-xml",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "collect",
+        "median_ns": 398945.5818965517,
+        "min_ns": 397660.2025862069,
+        "max_ns": 399588.1853448276,
+        "stdev_ns": 762.9485922732378,
+        "spread_pct": 0.4832696102198294,
+        "mb_per_s": 164.45852010215506,
+        "iterations": 232,
+        "accepted": true,
+        "checksum": 11621576,
+        "peak_rss_bytes": 7815168,
+        "batch_elapsed_ns": [
+          92419000,
+          92671875,
+          92649166,
+          92335625,
+          92555375,
+          92257167,
+          92704459
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
+            "quick-xml"
+          ],
+          "measured_at": "2026-11-17T07:01:04+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 864208,
+            "successes": 1,
+            "checksum": 50093,
+            "peak_rss_bytes": 7602176
+          },
+          "warmup": {
+            "iterations": 232,
+            "elapsed_ns": 92383750,
+            "successes": 232,
+            "checksum": 11621576,
+            "peak_rss_bytes": 7733248
+          },
+          "batches": [
+            {
+              "iterations": 232,
+              "elapsed_ns": 92419000,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7815168
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92671875,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7749632
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92649166,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7749632
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92335625,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7782400
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92555375,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7782400
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92257167,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7798784
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92704459,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7782400
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "bd3982bdf041781e6689b28adfe8ce395e0e961680ba2f64b6cb00f847114c2d",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:04+00:00"
+          }
+        }
+      },
+      {
+        "impl": "rust/roxmltree",
+        "lang": "rust",
+        "library": "roxmltree",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "collect-borrowed",
+        "median_ns": 269078.0,
+        "min_ns": 268709.8214285714,
+        "max_ns": 270243.4285714286,
+        "stdev_ns": 586.559595353266,
+        "spread_pct": 0.569948915502999,
+        "mb_per_s": 243.832643322754,
+        "iterations": 336,
+        "accepted": true,
+        "checksum": 24808560,
+        "peak_rss_bytes": 7405568,
+        "batch_elapsed_ns": [
+          90408334,
+          90692500,
+          90410208,
+          90801792,
+          90430417,
+          90286500,
+          90293916
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
+            "roxmltree"
+          ],
+          "measured_at": "2026-11-17T07:01:05+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 596209,
+            "successes": 1,
+            "checksum": 73835,
+            "peak_rss_bytes": 7192576
+          },
+          "warmup": {
+            "iterations": 336,
+            "elapsed_ns": 91402916,
+            "successes": 336,
+            "checksum": 24808560,
+            "peak_rss_bytes": 7421952
+          },
+          "batches": [
+            {
+              "iterations": 336,
+              "elapsed_ns": 90408334,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7356416
+            },
+            {
+              "iterations": 336,
+              "elapsed_ns": 90692500,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7389184
+            },
+            {
+              "iterations": 336,
+              "elapsed_ns": 90410208,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7340032
+            },
+            {
+              "iterations": 336,
+              "elapsed_ns": 90801792,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7389184
+            },
+            {
+              "iterations": 336,
+              "elapsed_ns": 90430417,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7372800
+            },
+            {
+              "iterations": 336,
+              "elapsed_ns": 90286500,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7405568
+            },
+            {
+              "iterations": 336,
+              "elapsed_ns": 90293916,
+              "successes": 336,
+              "checksum": 24808560,
+              "peak_rss_bytes": 7356416
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "84d94560af7cf62a00d5a0ddeaab3d65a469a2bf6e8629eace4fba9a5436819b",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:05+00:00"
+          }
+        }
+      },
+      {
+        "impl": "go/encoding-xml",
+        "lang": "go",
+        "library": "encoding-xml",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "collect",
+        "median_ns": 1151930.7953216375,
+        "min_ns": 1143530.9415204679,
+        "max_ns": 1161214.6725146198,
+        "stdev_ns": 5656.165984741071,
+        "spread_pct": 1.5351383143823605,
+        "mb_per_s": 56.95654657941551,
+        "iterations": 171,
+        "accepted": true,
+        "checksum": 7883100,
+        "peak_rss_bytes": 19202048,
+        "batch_elapsed_ns": [
+          197641833,
+          196800208,
+          195543791,
+          196980166,
+          197184875,
+          198567709,
+          196259541
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/go-compare",
+            "encoding-xml"
+          ],
+          "measured_at": "2026-11-17T07:01:06+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 1172750,
+            "successes": 1,
+            "checksum": 46100,
+            "peak_rss_bytes": 13254656
+          },
+          "warmup": {
+            "iterations": 171,
+            "elapsed_ns": 196556709,
+            "successes": 171,
+            "checksum": 7883100,
+            "peak_rss_bytes": 18694144
+          },
+          "batches": [
+            {
+              "iterations": 171,
+              "elapsed_ns": 197641833,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 18497536
+            },
+            {
+              "iterations": 171,
+              "elapsed_ns": 196800208,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 18579456
+            },
+            {
+              "iterations": 171,
+              "elapsed_ns": 195543791,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 18890752
+            },
+            {
+              "iterations": 171,
+              "elapsed_ns": 196980166,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 18841600
+            },
+            {
+              "iterations": 171,
+              "elapsed_ns": 197184875,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 18776064
+            },
+            {
+              "iterations": 171,
+              "elapsed_ns": 198567709,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 18628608
+            },
+            {
+              "iterations": 171,
+              "elapsed_ns": 196259541,
+              "successes": 171,
+              "checksum": 7883100,
+              "peak_rss_bytes": 19202048
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "68d36019890bc080678b0a56be13d66eb8b55471e69c9d925f1f16b8e39ae77f",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:06+00:00"
+          }
+        }
+      },
+      {
+        "impl": "python/etree",
+        "lang": "python",
+        "library": "etree",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "collect",
+        "median_ns": 1910044.1176470588,
+        "min_ns": 1906011.2705882352,
+        "max_ns": 1921610.294117647,
+        "stdev_ns": 5282.461480222191,
+        "spread_pct": 0.8166839386216823,
+        "mb_per_s": 34.34999191580115,
+        "iterations": 85,
+        "accepted": true,
+        "checksum": 3813525,
+        "peak_rss_bytes": 19365888,
+        "batch_elapsed_ns": [
+          162353750,
+          162010958,
+          162159583,
+          163336875,
+          162733166,
+          162426625,
+          162211292
+        ],
+        "receipts": {
+          "command": [
+            ".roc-parser-tmp/performance/references/python/bin/python",
+            "/private/tmp/roc-parser-streaming-integration/scripts/bench_python.py",
+            "etree"
+          ],
+          "measured_at": "2026-11-17T07:01:08+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 2361750,
+            "successes": 1,
+            "checksum": 44865,
+            "peak_rss_bytes": 19251200
+          },
+          "warmup": {
+            "iterations": 85,
+            "elapsed_ns": 164579750,
+            "successes": 85,
+            "checksum": 3813525,
+            "peak_rss_bytes": 19316736
+          },
+          "batches": [
+            {
+              "iterations": 85,
+              "elapsed_ns": 162353750,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19300352
+            },
+            {
+              "iterations": 85,
+              "elapsed_ns": 162010958,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19316736
+            },
+            {
+              "iterations": 85,
+              "elapsed_ns": 162159583,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19333120
+            },
+            {
+              "iterations": 85,
+              "elapsed_ns": 163336875,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19333120
+            },
+            {
+              "iterations": 85,
+              "elapsed_ns": 162733166,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19300352
+            },
+            {
+              "iterations": 85,
+              "elapsed_ns": 162426625,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19218432
+            },
+            {
+              "iterations": 85,
+              "elapsed_ns": 162211292,
+              "successes": 85,
+              "checksum": 3813525,
+              "peak_rss_bytes": 19365888
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "e0e06c644234180fa09591f9b64fed0857777029b829bade575949093de836e8",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:08+00:00"
+          }
+        }
+      },
+      {
+        "impl": "roc/roc-parser",
+        "lang": "roc",
+        "library": "roc-parser",
+        "doc": "http/sample-browser-get",
+        "kind": "sample",
+        "bytes": 555,
+        "workload": "collect",
+        "median_ns": 824.4706342117016,
+        "min_ns": 802.7626172398392,
+        "max_ns": 844.9223983921394,
+        "stdev_ns": 13.710894642388675,
+        "spread_pct": 5.113557645701993,
+        "mb_per_s": 673.1592090367783,
+        "iterations": 8956,
+        "accepted": true,
+        "checksum": 447800,
+        "peak_rss_bytes": 2179072,
+        "batch_elapsed_ns": [
+          7383167,
+          7189542,
+          7409375,
+          7479375,
+          7383959,
+          7567125,
+          7287042
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/roc-http"
+          ],
+          "measured_at": "2026-11-17T07:01:08+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 22333,
+            "successes": 1,
+            "checksum": 50,
+            "peak_rss_bytes": 2031616
+          },
+          "warmup": {
+            "iterations": 8956,
+            "elapsed_ns": 7332125,
+            "successes": 8956,
+            "checksum": 447800,
+            "peak_rss_bytes": 2048000
+          },
+          "batches": [
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7383167,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2048000
+            },
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7189542,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2064384
+            },
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7409375,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2048000
+            },
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7479375,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2048000
+            },
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7383959,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2048000
+            },
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7567125,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2048000
+            },
+            {
+              "iterations": 8956,
+              "elapsed_ns": 7287042,
+              "successes": 8956,
+              "checksum": 447800,
+              "peak_rss_bytes": 2179072
+            }
+          ]
+        }
+      },
+      {
+        "impl": "rust/httparse",
+        "lang": "rust",
+        "library": "httparse",
+        "doc": "http/sample-browser-get",
+        "kind": "sample",
+        "bytes": 555,
+        "workload": "collect",
+        "median_ns": 750.1842051974351,
+        "min_ns": 746.3887951400608,
+        "max_ns": 754.2861964225447,
+        "stdev_ns": 2.9577177643619983,
+        "spread_pct": 1.0527282803035594,
+        "mb_per_s": 739.8182954997486,
+        "iterations": 29630,
+        "accepted": true,
+        "checksum": 414820,
+        "peak_rss_bytes": 6455296,
+        "batch_elapsed_ns": [
+          22285709,
+          22115500,
+          22349500,
+          22147958,
+          22227958,
+          22149958,
+          22283000
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
+            "httparse"
+          ],
+          "measured_at": "2026-11-17T07:01:08+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 6750,
+            "successes": 1,
+            "checksum": 14,
+            "peak_rss_bytes": 6209536
+          },
+          "warmup": {
+            "iterations": 29630,
+            "elapsed_ns": 22375333,
+            "successes": 29630,
+            "checksum": 414820,
+            "peak_rss_bytes": 6455296
+          },
+          "batches": [
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22285709,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6438912
+            },
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22115500,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22349500,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22147958,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6422528
+            },
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22227958,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22149958,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6422528
+            },
+            {
+              "iterations": 29630,
+              "elapsed_ns": 22283000,
+              "successes": 29630,
+              "checksum": 414820,
+              "peak_rss_bytes": 6422528
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "ed2db8eafe3addaa1745d586a5bbebc27a3ab93a447a9fa5bfa2f1075678a2a4",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:08+00:00"
+          }
+        }
+      },
+      {
+        "impl": "go/net-http",
+        "lang": "go",
+        "library": "net-http",
+        "doc": "http/sample-browser-get",
+        "kind": "sample",
+        "bytes": 555,
+        "workload": "collect",
+        "median_ns": 2665.560351848835,
+        "min_ns": 2546.9605798990065,
+        "max_ns": 2899.3593419123636,
+        "stdev_ns": 121.70383911894015,
+        "spread_pct": 13.220438313052377,
+        "mb_per_s": 208.2113802507047,
+        "iterations": 6139,
+        "accepted": true,
+        "checksum": 79807,
+        "peak_rss_bytes": 18399232,
+        "batch_elapsed_ns": [
+          16441000,
+          15695166,
+          17799167,
+          16363875,
+          15802333,
+          16456292,
+          15635791
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/go-compare",
+            "net-http"
+          ],
+          "measured_at": "2026-11-17T07:01:08+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 32583,
+            "successes": 1,
+            "checksum": 13,
+            "peak_rss_bytes": 12075008
+          },
+          "warmup": {
+            "iterations": 6139,
+            "elapsed_ns": 16686791,
+            "successes": 6139,
+            "checksum": 79807,
+            "peak_rss_bytes": 18219008
+          },
+          "batches": [
+            {
+              "iterations": 6139,
+              "elapsed_ns": 16441000,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 17924096
+            },
+            {
+              "iterations": 6139,
+              "elapsed_ns": 15695166,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 17661952
+            },
+            {
+              "iterations": 6139,
+              "elapsed_ns": 17799167,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 17645568
+            },
+            {
+              "iterations": 6139,
+              "elapsed_ns": 16363875,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 18153472
+            },
+            {
+              "iterations": 6139,
+              "elapsed_ns": 15802333,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 18399232
+            },
+            {
+              "iterations": 6139,
+              "elapsed_ns": 16456292,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 17874944
+            },
+            {
+              "iterations": 6139,
+              "elapsed_ns": 15635791,
+              "successes": 6139,
+              "checksum": 79807,
+              "peak_rss_bytes": 17760256
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "e683d9a13a3f2e7ef2da7cb4171b3185781e9436ab29be00a49dfe345e72c156",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:08+00:00"
+          }
+        }
+      },
+      {
+        "impl": "python/h11",
+        "lang": "python",
+        "library": "h11",
+        "doc": "http/sample-browser-get",
+        "kind": "sample",
+        "bytes": 555,
+        "workload": "collect",
+        "median_ns": 28093.41782868526,
+        "min_ns": 27981.32470119522,
+        "max_ns": 28321.4437250996,
+        "stdev_ns": 132.83503448408547,
+        "spread_pct": 1.210671574311255,
+        "mb_per_s": 19.755517231275004,
+        "iterations": 2008,
+        "accepted": true,
+        "checksum": 28112,
+        "peak_rss_bytes": 20905984,
+        "batch_elapsed_ns": [
+          56794750,
+          56411583,
+          56869459,
+          56703750,
+          56359042,
+          56186500,
+          56304042
+        ],
+        "receipts": {
+          "command": [
+            ".roc-parser-tmp/performance/references/python/bin/python",
+            "/private/tmp/roc-parser-streaming-integration/scripts/bench_python.py",
+            "h11"
+          ],
+          "measured_at": "2026-11-17T07:01:09+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 99625,
+            "successes": 1,
+            "checksum": 14,
+            "peak_rss_bytes": 20873216
+          },
+          "warmup": {
+            "iterations": 2008,
+            "elapsed_ns": 56836500,
+            "successes": 2008,
+            "checksum": 28112,
+            "peak_rss_bytes": 20856832
+          },
+          "batches": [
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56794750,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20840448
+            },
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56411583,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20889600
+            },
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56869459,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20856832
+            },
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56703750,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20840448
+            },
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56359042,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20873216
+            },
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56186500,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20840448
+            },
+            {
+              "iterations": 2008,
+              "elapsed_ns": 56304042,
+              "successes": 2008,
+              "checksum": 28112,
+              "peak_rss_bytes": 20905984
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "38a588679034b0da6fe9a33f32ecc281e85a775fc12d1647058455003f7adc34",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:01:09+00:00"
+          }
+        }
+      }
+    ],
+    "comparison": [
+      {
+        "format": "xml",
+        "workload": "collect",
+        "impl": "go/encoding-xml",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.3168959100057162,
+        "impl_mb_per_s": 56.9565465794155,
+        "roc_mb_per_s": 179.73266546225895
+      },
+      {
+        "format": "xml",
+        "workload": "collect",
+        "impl": "python/etree",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.19111713403601704,
+        "impl_mb_per_s": 34.349991915801155,
+        "roc_mb_per_s": 179.73266546225895
+      },
+      {
+        "format": "xml",
+        "workload": "collect",
+        "impl": "rust/quick-xml",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.9150174214530237,
+        "impl_mb_per_s": 164.45852010215515,
+        "roc_mb_per_s": 179.73266546225895
+      },
+      {
+        "format": "json",
+        "workload": "collect",
+        "impl": "go/encoding-json",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.683283455751758,
+        "impl_mb_per_s": 98.16120848281398,
+        "roc_mb_per_s": 143.66103504557364
+      },
+      {
+        "format": "json",
+        "workload": "collect",
+        "impl": "python/json",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.3665611324384273,
+        "impl_mb_per_s": 52.66055169358209,
+        "roc_mb_per_s": 143.66103504557364
+      },
+      {
+        "format": "json",
+        "workload": "collect",
+        "impl": "rust/serde_json",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 1.0697041163161152,
+        "impl_mb_per_s": 153.67480054248384,
+        "roc_mb_per_s": 143.66103504557364
+      },
+      {
+        "format": "http",
+        "workload": "collect",
+        "impl": "go/net-http",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.3093048085142203,
+        "impl_mb_per_s": 208.21138025070476,
+        "roc_mb_per_s": 673.1592090367785
+      },
+      {
+        "format": "http",
+        "workload": "collect",
+        "impl": "python/h11",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 0.029347466343872974,
+        "impl_mb_per_s": 19.755517231275,
+        "roc_mb_per_s": 673.1592090367785
+      },
+      {
+        "format": "http",
+        "workload": "collect",
+        "impl": "rust/httparse",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 1.0990242509767527,
+        "impl_mb_per_s": 739.8182954997487,
+        "roc_mb_per_s": 673.1592090367785
+      }
+    ],
+    "performance_targets": [
+      {
+        "doc": "json/generated-medium",
+        "implementation": "roc/roc-parser",
+        "maximum_slowdown": 1.5,
+        "status": "passed",
+        "reference": "rust/serde_json",
+        "slowdown": 1.0697041163161152,
+        "roc_ns": 457062.0,
+        "reference_ns": 427278.90173410403,
+        "reference_workload": "collect",
+        "checksum_equal": false
+      },
+      {
+        "doc": "xml/generated-medium",
+        "implementation": "roc/roc-parser",
+        "maximum_slowdown": 1.5,
+        "status": "passed",
+        "reference": "rust/roxmltree",
+        "slowdown": 1.3566406679366534,
+        "roc_ns": 365042.15764705883,
+        "reference_ns": 269078.0,
+        "reference_workload": "collect-borrowed",
+        "checksum_equal": false
+      },
+      {
+        "doc": "http/sample-browser-get",
+        "implementation": "roc/roc-parser",
+        "maximum_slowdown": 1.5,
+        "status": "passed",
+        "reference": "rust/httparse",
+        "slowdown": 1.0990242509767527,
+        "roc_ns": 824.4706342117016,
+        "reference_ns": 750.1842051974351,
+        "reference_workload": "collect",
+        "checksum_equal": false
+      }
+    ]
+  },
+  "streaming": {
+    "metadata": {
+      "schema": 1,
+      "label": "final-streaming",
+      "quick": false,
+      "date": "2026-11-17T07:02:50+00:00",
+      "machine": {
+        "description": "Apple M2 (8 CPUs, arm64)",
+        "cpu": "Apple M2",
+        "cpus": 8,
+        "arch": "arm64",
+        "os": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+        "python": "3.13.16"
+      },
+      "git": {
+        "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+        "dirty": false
+      },
+      "environment": {
+        "blueprint": true,
+        "tools": {
+          "roc": "/private/tmp/roc-parser-streaming-tools/roc",
+          "go": "/nix/store/zm3sm3zv21c2jz90bh16jc7rgqfcnivs-go-1.26.10/bin/go",
+          "cargo": "/nix/store/yyhrcj8z06lw33h4kln41zsgxp5kd14g-cargo-1.99.0/bin/cargo",
+          "rustc": "/nix/store/kivknb4q8cs9z7fjl5gjz4v9n1vm0gi4-rustc-wrapper-1.99.0/bin/rustc",
+          "python3": "/nix/store/igbn577l0ylqad4ks9asxlprkjavfvg0-python3-3.13.16/bin/python3"
+        },
+        "lock": {
+          "path": "Blueprint.lock",
+          "sha256": "470fa97cbf22dd87e37b4ce96bd09dc03958a1db9f8ed8a9d6f9fab26fc8f505",
+          "inputs": {
+            "nix": "github:NixOS/nixpkgs/nixos-unstable@1c89083e451e891152365b799595cf7790a43325"
+          }
+        }
+      },
+      "versions": {
+        "roc": "Roc compiler version nightly-2026-11-15-f25da45",
+        "rustc": "rustc 1.99.0 (b940084d7 2026-09-28) (built from a source tarball)",
+        "rust_crates": {
+          "comrak": "0.43.0",
+          "csv": "1.3.1",
+          "httparse": "1.10.1",
+          "ofx-rs": "0.2.0",
+          "pulldown-cmark": "0.13.0",
+          "qif_parser": "0.6.0",
+          "quick-xml": "0.38.3",
+          "roxmltree": "0.21.1",
+          "serde_json": "1.0.151",
+          "serde_yaml": "0.9.34+deprecated",
+          "unsafe-libyaml": "0.2.11",
+          "yaml-rust2": "0.10.3"
+        },
+        "reference_profiles": {
+          "rust": {
+            "compiler": "rustc 1.99.0 (b940084d7 2026-09-28) (built from a source tarball)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: aarch64-apple-darwin\nrelease: 1.99.0\nLLVM version: 21.1.8",
+            "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+            "libraries": {
+              "comrak": "0.43.0",
+              "csv": "1.3.1",
+              "httparse": "1.10.1",
+              "ofx-rs": "0.2.0",
+              "pulldown-cmark": "0.13.0",
+              "qif_parser": "0.6.0",
+              "quick-xml": "0.38.3",
+              "roxmltree": "0.21.1",
+              "serde_json": "1.0.151",
+              "serde_yaml": "0.9.34+deprecated",
+              "unsafe-libyaml": "0.2.11",
+              "yaml-rust2": "0.10.3"
+            }
+          }
+        }
+      },
+      "skipped": {},
+      "repetitions": 7,
+      "target_ms": 200.0,
+      "implementations": [
+        {
+          "id": "roc/roc-parser-consume",
+          "format": "json",
+          "workload": "consume",
+          "notes": "consume: json array 4096; preloaded source, discard completed values/events; --opt=speed --debug"
+        },
+        {
+          "id": "roc/roc-parser-consume",
+          "format": "json",
+          "workload": "consume",
+          "notes": "consume: json ndjson 4096; preloaded source, discard completed values/events; --opt=speed --debug"
+        },
+        {
+          "id": "roc/roc-parser-consume",
+          "format": "xml",
+          "workload": "consume",
+          "notes": "consume: xml chunked 4096; preloaded source, discard completed values/events; --opt=speed --debug"
+        },
+        {
+          "id": "roc/roc-reader-consume",
+          "format": "xml",
+          "workload": "consume",
+          "notes": "consume: xml reader; preloaded source, discard completed values/events; --opt=speed --debug"
+        },
+        {
+          "id": "roc/roc-parser-consume",
+          "format": "http",
+          "workload": "consume",
+          "notes": "consume: http 4096 auto; preloaded source, discard completed values/events; --opt=speed --debug"
+        },
+        {
+          "id": "rust/serde-json-array-consume",
+          "format": "json",
+          "workload": "consume",
+          "notes": "consume: serde_json SeqAccess; owned ordered lossless items, discarded"
+        },
+        {
+          "id": "rust/serde-json-ndjson-consume",
+          "format": "json",
+          "workload": "consume",
+          "notes": "consume: serde_json per-line owned ordered lossless values, discarded"
+        },
+        {
+          "id": "rust/quick-xml-consume",
+          "format": "xml",
+          "workload": "consume",
+          "notes": "consume: quick-xml borrowed events; decoded/coalesced XML text checksum, no tree"
+        },
+        {
+          "id": "rust/httparse-consume",
+          "format": "http",
+          "workload": "consume",
+          "notes": "consume: httparse borrowed heads; pipeline/body/trailer framing, no retained messages"
+        }
+      ],
+      "streaming": true,
+      "chunk_bytes": 4096,
+      "maximum_slowdown": 1.5,
+      "corpus": [
+        {
+          "id": "json/array-medium",
+          "kind": "medium",
+          "bytes": 65145,
+          "sha256": "70e2688dd5d50c8e93393ec2184a07751aecab57fef784586711083935f578e1",
+          "path": "json/array-medium.json"
+        },
+        {
+          "id": "json/ndjson-medium",
+          "kind": "medium",
+          "bytes": 65143,
+          "sha256": "dd9c8544c903d8cb131816b30f10a9ff756fe140dbff0d5984552686c59342e6",
+          "path": "json/ndjson-medium.json"
+        },
+        {
+          "id": "xml/generated-medium",
+          "kind": "medium",
+          "bytes": 65610,
+          "sha256": "4c91b73b33bc4a3ea8ca29ffb3702a24bf1603371c9b48f0165a8182fdddb45d",
+          "path": "xml/generated-medium.xml"
+        },
+        {
+          "id": "http/sample-browser-get",
+          "kind": "sample",
+          "bytes": 555,
+          "sha256": "c19ed6be46fd4b6fde0e851f5ffa4a75bca0b827c0165c37f11d1aa45bff440d",
+          "path": "http/sample-browser-get.http"
+        },
+        {
+          "id": "http/pipeline-medium",
+          "kind": "medium",
+          "bytes": 65765,
+          "sha256": "df9d7e4395c61f5676f0c183784840fa590ccde1a182968b7b2fec14ecf13047",
+          "path": "http/pipeline-medium.http"
+        }
+      ],
+      "reference_cache": {
+        "mode": "refresh",
+        "directory": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/reference-cache"
+      },
+      "measurement": "in-process parse loop around an in-memory document; stdin, process start and output are outside the timed region; median of per-parse time over batches"
+    },
+    "results": [
+      {
+        "impl": "roc/roc-parser-consume",
+        "lang": "roc",
+        "library": "roc-parser-consume",
+        "doc": "json/array-medium",
+        "kind": "medium",
+        "bytes": 65145,
+        "workload": "consume",
+        "median_ns": 606297.4602649007,
+        "min_ns": 600771.9370860927,
+        "max_ns": 609515.4536423841,
+        "stdev_ns": 2767.7758827059274,
+        "spread_pct": 1.4421166389961975,
+        "mb_per_s": 107.44725859735111,
+        "iterations": 302,
+        "accepted": true,
+        "checksum": 19936228,
+        "peak_rss_bytes": 3031040,
+        "batch_elapsed_ns": [
+          181433125,
+          182921083,
+          184073667,
+          183255084,
+          183101833,
+          183534708,
+          182531167
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-json-stream",
+            "array",
+            "4096"
+          ],
+          "measured_at": "2026-11-17T07:02:52+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 663083,
+            "successes": 1,
+            "checksum": 66014,
+            "peak_rss_bytes": 2490368
+          },
+          "warmup": {
+            "iterations": 302,
+            "elapsed_ns": 183966750,
+            "successes": 302,
+            "checksum": 19936228,
+            "peak_rss_bytes": 2867200
+          },
+          "batches": [
+            {
+              "iterations": 302,
+              "elapsed_ns": 181433125,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 2752512
+            },
+            {
+              "iterations": 302,
+              "elapsed_ns": 182921083,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 2785280
+            },
+            {
+              "iterations": 302,
+              "elapsed_ns": 184073667,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 3031040
+            },
+            {
+              "iterations": 302,
+              "elapsed_ns": 183255084,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 2703360
+            },
+            {
+              "iterations": 302,
+              "elapsed_ns": 183101833,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 2949120
+            },
+            {
+              "iterations": 302,
+              "elapsed_ns": 183534708,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 2998272
+            },
+            {
+              "iterations": 302,
+              "elapsed_ns": 182531167,
+              "successes": 302,
+              "checksum": 19936228,
+              "peak_rss_bytes": 2588672
+            }
+          ]
+        },
+        "expected_checksum": 66014,
+        "checksum_qualified": true,
+        "checksum_model": "original-number-spelling"
+      },
+      {
+        "impl": "rust/serde-json-array-consume",
+        "lang": "rust",
+        "library": "serde-json-array-consume",
+        "doc": "json/array-medium",
+        "kind": "medium",
+        "bytes": 65145,
+        "workload": "consume",
+        "median_ns": 402201.3152173913,
+        "min_ns": 400136.54891304346,
+        "max_ns": 403611.1847826087,
+        "stdev_ns": 1321.1831681459098,
+        "spread_pct": 0.8639046512533635,
+        "mb_per_s": 161.97112623758798,
+        "iterations": 184,
+        "accepted": true,
+        "checksum": 12151544,
+        "peak_rss_bytes": 6914048,
+        "batch_elapsed_ns": [
+          73849375,
+          74237041,
+          74005042,
+          74264458,
+          73625125,
+          73822833,
+          74183959
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
+            "serde-json-array-consume"
+          ],
+          "measured_at": "2026-11-17T07:02:52+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 1092083,
+            "successes": 1,
+            "checksum": 66041,
+            "peak_rss_bytes": 6701056
+          },
+          "warmup": {
+            "iterations": 184,
+            "elapsed_ns": 74406375,
+            "successes": 184,
+            "checksum": 12151544,
+            "peak_rss_bytes": 6914048
+          },
+          "batches": [
+            {
+              "iterations": 184,
+              "elapsed_ns": 73849375,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6897664
+            },
+            {
+              "iterations": 184,
+              "elapsed_ns": 74237041,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6914048
+            },
+            {
+              "iterations": 184,
+              "elapsed_ns": 74005042,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6914048
+            },
+            {
+              "iterations": 184,
+              "elapsed_ns": 74264458,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6897664
+            },
+            {
+              "iterations": 184,
+              "elapsed_ns": 73625125,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6881280
+            },
+            {
+              "iterations": 184,
+              "elapsed_ns": 73822833,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6897664
+            },
+            {
+              "iterations": 184,
+              "elapsed_ns": 74183959,
+              "successes": 184,
+              "checksum": 12151544,
+              "peak_rss_bytes": 6914048
+            }
+          ]
+        },
+        "expected_checksum": 66041,
+        "checksum_qualified": true,
+        "checksum_model": "serde-number-spelling",
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "3014d4af0d535ddba33628201101c573a0d68b37ce6d9b3cc956c680c9e496a7",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:02:52+00:00"
+          }
+        }
+      },
+      {
+        "impl": "roc/roc-parser-consume",
+        "lang": "roc",
+        "library": "roc-parser-consume",
+        "doc": "json/ndjson-medium",
+        "kind": "medium",
+        "bytes": 65143,
+        "workload": "consume",
+        "median_ns": 545710.5382352942,
+        "min_ns": 539154.9,
+        "max_ns": 556124.7529411765,
+        "stdev_ns": 5695.338458706199,
+        "spread_pct": 3.109680270432969,
+        "mb_per_s": 119.37280927478128,
+        "iterations": 340,
+        "accepted": true,
+        "checksum": 22442720,
+        "peak_rss_bytes": 3194880,
+        "batch_elapsed_ns": [
+          185541583,
+          183312666,
+          184355791,
+          189082416,
+          184138000,
+          186300708,
+          186580292
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-json-stream",
+            "ndjson",
+            "4096"
+          ],
+          "measured_at": "2026-11-17T07:02:54+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 589833,
+            "successes": 1,
+            "checksum": 66008,
+            "peak_rss_bytes": 2473984
+          },
+          "warmup": {
+            "iterations": 340,
+            "elapsed_ns": 184836958,
+            "successes": 340,
+            "checksum": 22442720,
+            "peak_rss_bytes": 2441216
+          },
+          "batches": [
+            {
+              "iterations": 340,
+              "elapsed_ns": 185541583,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 3178496
+            },
+            {
+              "iterations": 340,
+              "elapsed_ns": 183312666,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 2473984
+            },
+            {
+              "iterations": 340,
+              "elapsed_ns": 184355791,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 2768896
+            },
+            {
+              "iterations": 340,
+              "elapsed_ns": 189082416,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 3194880
+            },
+            {
+              "iterations": 340,
+              "elapsed_ns": 184138000,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 2506752
+            },
+            {
+              "iterations": 340,
+              "elapsed_ns": 186300708,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 2506752
+            },
+            {
+              "iterations": 340,
+              "elapsed_ns": 186580292,
+              "successes": 340,
+              "checksum": 22442720,
+              "peak_rss_bytes": 3014656
+            }
+          ]
+        },
+        "expected_checksum": 66008,
+        "checksum_qualified": true,
+        "checksum_model": "original-number-spelling"
+      },
+      {
+        "impl": "rust/serde-json-ndjson-consume",
+        "lang": "rust",
+        "library": "serde-json-ndjson-consume",
+        "doc": "json/ndjson-medium",
+        "kind": "medium",
+        "bytes": 65143,
+        "workload": "consume",
+        "median_ns": 414526.891966759,
+        "min_ns": 412830.6786703601,
+        "max_ns": 419575.02216066484,
+        "stdev_ns": 2289.234030600787,
+        "spread_pct": 1.626997818719454,
+        "mb_per_s": 157.15023865140174,
+        "iterations": 361,
+        "accepted": true,
+        "checksum": 23838635,
+        "peak_rss_bytes": 7045120,
+        "batch_elapsed_ns": [
+          149678625,
+          150425208,
+          149409208,
+          149644208,
+          149031875,
+          149381709,
+          151466583
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
+            "serde-json-ndjson-consume"
+          ],
+          "measured_at": "2026-11-17T07:02:55+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 554458,
+            "successes": 1,
+            "checksum": 66035,
+            "peak_rss_bytes": 6750208
+          },
+          "warmup": {
+            "iterations": 361,
+            "elapsed_ns": 149394041,
+            "successes": 361,
+            "checksum": 23838635,
+            "peak_rss_bytes": 6963200
+          },
+          "batches": [
+            {
+              "iterations": 361,
+              "elapsed_ns": 149678625,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 6979584
+            },
+            {
+              "iterations": 361,
+              "elapsed_ns": 150425208,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 6979584
+            },
+            {
+              "iterations": 361,
+              "elapsed_ns": 149409208,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 6963200
+            },
+            {
+              "iterations": 361,
+              "elapsed_ns": 149644208,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 6963200
+            },
+            {
+              "iterations": 361,
+              "elapsed_ns": 149031875,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 7045120
+            },
+            {
+              "iterations": 361,
+              "elapsed_ns": 149381709,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 6963200
+            },
+            {
+              "iterations": 361,
+              "elapsed_ns": 151466583,
+              "successes": 361,
+              "checksum": 23838635,
+              "peak_rss_bytes": 6979584
+            }
+          ]
+        },
+        "expected_checksum": 66035,
+        "checksum_qualified": true,
+        "checksum_model": "serde-number-spelling",
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "c900cde940484f8b1db7c04e48fa27de05e3cebc7185b984ac1a78c2bfae6e16",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:02:55+00:00"
+          }
+        }
+      },
+      {
+        "impl": "roc/roc-parser-consume",
+        "lang": "roc",
+        "library": "roc-parser-consume",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "consume",
+        "median_ns": 1006931.543956044,
+        "min_ns": 1000749.5384615385,
+        "max_ns": 1010077.6098901099,
+        "stdev_ns": 3400.1742727777405,
+        "spread_pct": 0.9263858585582819,
+        "mb_per_s": 65.15835201887776,
+        "iterations": 182,
+        "accepted": true,
+        "checksum": 8824634,
+        "peak_rss_bytes": 2867200,
+        "batch_elapsed_ns": [
+          182402334,
+          183834125,
+          183156041,
+          183261541,
+          183463875,
+          183527625,
+          182136416
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-xml-events",
+            "chunked",
+            "4096"
+          ],
+          "measured_at": "2026-11-17T07:02:57+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 1101625,
+            "successes": 1,
+            "checksum": 48487,
+            "peak_rss_bytes": 2588672
+          },
+          "warmup": {
+            "iterations": 182,
+            "elapsed_ns": 183968250,
+            "successes": 182,
+            "checksum": 8824634,
+            "peak_rss_bytes": 3162112
+          },
+          "batches": [
+            {
+              "iterations": 182,
+              "elapsed_ns": 182402334,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2867200
+            },
+            {
+              "iterations": 182,
+              "elapsed_ns": 183834125,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2850816
+            },
+            {
+              "iterations": 182,
+              "elapsed_ns": 183156041,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2605056
+            },
+            {
+              "iterations": 182,
+              "elapsed_ns": 183261541,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2867200
+            },
+            {
+              "iterations": 182,
+              "elapsed_ns": 183463875,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2768896
+            },
+            {
+              "iterations": 182,
+              "elapsed_ns": 183527625,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2850816
+            },
+            {
+              "iterations": 182,
+              "elapsed_ns": 182136416,
+              "successes": 182,
+              "checksum": 8824634,
+              "peak_rss_bytes": 2572288
+            }
+          ]
+        }
+      },
+      {
+        "impl": "roc/roc-reader-consume",
+        "lang": "roc",
+        "library": "roc-reader-consume",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "consume",
+        "median_ns": 337397.0823970037,
+        "min_ns": 336709.2696629214,
+        "max_ns": 338205.6797752809,
+        "stdev_ns": 620.9389422330165,
+        "spread_pct": 0.4435160202715469,
+        "mb_per_s": 194.45929862190962,
+        "iterations": 534,
+        "accepted": true,
+        "checksum": 25892058,
+        "peak_rss_bytes": 3031040,
+        "batch_elapsed_ns": [
+          179989958,
+          180601833,
+          179816500,
+          180170042,
+          179802750,
+          180590959,
+          180231375
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-xml-events",
+            "reader"
+          ],
+          "measured_at": "2026-11-17T07:02:58+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 374667,
+            "successes": 1,
+            "checksum": 48487,
+            "peak_rss_bytes": 2539520
+          },
+          "warmup": {
+            "iterations": 534,
+            "elapsed_ns": 180364625,
+            "successes": 534,
+            "checksum": 25892058,
+            "peak_rss_bytes": 2801664
+          },
+          "batches": [
+            {
+              "iterations": 534,
+              "elapsed_ns": 179989958,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 2850816
+            },
+            {
+              "iterations": 534,
+              "elapsed_ns": 180601833,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 2883584
+            },
+            {
+              "iterations": 534,
+              "elapsed_ns": 179816500,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 2834432
+            },
+            {
+              "iterations": 534,
+              "elapsed_ns": 180170042,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 2834432
+            },
+            {
+              "iterations": 534,
+              "elapsed_ns": 179802750,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 2539520
+            },
+            {
+              "iterations": 534,
+              "elapsed_ns": 180590959,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 3031040
+            },
+            {
+              "iterations": 534,
+              "elapsed_ns": 180231375,
+              "successes": 534,
+              "checksum": 25892058,
+              "peak_rss_bytes": 2834432
+            }
+          ]
+        }
+      },
+      {
+        "impl": "rust/quick-xml-consume",
+        "lang": "rust",
+        "library": "quick-xml-consume",
+        "doc": "xml/generated-medium",
+        "kind": "medium",
+        "bytes": 65610,
+        "workload": "consume",
+        "median_ns": 161134.0206185567,
+        "min_ns": 160177.19072164947,
+        "max_ns": 162140.78608247422,
+        "stdev_ns": 737.1912497873509,
+        "spread_pct": 1.218610044785674,
+        "mb_per_s": 407.1765834932822,
+        "iterations": 388,
+        "accepted": true,
+        "checksum": 18812956,
+        "peak_rss_bytes": 6520832,
+        "batch_elapsed_ns": [
+          62375333,
+          62910625,
+          62280666,
+          62817667,
+          62520000,
+          62148750,
+          62709166
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
+            "quick-xml-consume"
+          ],
+          "measured_at": "2026-11-17T07:02:59+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 516541,
+            "successes": 1,
+            "checksum": 48487,
+            "peak_rss_bytes": 6455296
+          },
+          "warmup": {
+            "iterations": 388,
+            "elapsed_ns": 62411041,
+            "successes": 388,
+            "checksum": 18812956,
+            "peak_rss_bytes": 6504448
+          },
+          "batches": [
+            {
+              "iterations": 388,
+              "elapsed_ns": 62375333,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6520832
+            },
+            {
+              "iterations": 388,
+              "elapsed_ns": 62910625,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6520832
+            },
+            {
+              "iterations": 388,
+              "elapsed_ns": 62280666,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6488064
+            },
+            {
+              "iterations": 388,
+              "elapsed_ns": 62817667,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6520832
+            },
+            {
+              "iterations": 388,
+              "elapsed_ns": 62520000,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6504448
+            },
+            {
+              "iterations": 388,
+              "elapsed_ns": 62148750,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6520832
+            },
+            {
+              "iterations": 388,
+              "elapsed_ns": 62709166,
+              "successes": 388,
+              "checksum": 18812956,
+              "peak_rss_bytes": 6488064
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "79b5b282fa563d09b49ae867d0b7c594c11fea780da5c08d6f082041879c75fc",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:02:59+00:00"
+          }
+        }
+      },
+      {
+        "impl": "roc/roc-parser-consume",
+        "lang": "roc",
+        "library": "roc-parser-consume",
+        "doc": "http/sample-browser-get",
+        "kind": "sample",
+        "bytes": 555,
+        "workload": "consume",
+        "median_ns": 1738.9745817944818,
+        "min_ns": 1728.9359113621551,
+        "max_ns": 1773.5715837497285,
+        "stdev_ns": 16.19216350590131,
+        "spread_pct": 2.5667811855831095,
+        "mb_per_s": 319.15360109938166,
+        "iterations": 4603,
+        "accepted": true,
+        "checksum": 230150,
+        "peak_rss_bytes": 2080768,
+        "batch_elapsed_ns": [
+          7958292,
+          8004500,
+          8163750,
+          7959125,
+          8055458,
+          8059500,
+          7972542
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-http-stream",
+            "4096",
+            "auto"
+          ],
+          "measured_at": "2026-11-17T07:02:59+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 43458,
+            "successes": 1,
+            "checksum": 50,
+            "peak_rss_bytes": 2048000
+          },
+          "warmup": {
+            "iterations": 4603,
+            "elapsed_ns": 7912167,
+            "successes": 4603,
+            "checksum": 230150,
+            "peak_rss_bytes": 2211840
+          },
+          "batches": [
+            {
+              "iterations": 4603,
+              "elapsed_ns": 7958292,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            },
+            {
+              "iterations": 4603,
+              "elapsed_ns": 8004500,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            },
+            {
+              "iterations": 4603,
+              "elapsed_ns": 8163750,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            },
+            {
+              "iterations": 4603,
+              "elapsed_ns": 7959125,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            },
+            {
+              "iterations": 4603,
+              "elapsed_ns": 8055458,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            },
+            {
+              "iterations": 4603,
+              "elapsed_ns": 8059500,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            },
+            {
+              "iterations": 4603,
+              "elapsed_ns": 7972542,
+              "successes": 4603,
+              "checksum": 230150,
+              "peak_rss_bytes": 2080768
+            }
+          ]
+        }
+      },
+      {
+        "impl": "rust/httparse-consume",
+        "lang": "rust",
+        "library": "httparse-consume",
+        "doc": "http/sample-browser-get",
+        "kind": "sample",
+        "bytes": 555,
+        "workload": "consume",
+        "median_ns": 251.0157308052922,
+        "min_ns": 248.02713824356704,
+        "max_ns": 254.6022502343994,
+        "stdev_ns": 2.0484300327136484,
+        "spread_pct": 2.61940236563602,
+        "mb_per_s": 2211.016808466487,
+        "iterations": 38396,
+        "accepted": true,
+        "checksum": 1919800,
+        "peak_rss_bytes": 6225920,
+        "batch_elapsed_ns": [
+          9638000,
+          9523250,
+          9775708,
+          9608708,
+          9684084,
+          9676542,
+          9608666
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
+            "httparse-consume"
+          ],
+          "measured_at": "2026-11-17T07:02:59+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 5209,
+            "successes": 1,
+            "checksum": 50,
+            "peak_rss_bytes": 6225920
+          },
+          "warmup": {
+            "iterations": 38396,
+            "elapsed_ns": 9678292,
+            "successes": 38396,
+            "checksum": 1919800,
+            "peak_rss_bytes": 6225920
+          },
+          "batches": [
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9638000,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            },
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9523250,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            },
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9775708,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            },
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9608708,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            },
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9684084,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            },
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9676542,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            },
+            {
+              "iterations": 38396,
+              "elapsed_ns": 9608666,
+              "successes": 38396,
+              "checksum": 1919800,
+              "peak_rss_bytes": 6225920
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "4a0a26b96dee38cc874062d4c02e1d82fe51ce81bdbbe853965a0ec169fc26f0",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:02:59+00:00"
+          }
+        }
+      },
+      {
+        "impl": "roc/roc-parser-consume",
+        "lang": "roc",
+        "library": "roc-parser-consume",
+        "doc": "http/pipeline-medium",
+        "kind": "medium",
+        "bytes": 65765,
+        "workload": "consume",
+        "median_ns": 183675.18440463647,
+        "min_ns": 182866.57007376186,
+        "max_ns": 184785.73867228662,
+        "stdev_ns": 656.3440519279425,
+        "spread_pct": 1.0448709251309811,
+        "mb_per_s": 358.050545658469,
+        "iterations": 949,
+        "accepted": true,
+        "checksum": 2505360,
+        "peak_rss_bytes": 2703360,
+        "batch_elapsed_ns": [
+          174138083,
+          173540375,
+          174307750,
+          175361666,
+          174720833,
+          174726125,
+          173779583
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-http-stream",
+            "4096",
+            "auto"
+          ],
+          "measured_at": "2026-11-17T07:03:00+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 210875,
+            "successes": 1,
+            "checksum": 2640,
+            "peak_rss_bytes": 2457600
+          },
+          "warmup": {
+            "iterations": 949,
+            "elapsed_ns": 174827834,
+            "successes": 949,
+            "checksum": 2505360,
+            "peak_rss_bytes": 2670592
+          },
+          "batches": [
+            {
+              "iterations": 949,
+              "elapsed_ns": 174138083,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2686976
+            },
+            {
+              "iterations": 949,
+              "elapsed_ns": 173540375,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2686976
+            },
+            {
+              "iterations": 949,
+              "elapsed_ns": 174307750,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2637824
+            },
+            {
+              "iterations": 949,
+              "elapsed_ns": 175361666,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2670592
+            },
+            {
+              "iterations": 949,
+              "elapsed_ns": 174720833,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2588672
+            },
+            {
+              "iterations": 949,
+              "elapsed_ns": 174726125,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2703360
+            },
+            {
+              "iterations": 949,
+              "elapsed_ns": 173779583,
+              "successes": 949,
+              "checksum": 2505360,
+              "peak_rss_bytes": 2621440
+            }
+          ]
+        }
+      },
+      {
+        "impl": "rust/httparse-consume",
+        "lang": "rust",
+        "library": "httparse-consume",
+        "doc": "http/pipeline-medium",
+        "kind": "medium",
+        "bytes": 65765,
+        "workload": "consume",
+        "median_ns": 31487.102794793263,
+        "min_ns": 31184.54096477795,
+        "max_ns": 31645.992917304746,
+        "stdev_ns": 184.98602366723145,
+        "spread_pct": 1.4655268715389815,
+        "mb_per_s": 2088.632937383968,
+        "iterations": 5224,
+        "accepted": true,
+        "checksum": 13791360,
+        "peak_rss_bytes": 6389760,
+        "batch_elapsed_ns": [
+          164952084,
+          163381041,
+          162908042,
+          163147125,
+          164488625,
+          164734750,
+          165318667
+        ],
+        "receipts": {
+          "command": [
+            "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
+            "httparse-consume"
+          ],
+          "measured_at": "2026-11-17T07:03:02+00:00",
+          "calibration": {
+            "iterations": 1,
+            "elapsed_ns": 38291,
+            "successes": 1,
+            "checksum": 2640,
+            "peak_rss_bytes": 6389760
+          },
+          "warmup": {
+            "iterations": 5224,
+            "elapsed_ns": 164098583,
+            "successes": 5224,
+            "checksum": 13791360,
+            "peak_rss_bytes": 6389760
+          },
+          "batches": [
+            {
+              "iterations": 5224,
+              "elapsed_ns": 164952084,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 5224,
+              "elapsed_ns": 163381041,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 5224,
+              "elapsed_ns": 162908042,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 5224,
+              "elapsed_ns": 163147125,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6373376
+            },
+            {
+              "iterations": 5224,
+              "elapsed_ns": 164488625,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 5224,
+              "elapsed_ns": 164734750,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 5224,
+              "elapsed_ns": 165318667,
+              "successes": 5224,
+              "checksum": 13791360,
+              "peak_rss_bytes": 6389760
+            }
+          ]
+        },
+        "reference_cache": {
+          "status": "refreshed",
+          "key": "ea3096d72f746e57635de7ac854a7ebd27e22fccd21a5dc34aa8dad4584ce20f",
+          "provenance": {
+            "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
+            "git": {
+              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "dirty": false
+            },
+            "measured_at": "2026-11-17T07:03:02+00:00"
+          }
+        }
+      }
+    ],
+    "comparison": [
+      {
+        "format": "xml",
+        "workload": "consume",
+        "impl": "rust/quick-xml-consume",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 6.249031334851967,
+        "impl_mb_per_s": 407.1765834932823,
+        "roc_mb_per_s": 65.15835201887774
+      },
+      {
+        "format": "json",
+        "workload": "consume",
+        "impl": "rust/serde-json-array-consume",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 1.5074477315848525,
+        "impl_mb_per_s": 161.97112623758804,
+        "roc_mb_per_s": 107.44725859735108
+      },
+      {
+        "format": "json",
+        "workload": "consume",
+        "impl": "rust/serde-json-ndjson-consume",
+        "documents": 1,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 1.3164659490392117,
+        "impl_mb_per_s": 157.15023865140168,
+        "roc_mb_per_s": 119.37280927478128
+      },
+      {
+        "format": "http",
+        "workload": "consume",
+        "impl": "rust/httparse-consume",
+        "documents": 2,
+        "semantic_mismatches": [],
+        "speedup_vs_roc": 6.357041386269327,
+        "impl_mb_per_s": 2148.9538225082188,
+        "roc_mb_per_s": 338.04307569080447
+      }
+    ],
+    "performance_targets": [
+      {
+        "doc": "json/array-medium",
+        "implementation": "roc/roc-parser-consume",
+        "maximum_slowdown": 1.5,
+        "status": "failed",
+        "reference": "rust/serde-json-array-consume",
+        "slowdown": 1.5074477315848525,
+        "roc_ns": 606297.4602649007,
+        "reference_ns": 402201.3152173913,
+        "reference_workload": "consume",
+        "checksum_equal": false
+      },
+      {
+        "doc": "json/ndjson-medium",
+        "implementation": "roc/roc-parser-consume",
+        "maximum_slowdown": 1.5,
+        "status": "passed",
+        "reference": "rust/serde-json-ndjson-consume",
+        "slowdown": 1.3164659490392117,
+        "roc_ns": 545710.5382352942,
+        "reference_ns": 414526.891966759,
+        "reference_workload": "consume",
+        "checksum_equal": false
+      },
+      {
+        "doc": "xml/generated-medium",
+        "implementation": "roc/roc-parser-consume",
+        "maximum_slowdown": 1.5,
+        "status": "failed",
+        "reference": "rust/quick-xml-consume",
+        "slowdown": 6.249031334851968,
+        "roc_ns": 1006931.543956044,
+        "reference_ns": 161134.0206185567,
+        "reference_workload": "consume",
+        "checksum_equal": true
+      },
+      {
+        "doc": "xml/generated-medium",
+        "implementation": "roc/roc-reader-consume",
+        "maximum_slowdown": 1.5,
+        "status": "failed",
+        "reference": "rust/quick-xml-consume",
+        "slowdown": 2.093891042387035,
+        "roc_ns": 337397.0823970037,
+        "reference_ns": 161134.0206185567,
+        "reference_workload": "consume",
+        "checksum_equal": true
+      },
+      {
+        "doc": "http/sample-browser-get",
+        "implementation": "roc/roc-parser-consume",
+        "maximum_slowdown": 1.5,
+        "status": "failed",
+        "reference": "rust/httparse-consume",
+        "slowdown": 6.927751405123566,
+        "roc_ns": 1738.9745817944818,
+        "reference_ns": 251.0157308052922,
+        "reference_workload": "consume",
+        "checksum_equal": true
+      },
+      {
+        "doc": "http/pipeline-medium",
+        "implementation": "roc/roc-parser-consume",
+        "maximum_slowdown": 1.5,
+        "status": "failed",
+        "reference": "rust/httparse-consume",
+        "slowdown": 5.833346611839091,
+        "roc_ns": 183675.18440463647,
+        "reference_ns": 31487.102794793263,
+        "reference_workload": "consume",
+        "checksum_equal": true
+      }
+    ]
+  }
+}
