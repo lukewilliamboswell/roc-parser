@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("bench", SCRIPTS / "bench.py")
@@ -102,6 +103,41 @@ class Measurement(unittest.TestCase):
             args = bench.parse_args(["--quick"])
             record = bench.measure(impl, doc, args)
         self.assertIn("error", record)
+
+    def measure_receipts(self, language, receipts):
+        impl = bench.Impl(language, "fixture", "json", ["unused-driver"])
+        doc = bench.Doc("json", "fixture", "small", b"[]")
+        args = bench.parse_args(["--quick", "--repetitions", "2", "--max-iterations", "3"])
+        with patch.object(bench, "run_once", side_effect=receipts):
+            return bench.measure(impl, doc, args)
+
+    def stable_receipts(self, accepted=True):
+        def batch(count):
+            return {"iterations": count, "elapsed_ns": 100 * count,
+                    "successes": count if accepted else 0, "checksum": 7 * count}
+        return [batch(1), batch(3), batch(3), batch(3)]
+
+    def test_measure_requires_calibration_and_warmup_agreement_for_every_language(self):
+        for language in ("roc", "rust", "go", "python"):
+            for stage, index in (("calibration", 0), ("warmup", 1)):
+                for field in ("successes", "checksum"):
+                    with self.subTest(language=language, stage=stage, field=field):
+                        receipts = self.stable_receipts()
+                        receipts[index][field] = 0
+                        record = self.measure_receipts(language, receipts)
+                        self.assertIn(stage, record["error"])
+                        self.assertNotIn("accepted", record)
+                        self.assertNotIn("median_ns", record)
+
+    def test_measure_accepts_scaled_calibration_and_identical_warmup(self):
+        for accepted in (True, False):
+            with self.subTest(accepted=accepted):
+                record = self.measure_receipts("roc", self.stable_receipts(accepted))
+                self.assertNotIn("error", record)
+                self.assertEqual(record["accepted"], accepted)
+                self.assertEqual(record["iterations"], 3)
+                self.assertEqual(record["checksum"], 21)
+                self.assertEqual(record["median_ns"], 100)
 
 
 class Reports(unittest.TestCase):

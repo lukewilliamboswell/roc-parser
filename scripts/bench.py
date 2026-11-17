@@ -632,6 +632,13 @@ def measure(impl: Impl, doc: Doc, args) -> dict:
            for batch in batches[1:]):
         record["error"] = "unstable success count or content checksum across batches"
         return record
+    measured = (batches[0]["successes"], batches[0]["checksum"])
+    if (first["successes"] * iterations, first["checksum"] * iterations) != measured:
+        record["error"] = "calibration success count or content checksum differs from measured batches"
+        return record
+    if (warmup["successes"], warmup["checksum"]) != measured:
+        record["error"] = "warmup success count or content checksum differs from measured batches"
+        return record
     record.update(summarize([b["elapsed_ns"] / iterations for b in batches], len(doc.data)))
     record["iterations"] = iterations
     record["accepted"] = batches[0]["successes"] == iterations
