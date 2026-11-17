@@ -19,20 +19,26 @@ and how to read a report.
 == Run the benchmarks
 
 You need a recent Roc nightly; the report records which one. Go,
-Rust (cargo, Rust 1.98 or newer for the financial comparators) and Python 3 are optional: a missing toolchain is skipped and
-named in the report.
+Rust (cargo, Rust 1.98 or newer for the financial comparators) and Python 3
+are needed only to create or qualify the corresponding reference measurements.
+Ordinary runs rebuild and measure Roc, then reuse qualified reference timings.
+A missing or incompatible reference is reported as `ReferenceUnavailable`; it
+is never silently rebuilt or remeasured.
 
 [source,console]
 ----
 $ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-21-5349569/roc
-$ python3 scripts/bench.py --quick             # about two minutes
-$ python3 scripts/bench.py --allocations       # the full comparison
+$ python3 scripts/bench.py --quick --refresh-references  # explicitly create reference timings
+$ python3 scripts/bench.py --quick --label candidate     # rerun only Roc; reuse references
+$ python3 scripts/bench.py --allocations                  # full settings require their own reference cache
 ----
 
 `--quick` measures each format's samples, its small generated document and one
 pathological document, with three short batches. Use it to check that nothing
 is broken, not to compare numbers. The full run takes about half an hour on a
-laptop.
+laptop when refreshing all implementations. Cached reference timings are reused
+without building or benchmarking Go, Rust or Python. Cheap runtime/version
+probes qualify the cache; they do not parse the benchmark corpus.
 
 Narrow a run with these options:
 
@@ -45,10 +51,32 @@ runs can be compared side by side.
 `--repetitions`, `--target-ms`, `--timeout`:: Batch count, approximate batch
 duration and the time limit for one batch.
 `--corpus-only`:: Write the corpus and its manifest, then stop.
+`--refresh-references`:: Explicitly build and measure selected reference libraries,
+then store their complete measurement receipts. This is the only mode that
+creates a comparator Python environment or installs its dependencies.
+`--reference-cache-dir`:: Share a cache across worktrees or output directories.
+The default is `.roc-parser-tmp/bench/reference-cache`, separate from report labels.
 
 To compare two revisions of the parser, check each one out in turn and run the
 harness with a different `--label`; the report records the commit and whether
-the tree was dirty.
+the tree was dirty. Use the same reference cache for both revisions; parser,
+Roc compiler, and Roc benchmark-driver changes do not invalidate its entries.
+
+Reference keys include the exact input SHA-256, comparator code and dependency
+pins, installed runtime/library versions, build recipe, ownership/workload,
+measurement settings, and machine/CPU-affinity/governor/resource configuration.
+Changing any of these requires an explicit reference refresh. Go builds and
+identity probes use `GOTOOLCHAIN=local`; select an installed Go compiler on
+`PATH`, because cache qualification must not download toolchains.
+
+Cache files retain calibration, warmup and every measured batch, original
+commands, timestamps and source-report provenance. Corrupt, stale or incomplete
+receipts are rejected. Reports mark cache hits and preserve their original
+measurement date: reused timings are historical measurements, not fresh timing
+samples. They have no time-based expiry; refresh explicitly when new reference
+measurements are needed. This measurement cache is separate from the QIF/OFX
+correctness-oracle output cache: performance depends on runtime, hardware and
+measurement conditions as well as the input.
 
 == How a measurement works
 

@@ -18,6 +18,7 @@ import argparse
 import dataclasses
 import datetime
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -34,8 +35,10 @@ from typing import Callable
 
 try:
     from ._common import measured_allocations
+    from ._reference_cache import ReferenceCache, ReferenceUnavailable, digest as reference_digest
 except ImportError:
     from _common import measured_allocations
+    from _reference_cache import ReferenceCache, ReferenceUnavailable, digest as reference_digest
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "bench"
@@ -422,6 +425,14 @@ def tool_version(command: list[str]) -> str:
     return (result.stdout + result.stderr).strip().splitlines()[0] if result.returncode == 0 else ""
 
 
+def python_comparator_path(requested: str | None) -> str:
+    if requested is not None:
+        return shutil.which(requested) or requested
+    cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    key = hashlib.sha256(str(Path(sys.executable).resolve()).encode()).hexdigest()[:12]
+    return str(cache / "roc-parser" / f"bench-venv-{key}" / "bin" / "python")
+
+
 class Builder:
     def __init__(self, out: Path, roc: str, python: str | None, log: Callable[[str], None]):
         self.out = out
@@ -431,9 +442,9 @@ class Builder:
         self.skipped: dict[str, str] = {}
         self.versions: dict[str, object] = {}
 
-    def run(self, name: str, command: list[str], cwd: Path = ROOT) -> bool:
+    def run(self, name: str, command: list[str], cwd: Path = ROOT, env: dict | None = None) -> bool:
         self.log(f"build {name}: {' '.join(command)}")
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+        result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
         (self.out / "logs" / f"build-{name}.log").write_text(result.stdout + result.stderr)
         if result.returncode:
@@ -472,23 +483,17 @@ class Builder:
             self.skipped["go"] = "go not found"
             return []
         binary = self.out / "bin" / "go-compare"
-        if not self.run("go", ["go", "build", "-mod=readonly", "-o", str(binary), "."], cwd=BENCH / "compare" / "go"):
+        if not self.run("go", ["go", "build", "-mod=readonly", "-o", str(binary), "."], cwd=BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"}):
             return []
-        self.versions["go"] = tool_version(["go", "version"])
+        self.versions["go"] = reference_probe(["go", "version"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"})
         self.versions["go_modules"] = go_mod_versions()
         return self._impls("go", [str(binary)], formats)
 
     def python_impls(self, formats: tuple[str, ...]) -> list[Impl]:
-        python = self.python
-        if python is None:
-            # Outside the checkout: repository policy rejects Python files
-            # anywhere but scripts/, and a venv is full of them.
-            cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-            # One venv per interpreter, so a blueprint (Nix) run and a plain
-            # run never share packages built for another Python.
-            key = hashlib.sha256(str(Path(sys.executable).resolve()).encode()).hexdigest()[:12]
-            venv = cache / "roc-parser" / f"bench-venv-{key}"
-            python = str(venv / "bin" / "python")
+        python = python_comparator_path(self.python)
+        if self.python is None:
+            # Only explicit reference refresh is allowed to create/install this environment.
+            venv = Path(python).parent.parent
             if not Path(python).exists():
                 if not self.run("python-venv", [sys.executable, "-m", "venv", str(venv)]):
                     return []
@@ -605,7 +610,7 @@ def measure(impl: Impl, doc: Doc, args) -> dict:
     try:
         first = run_once(impl.command, doc.data, 1, args.timeout)
         iterations = calibrate(first["elapsed_ns"], int(args.target_ms * 1e6), args.max_iterations)
-        run_once(impl.command, doc.data, iterations, args.timeout)  # warmup batch, discarded
+        warmup = run_once(impl.command, doc.data, iterations, args.timeout)
         batches = [run_once(impl.command, doc.data, iterations, args.timeout) for _ in range(args.repetitions)]
     except RunError as error:
         record["error"] = str(error)
@@ -621,6 +626,9 @@ def measure(impl: Impl, doc: Doc, args) -> dict:
     rss = [b["peak_rss_bytes"] for b in batches if b.get("peak_rss_bytes")]
     record["peak_rss_bytes"] = max(rss) if rss else None
     record["batch_elapsed_ns"] = [b["elapsed_ns"] for b in batches]
+    record["receipts"] = {"command": impl.command,
+                          "measured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+                          "calibration": first, "warmup": warmup, "batches": batches}
     return record
 
 
@@ -700,6 +708,9 @@ def markdown_report(report: dict) -> str:
              f"- roc-parser commit: {meta['git']['commit']}{' (dirty)' if meta['git']['dirty'] else ''}",
              f"- Mode: {'quick' if meta['quick'] else 'full'}, {meta['repetitions']} batches of about "
              f"{meta['target_ms']} ms after a warmup batch", ""]
+    if meta.get("reference_cache"):
+        lines += ["Reference measurements: " + meta["reference_cache"]["mode"]
+                  + "; cached timings retain their original timestamps and measurement receipts.", ""]
     if meta["skipped"]:
         lines += ["Skipped: " + "; ".join(f"{k} ({v.splitlines()[0][:120]})" for k, v in meta["skipped"].items()), ""]
     implementations = meta.get("implementations", [])
@@ -732,6 +743,9 @@ def markdown_report(report: dict) -> str:
             continue
         rss = f"{r['peak_rss_bytes'] / 2**20:.1f} MiB" if r.get("peak_rss_bytes") else "-"
         result = "accepted" if r["accepted"] else "rejected"
+        cached = r.get("reference_cache", {})
+        if cached.get("status") == "hit":
+            result += f", cached {cached.get('provenance', {}).get('measured_at', '?')}"
         if "allocation_calls" in r:
             result += f", {r['allocation_calls']} allocs"
         lines.append(f"| {r['doc']} | {r['bytes']} | {r['impl']} | {fmt_ns(r['median_ns'])} | "
@@ -805,6 +819,118 @@ def write_corpus(docs: list[Doc], folder: Path) -> list[dict]:
     return manifest
 
 
+# Reference measurements intentionally exclude Roc sources, compiler and revision.
+# Only their own comparator, toolchain, input and measurement conditions qualify reuse.
+def reference_sources(lang: str) -> dict[str, str]:
+    if lang == "python":
+        files = [ROOT / "scripts" / "bench_python.py", BENCH / "compare" / "python" / "requirements.txt"]
+    else:
+        folder = BENCH / "compare" / lang
+        suffixes = {".rs", ".toml", ".lock"} if lang == "rust" else {".go", ".mod", ".sum"}
+        files = []
+        for current, directories, names in os.walk(folder):
+            directories[:] = [name for name in directories if name not in {"target", ".git", ".roc-parser-tmp"}]
+            files.extend(Path(current) / name for name in names if Path(name).suffix in suffixes)
+    return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(files)}
+
+
+def reference_probe(command: list[str], cwd: Path = ROOT, env: dict | None = None) -> str:
+    try:
+        result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ReferenceUnavailable(f"runtime identity unavailable: {error}") from None
+    if result.returncode or not result.stdout.strip():
+        raise ReferenceUnavailable(f"runtime identity unavailable for {command[0]}: {result.stderr.strip()[:200]}")
+    return result.stdout.strip()
+
+
+def reference_runtime(lang: str, python: str | None) -> dict:
+    if lang == "rust":
+        return {"compiler": reference_probe(["rustc", "--version", "--verbose"]),
+                "cargo": reference_probe(["cargo", "--version"]), "libraries": cargo_lock_versions()}
+    if lang == "go":
+        return {"compiler": reference_probe(["go", "version"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"}),
+                "configuration": json.loads(reference_probe(["go", "env", "-json", "GOOS", "GOARCH", "GOAMD64",
+                    "GOARM", "GOEXPERIMENT", "CGO_ENABLED", "GOTOOLCHAIN", "GOFLAGS", "CC", "CXX"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"})),
+                "libraries": go_mod_versions()}
+    executable = python_comparator_path(python)
+    code = ("import hashlib,importlib.metadata as m,json,platform,sys,sysconfig; "
+            "print(json.dumps({'version':sys.version,'compiler':platform.python_compiler(),"
+            "'build':platform.python_build(),'configuration':sysconfig.get_config_var('CONFIG_ARGS'),"
+            "'executable_sha256':hashlib.sha256(open(sys.executable,'rb').read()).hexdigest(),"
+            "'packages':sorted((d.metadata['Name'],d.version,hashlib.sha256((d.read_text('RECORD') or '').encode()).hexdigest()) "
+            "for d in m.distributions())}))")
+    return json.loads(reference_probe([executable, "-c", code]))
+
+
+def reference_machine() -> dict:
+    config = {"machine": machine(), "hostname": platform.node(),
+              "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None}
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        stable = [line for line in cpuinfo.read_text().splitlines()
+                  if line.split(":", 1)[0].strip() in {"vendor_id", "cpu family", "model", "stepping", "microcode", "flags", "Features"}]
+        config["cpu_identity_sha256"] = hashlib.sha256("\n".join(stable).encode()).hexdigest()
+    paths = [Path("/sys/fs/cgroup") / name for name in ("cpu.max", "cpuset.cpus.effective", "memory.max")]
+    paths += [Path("/sys/devices/system/cpu/intel_pstate/no_turbo"), Path("/sys/devices/system/cpu/cpufreq/boost")]
+    paths += list(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_min_freq"))
+    paths += list(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_max_freq"))
+    paths += list(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_governor"))
+    for path in paths:
+        try:
+            config[str(path)] = path.read_text().strip()
+        except OSError:
+            pass
+    config["environment"] = {key: value for key, value in sorted(os.environ.items())
+                             if key.startswith(("RUST", "CARGO_", "GO", "PYTHON", "MALLOC_"))
+                             or key in {"CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "LD_PRELOAD", "LD_LIBRARY_PATH",
+                                        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}}
+    # Dynamic CPU frequency/load and free memory are deliberately not identities.
+    return config
+
+
+def reference_profile(lang: str, args, machine_config: dict) -> dict:
+    runtime = reference_runtime(lang, args.python)
+    sources = reference_sources(lang)
+    if not sources:
+        raise ReferenceUnavailable("comparator source identity is unavailable")
+    if lang == "rust":
+        cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
+        for folder, label in ((cargo_home, "cargo-home"), (ROOT / ".cargo", ".cargo"),
+                              (BENCH / "compare" / "rust" / ".cargo", "bench/compare/rust/.cargo")):
+            for name in ("config", "config.toml"):
+                path = folder / name
+                if path.is_file():
+                    sources[f"{label}/{name}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    builder = getattr(Builder, f"{lang}_impls")
+    protocol = "\n".join(inspect.getsource(function) for function in
+                         (run_once, measure, calibrate, summarize, peak_rss_bytes, _install_wait_hook))
+    return {"runtime": runtime, "sources": sources, "machine": machine_config,
+            "build_recipe_sha256": hashlib.sha256((inspect.getsource(builder) + inspect.getsource(Builder.run)).encode()).hexdigest(),
+            "measurement_protocol_sha256": hashlib.sha256(protocol.encode()).hexdigest()}
+
+
+def reference_identity(impl: Impl, doc: Doc, args, profile: dict) -> dict:
+    return {"schema": 1, "profile": profile,
+            "implementation": {"id": impl.id, "lang": impl.lang, "name": impl.name,
+                               "workload": impl.workload, "ownership": impl.notes},
+            "document": {"id": doc.id, "kind": doc.kind, "bytes": len(doc.data), "sha256": doc.sha256},
+            "settings": {key: getattr(args, key) for key in
+                         ("quick", "repetitions", "target_ms", "timeout", "max_iterations")}}
+
+
+def reference_specs(languages: tuple[str, ...], formats: tuple[str, ...]) -> list[Impl]:
+    return [Impl(lang, name, fmt, [], notes) for lang in languages if lang != "roc"
+            for fmt in formats for name, notes in COMPARATORS[lang][fmt]]
+
+
+def reference_unavailable(impl: Impl, doc: Doc, reason: str, identity: dict | None = None) -> dict:
+    return {"impl": impl.id, "lang": impl.lang, "library": impl.name, "doc": doc.id, "kind": doc.kind,
+            "bytes": len(doc.data), "workload": impl.workload, "status": "ReferenceUnavailable",
+            "error": f"ReferenceUnavailable: {reason}",
+            "reference_cache": {"status": "unavailable", "key": reference_digest(identity) if identity else None}}
+
+
 # ---------------------------------------------------------------------------
 # Command line
 
@@ -813,6 +939,10 @@ def parse_args(argv: list[str] | None = None):
     ap.add_argument("--quick", action="store_true", help="small corpus and short batches, for CI smoke runs")
     ap.add_argument("--label", default=None, help="report folder name (default: full or quick)")
     ap.add_argument("--output-dir", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--refresh-references", action="store_true",
+                    help="explicitly rebuild/measure Go, Rust and Python references and refresh their cache")
+    ap.add_argument("--reference-cache-dir", type=Path, default=None,
+                    help="shared reference measurement cache (default: output-dir/reference-cache)")
     ap.add_argument("--roc", default=os.environ.get("ROC", "roc"))
     ap.add_argument("--formats", default=",".join(FORMATS))
     ap.add_argument("--langs", default="roc,rust,go,python", help="comma-separated: roc,rust,go,python")
@@ -838,6 +968,8 @@ def parse_args(argv: list[str] | None = None):
     if unknown:
         ap.error(f"unknown formats {sorted(unknown)}")
     args.langs = tuple(x for x in args.langs.split(",") if x)
+    if set(args.langs) - {"roc", "rust", "go", "python"}:
+        ap.error("langs must be roc, rust, go or python")
     return args
 
 
@@ -862,9 +994,23 @@ def main(argv: list[str] | None = None) -> int:
 
     _install_wait_hook()
     builder = Builder(out, args.roc, args.python, log)
-    impls: list[Impl] = []
-    for lang in args.langs:
-        impls += getattr(builder, f"{lang}_impls")(args.formats)
+    impls = builder.roc_impls(args.formats) if "roc" in args.langs else []
+    references = reference_specs(args.langs, args.formats)
+    fresh: dict[tuple[str, str], Impl] = {}
+    if args.refresh_references:
+        for lang in args.langs:
+            if lang != "roc":
+                fresh.update({(impl.id, impl.format): impl for impl in getattr(builder, f"{lang}_impls")(args.formats)})
+    impls += references
+    cache = ReferenceCache((args.reference_cache_dir or args.output_dir / "reference-cache").resolve())
+    machine_config = reference_machine() if references else {}
+    profiles, profile_errors = {}, {}
+    for lang in dict.fromkeys(impl.lang for impl in references):
+        try:
+            profiles[lang] = reference_profile(lang, args, machine_config)
+        except (ReferenceUnavailable, OSError, ValueError) as error:
+            profile_errors[lang] = str(error)
+    builder.versions["reference_profiles"] = {lang: profile["runtime"] for lang, profile in profiles.items()}
     alloc = builder.alloc_binary() if args.allocations and "roc" in args.langs else None
 
     metadata = {
@@ -875,6 +1021,7 @@ def main(argv: list[str] | None = None) -> int:
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
         "implementations": [{"id": i.id, "format": i.format, "workload": i.workload, "notes": i.notes} for i in impls],
         "corpus": manifest,
+        "reference_cache": {"mode": "refresh" if args.refresh_references else "reuse", "directory": str(cache.folder)},
         "measurement": "in-process parse loop around an in-memory document; stdin, process start and "
                        "output are outside the timed region; median of per-parse time over batches",
     }
@@ -882,7 +1029,36 @@ def main(argv: list[str] | None = None) -> int:
     report = {"metadata": metadata, "results": results, "comparison": []}
     for doc in docs:
         for impl in (i for i in impls if i.format == doc.format):
-            record = measure(impl, doc, args)
+            if impl.lang == "roc":
+                record = measure(impl, doc, args)
+            elif impl.lang in profile_errors:
+                record = reference_unavailable(impl, doc, profile_errors[impl.lang])
+            else:
+                identity = reference_identity(impl, doc, args, profiles[impl.lang])
+                if args.refresh_references:
+                    measured_impl = fresh.get((impl.id, impl.format))
+                    if measured_impl is None:
+                        record = reference_unavailable(impl, doc, builder.skipped.get(impl.lang, "reference build failed"), identity)
+                    else:
+                        record = measure(measured_impl, doc, args)
+                        provenance = {"report": str(out / "results.json"), "git": metadata["git"],
+                                      "measured_at": record.get("receipts", {}).get("measured_at")}
+                        try:
+                            cache.save(identity, record, provenance)
+                            record = {**record, "reference_cache": {"status": "refreshed", "key": reference_digest(identity),
+                                                                   "provenance": provenance}}
+                        except (ReferenceUnavailable, OSError, ValueError) as error:
+                            reason = record.get("error") or str(error)
+                            rejected = record
+                            record = reference_unavailable(impl, doc, f"unqualified refresh: {reason}", identity)
+                            record["unqualified_measurement"] = rejected
+                else:
+                    try:
+                        record, provenance = cache.load(identity)
+                        record = {**record, "reference_cache": {"status": "hit", "key": reference_digest(identity),
+                                                               "provenance": provenance}}
+                    except ReferenceUnavailable as error:
+                        record = reference_unavailable(impl, doc, str(error), identity)
             if alloc and impl.lang == "roc":
                 record.update(count_allocations(alloc, doc, out / "logs", args.timeout))
             results.append(record)
