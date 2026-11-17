@@ -149,6 +149,13 @@ stops at the first failure. Name sections to run only those, for example
 |`bench` |A smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
 |===
 
+Roc commands use https://github.com/lukewilliamboswell/weaver[Weaver] for
+argument parsing, with their schemas in `scripts/src/CommandLine.roc`.
+Use `--help` on a command to list its options, for example
+`blueprint run fuzz -- --help`. Options accept both `--name value` and
+`--name=value`. Put extra compiler arguments for `blueprint run bundle` after
+`--`, following the bundle command's own options.
+
 The scheduled `fuzz.yml` workflow runs ten-minute native Roc campaigns for
 each registered CI target. Cross-language correctness and performance
 comparisons run locally through the named `conformance`, `markup`, `asciidoc`,

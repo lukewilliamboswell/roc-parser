@@ -2,9 +2,12 @@
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	roc: "nightly-2026-10-09-258ab27",
+	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 
 import cli.Cmd
+import src/CommandLine
+import weaver.Cli
 import cli.OsStr
 import cli.Path
 import cli.Stderr
@@ -14,15 +17,19 @@ import src/DocExamples
 
 ## Format-check, check, test and run the manual's examples with the nightly.
 ## An optional substring selects example filenames. Run from the repo root.
-main! = |args| {
-	filter = match args.map(OsStr.display) {
-		[] => ""
-		[value] => value
-		_ => {
-			Stderr.line!("usage: check_doc_examples.roc -- [filename-substring]")?
+main! = |raw| {
+	options = match Cli.parse_or_display_message(CommandLine.doc_examples, raw, OsStr.to_raw) {
+		Ok(config) => config
+		Err(Help(message)) | Err(Version(message)) => {
+			Stdout.line!(message)?
+			return Ok({})
+		}
+		Err(InvalidUsage(message)) => {
+			Stderr.line!(message)?
 			return Err(Exit(2))
 		}
 	}
+	filter = options
 	names = Path.list!("docs/examples")?.map(|path| Path.filename(path).map_ok(Path.display) ?? "")
 	apps = BundlePlan.module_names(names).keep_if(|name| names.contains(name) and name.contains(filter))
 	if apps.is_empty() {

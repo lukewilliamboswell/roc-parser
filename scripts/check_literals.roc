@@ -2,18 +2,25 @@
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	roc: "nightly-2026-10-09-258ab27",
+	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 import cli.Cmd
 import cli.Env
+import weaver.Cli
 import cli.OsStr
 import cli.Path
 import cli.Stderr
 import cli.Stdout
-import src/Arguments
+import src/CommandLine
 import src/LiteralContract
 
-main! = |raw| {
-	match run!(raw.map(OsStr.display)) {
+main! = |raw| match Cli.parse_or_display_message(CommandLine.literals, raw, OsStr.to_raw) {
+	Err(Help(message)) | Err(Version(message)) => Stdout.line!(message)
+	Err(InvalidUsage(message)) => {
+		Stderr.line!(message)?
+		Err(Exit(2))
+	}
+	Ok(args) => match run!(args) {
 		Ok({}) => Ok({})
 		Err(error) => {
 			Stderr.line!(Str.inspect(error))?
@@ -22,14 +29,10 @@ main! = |raw| {
 	}
 }
 
-run! = |raw| {
-	args = Arguments.parse(raw, [], ["--filter", "--roc"])?
-	if !args.positional.is_empty() {
-		return Err(UnexpectedArguments(args.positional))
-	}
-	filter = Arguments.value(args, "--filter", "")
+run! = |args| {
+	filter = args.filter
 	root = Path.canonicalize!(".")?
-	compiler = Arguments.value(args, "--roc", Env.var_str!("ROC") ?? "roc")
+	compiler = if args.roc == "" (Env.var_str!("ROC") ?? "roc") else args.roc
 	roc = if compiler.contains("/") Path.display(Path.canonicalize!(Path.utf8(compiler))?) else compiler
 	parsed : Try(List({ name : Str, body : Str, errors : List(Str), assets : Dict(Str, Str) }), _)
 	parsed = Json.parse(Path.read_utf8!("scripts/literals/cases.json")?)

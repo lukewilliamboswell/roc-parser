@@ -2,19 +2,26 @@
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	roc: "nightly-2026-10-09-258ab27",
+	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 import cli.Cmd
 import cli.Env
+import weaver.Cli
 import cli.OsStr
 import cli.Path
 import cli.Stderr
 import cli.Stdout
-import src/Arguments
+import src/CommandLine
 import src/FuzzPlan
 import src/Process
 
-main! = |raw| {
-	match run!(raw.map(OsStr.display)) {
+main! = |raw| match Cli.parse_or_display_message(CommandLine.fuzz, raw, OsStr.to_raw) {
+	Err(Help(message)) | Err(Version(message)) => Stdout.line!(message)
+	Err(InvalidUsage(message)) => {
+		Stderr.line!(message)?
+		Err(Exit(2))
+	}
+	Ok(args) => match run!(args) {
 		Ok({}) => Ok({})
 		Err(error) => {
 			Stderr.line!(Str.inspect(error))?
@@ -23,24 +30,23 @@ main! = |raw| {
 	}
 }
 
-run! = |raw| {
-	args = Arguments.parse(raw, ["--ci", "--no-build"], ["--roc", "--runs", "--seconds", "--timeout", "--max-input-size", "--memory-limit", "--corpus-dir", "--jobs"])?
-	mode = args.positional.first() ?? "list"
+run! = |args| {
+	mode = args.mode
 	if !["list", "describe", "prepare", "build", "smoke", "campaign", "show", "replay", "minimize"].contains(mode) {
 		return Err(UnknownMode(mode))
 	}
 	artifact = ["show", "replay", "minimize"].contains(mode)
-	names = args.positional.drop_first(1)
+	names = args.arguments
 	if artifact and names.len() != (if mode == "minimize" 3 else 2) {
 		return Err(InvalidArtifactArguments(mode))
 	}
-	chosen = FuzzPlan.select(if artifact names.take_first(1) else names, args.flags.contains("--ci"))?
-	jobs = Arguments.positive(args, "--jobs", 1)?
-	runs = Arguments.positive(args, "--runs", 2000)?
-	seconds = Arguments.positive(args, "--seconds", 600)?
-	memory = Arguments.positive(args, "--memory-limit", 2048)?
-	_ = Arguments.positive(args, "--timeout", 5)?
-	_ = Arguments.positive(args, "--max-input-size", 4096)?
+	chosen = FuzzPlan.select(if artifact names.take_first(1) else names, args.ci)?
+	jobs = CommandLine.positive("--jobs", args.jobs)?
+	runs = CommandLine.positive("--runs", args.runs)?
+	seconds = CommandLine.positive("--seconds", args.seconds)?
+	memory = CommandLine.positive("--memory-limit", args.memory_limit)?
+	_ = CommandLine.positive("--timeout", args.timeout ?? 5)?
+	_ = CommandLine.positive("--max-input-size", args.max_input_size ?? 4096)?
 	if mode == "describe" {
 		Stdout.line!(Json.to_str(chosen)).map_err(|_| OutputUnavailable)?
 		return Ok({})
@@ -58,7 +64,7 @@ run! = |raw| {
 		}
 		return Ok({})
 	}
-	roc = Arguments.value(args, "--roc", Env.var_str!("ROC") ?? "roc")
+	roc = if args.roc == "" (Env.var_str!("ROC") ?? "roc") else args.roc
 	# Resolve path-like compiler choices before changing the worker cwd.
 	compiler_path = Process.resolve!(roc)?
 	compiler = Path.display(compiler_path)
@@ -71,7 +77,7 @@ run! = |raw| {
 	compiler_hash = Process.digest!(Path.read_bytes!(compiler_path)?)?
 	source_hash = Process.digest!($source.concat(version.stdout_bytes).concat(compiler_hash.to_utf8()))?
 	var $execution_args = args
-	if jobs > 1 and !args.flags.contains("--no-build") and chosen.len() > 1 {
+	if jobs > 1 and !args.no_build and chosen.len() > 1 {
 		var $remaining = chosen
 		while !$remaining.is_empty() {
 			batch = $remaining.take_first(jobs)
@@ -96,7 +102,7 @@ run! = |raw| {
 				return Err(ParallelBuildFailed(batch.map(|target| target.name)))
 			}
 		}
-		$execution_args = { ..args, flags: args.flags.append("--no-build") }
+		$execution_args = { ..args, no_build: True }
 	}
 	var $failed = []
 	for target in chosen {
@@ -120,7 +126,7 @@ run! = |raw| {
 }
 
 execute! = |target, mode, args, names, compiler, root, binary, receipt, source_hash, runs, seconds, memory| {
-	if args.flags.contains("--no-build") {
+	if args.no_build {
 		actual = Process.digest!(Path.read_bytes!(binary)?)?
 		saved = Path.read_utf8!(receipt)?
 		if saved != "${source_hash}\n${actual}\n" {
@@ -145,8 +151,8 @@ execute! = |target, mode, args, names, compiler, root, binary, receipt, source_h
 		}
 	} else {
 		corpus = prepare!(target, args, root)?
-		timeout = Arguments.positive(args, "--timeout", target.timeout)?
-		size = Arguments.positive(args, "--max-input-size", target.size)?
+		timeout = CommandLine.positive("--timeout", args.timeout ?? target.timeout)?
+		size = CommandLine.positive("--max-input-size", args.max_input_size ?? target.size)?
 		if target.examples {
 			_ = Process.run!([Path.display(binary), "check", "--timeout=${timeout.to_str()}"], work, [], 600_000)?
 		}
@@ -162,7 +168,7 @@ execute! = |target, mode, args, names, compiler, root, binary, receipt, source_h
 }
 
 prepare! = |target, args, root| {
-	corpus = Path.absolute!(Path.utf8(Arguments.value(args, "--corpus-dir", "${Path.display(root)}/.roc-parser-tmp/fuzz/corpus/${target.name}")))?
+	corpus = Path.absolute!(Path.utf8(if args.corpus_dir == "" "${Path.display(root)}/.roc-parser-tmp/fuzz/corpus/${target.name}" else args.corpus_dir))?
 	Path.create_all!(corpus)?
 	if target.seeds != "" {
 		parsed : Try(List(Str), _)

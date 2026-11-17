@@ -2,11 +2,13 @@
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	roc: "nightly-2026-10-09-258ab27",
+	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 import cli.OsStr
 import cli.Path
 import cli.Stderr
 import cli.Stdout
+import src/CommandLine
 import src/FuzzPlan
 import src/Process
 
@@ -21,7 +23,8 @@ main! = |_args| {
 }
 
 check! = || {
-	for name in ["Arguments", "FuzzPlan", "LiteralContract", "Vocabulary"] {
+	_ = Process.run!(["roc-stable", "test", "scripts/test_automation.roc"], ".", [], 60_000)?
+	for name in ["FuzzPlan", "LiteralContract", "Vocabulary"] {
 		_ = Process.run!(["roc-stable", "test", "scripts/src/${name}.roc"], ".", [], 60_000)?
 	}
 	for name in ["fuzz", "check_literals", "generate", "test_automation"] {

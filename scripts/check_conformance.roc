@@ -2,19 +2,33 @@
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	roc: "nightly-2026-10-09-258ab27",
+	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 
 import cli.Cmd
 import cli.Env
+import src/CommandLine
+import weaver.Cli
 import cli.OsStr
 import cli.Stderr
 import cli.Stdout
 import src/HarnessPlan
 
 ## Run selected independent reviews, retaining evidence from every failure.
-main! = |args| {
-	requested = args.map(OsStr.display)
-	if requested == ["--list"] {
+main! = |raw| {
+	options = match Cli.parse_or_display_message(CommandLine.conformance, raw, OsStr.to_raw) {
+		Ok(config) => config
+		Err(Help(message)) | Err(Version(message)) => {
+			Stdout.line!(message)?
+			return Ok({})
+		}
+		Err(InvalidUsage(message)) => {
+			Stderr.line!(message)?
+			return Err(Exit(2))
+		}
+	}
+	requested = options.reviews
+	if options.list {
 		for review in HarnessPlan.reviews {
 			kind = if review.fast "fast" else "scheduled"
 			Stdout.line!("${review.name}: ${kind}; ${Str.join_with(review.args, " ")}")?
