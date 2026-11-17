@@ -341,7 +341,21 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 
 ## Lazily decode an effectful source. Source errors stop without finalizing.
 read_source : Stream(Try(Streaming.Bytes, source_error)), state, (state, Streaming.Bytes, Streaming.InputEnd -> Streaming.Step(state, item, [..problem])), Streaming.RecoveryProps -> Stream(Try(Streaming.ReadEvent(item, problem), [SourceErr(source_error), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), ..problem]))
-read_source = |chunks, initial, step, props| Stream.custom(
+read_source = |chunks, initial, step, props| read_source_wrapped(chunks, initial, step, props).map(
+	|event| match event {
+		Ok(value) => Ok(value)
+		Err(PrivateNative(error)) => source_failure(error)
+		Err(SourceErr(error)) => Err(SourceErr(error))
+		Err(RecoveryLimitExceeded(error)) => Err(RecoveryLimitExceeded(error))
+		Err(DecoderProtocol(error)) => Err(DecoderProtocol(error))
+	},
+)
+
+# Keep the scanner error row closed before composing its stream. Merging the
+# native row inside Stream.custom causes recursive lambda specialization when
+# callers adapt the stream or pass it through an effectful writer.
+read_source_wrapped : Stream(Try(Streaming.Bytes, source_error)), state, (state, Streaming.Bytes, Streaming.InputEnd -> Streaming.Step(state, item, [..problem])), Streaming.RecoveryProps -> Stream(Try(Streaming.ReadEvent(item, problem), [SourceErr(source_error), RecoveryLimitExceeded(DiagnosticCore(Streaming.RecoveryProblem(problem))), DecoderProtocol(DiagnosticCore(Streaming.ProtocolProblem)), PrivateNative([..problem])]))
+read_source_wrapped = |chunks, initial, step, props| Stream.custom(
 	Reading({ chunks, buffer: [], index: 0, final: False, need_input: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
 	Err(Unknown),
 	|cursor| match cursor {
@@ -375,7 +389,7 @@ read_source = |chunks, initial, step, props| Stream.custom(
 						}
 						RecordError(error) => {
 							if props.policy == FailFast {
-								return Ok((source_failure(error), Stopped))
+								return Ok((Err(PrivateNative(error)), Stopped))
 							}
 							if $cursor.report.rejected_records >= props.max_errors {
 								return Ok((Err(recovery_error({ max: props.max_errors, rejected: $cursor.report.rejected_records + 1, cause: error })), Stopped))
@@ -400,7 +414,7 @@ read_source = |chunks, initial, step, props| Stream.custom(
 							}
 							return Ok((Ok(Finished($cursor.report)), Stopped))
 						}
-						Failed(error) => return Ok((source_failure(error), Stopped))
+						Failed(error) => return Ok((Err(PrivateNative(error)), Stopped))
 					}
 				}
 			}

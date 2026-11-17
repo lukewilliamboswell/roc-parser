@@ -89,6 +89,27 @@ test! = |bytes| {
 		crash "source failure finalized or lost its error"
 	}
 
+	# Native failures keep their tags when value extraction is adapted again.
+	composed_byte = match (bytes.first() ?? 1) % 3 {
+		0 => 0.U8
+		1 => 1.U8
+		_ => 255.U8
+	}
+	values_source : Stream(Try(List(U8), [Injected({ code : U64 })]))
+	values_source = [Ok([composed_byte]), Err(Injected({ code: bytes.len() })), Ok([1.U8])].iter().stream()
+	var $values = []
+	for! item in (Parser.decoder({ initial_state: 0, step })).values_stream(values_source).map(|value| value) {
+		$values = $values.append(item)
+	}
+	wanted_values = match composed_byte {
+		0 => [Err(ZeroByte(0))]
+		255 => [Err(ForbiddenByte(0))]
+		_ => [Ok(composed_byte), Err(SourceErr(Injected({ code: bytes.len() })))]
+	}
+	if $values != wanted_values {
+		crash "stream composition changed native or source failure payloads"
+	}
+
 	# A faulty custom decoder cannot turn source exhaustion into a successful EOF.
 	broken = Parser.decoder({ initial_state: {}, step: broken_step })
 	broken_source : Stream(Try(List(U8), [Injected]))
