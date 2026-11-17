@@ -30,8 +30,8 @@ test! = |bytes| {
 	# untouched. Keep these checks outside the default allocation observation.
 	options : Html.Props
 	options = { recovery: Browser, allow_unknown_elements: True, allow_unknown_attributes: True, check_values: False }
-	ordinary = Html.parse_source(input, options, True)
-	strict = Html.parse_source(input, { ..options, strict_foreign_spelling: True }, True)
+	ordinary = Html.parse_source(input, { mode: Fragment, options })
+	strict = Html.parse_source(input, { mode: Fragment, options: { ..options, strict_foreign_spelling: True } })
 	match strict {
 		Ok(parsed) => if ordinary != Ok(parsed) {
 			crash "canonical foreign spelling changed the parsed source/tree"

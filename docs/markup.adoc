@@ -131,6 +131,10 @@ root, element/attribute vocabulary, content-model, value-grammar, interpolation,
 binding-count and resource-limit failures. `InvalidValue` includes its authored
 value and a typed grammar such as `Length`, `PathData` or `Keyword(values)`.
 
+`Markup.validate_tree(parsed, props)` applies the shared authoring rules to an
+already parsed tree and checks every concrete value. Template parsing validates
+its own legal holes before producing an opaque plan.
+
 The implemented checks include:
 
 * HTML vocabulary and common content models, required attributes, boolean and
@@ -166,9 +170,10 @@ need both browser recovery and the corresponding extension prop. Normal HTML
 optional tags are accepted in strict mode when the standard permits them.
 Use xref:exact-structure.adoc#exact-structure[exact authored structure] for an additional literal or prerender policy; failures include the causing source span.
 Checks run on authored content before selected-option projection, so generated
-copies cannot hide an invalid authored child. Use `Html.parse_source` or
-`Html.parse_syntax` when only HTML syntax and browser tree construction are
-needed, without the format's authoring checks.
+copies cannot hide an invalid authored child. For syntax and browser tree
+construction without authoring checks, use
+`Html.parse_source(source, { mode: Fragment, options: props })`; `mode` defaults
+to `Document`.
 
 Resource props bound source bytes, depth, elements, all nodes, attributes per
 element, diagnostics, slots and parser work. Defaults are 16 MiB of source,

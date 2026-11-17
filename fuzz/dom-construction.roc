@@ -30,7 +30,7 @@ expected = |chain, children| {
 }
 
 preserved = |source, model| {
-	parsed = Html.parse_source("<!doctype html><html><head></head><body>${source}", { recovery: Browser }, False) ?? crash "bounded generated input exceeds parser limits"
+	parsed = Html.parse_source("<!doctype html><html><head></head><body>${source}", { options: { recovery: Browser } }) ?? crash "bounded generated input exceeds parser limits"
 	body = parsed.tree.nodes.find_first(|node| node.kind == Element(name("body"))) ?? crash "missing body"
 	actual = MarkupCheck.Model.Element({ namespace: Markup.html_namespace, local: "body", attributes: [], children: body.children.map(|id| MarkupCheck.model(parsed.tree, id)) })
 	# A nested anchor can repair the active-formatting/open-element state
