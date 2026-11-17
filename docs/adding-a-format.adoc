@@ -49,8 +49,11 @@ the existing formats are listed in <<property-testing>>.
   leave the alias unbound; that is why the JSON module is `JsonValue`.
 . Make it a type module and follow the conventions of the existing ones:
 ** `Toml.parse_str : Str -> Try(Toml, [InvalidToml(Toml.Error)])`, where
-   `Toml.Error` is a record with a `message` and the most precise location
-   the format has (`line` and `column` for a text format);
+   `Toml.Error` carries a `problem` tag and the most precise location the
+   format has (`line` and `column` for text). Define a `Toml.Problem` union
+   with structured payloads for source values, limits, and expected tokens.
+   Use `Parser.Problem(Toml.Problem)` for the envelope when adapting native
+   errors into combinators, and format diagnostics at application boundaries;
 ** `Toml.parser : Parser(Utf8.Bytes, Toml, Toml.Problem)` for callers who compose
    parsers, failing with `ParseError({ problem, offset })`;
 ** `Try(a, [Missing])` for every optional value, and methods in the
