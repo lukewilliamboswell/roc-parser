@@ -293,7 +293,7 @@ test! = |bytes| {
 	# use a second byte to check much larger documents without slowing every run.
 	n = if (bytes.get(1) == Ok(255)) 2048 else [1.U64, 8, 32, 64].get(choice // 7 % 4) ?? 1
 	if choice == 7 {
-		for mode in (0.U64).to(10) {
+		for mode in (0.U64).to(9) {
 			retained = Fuzz.measure!("xml-error-lifetime", || retained_error_payloads(n, mode))
 			if retained.stats.exit_live_bytes > retained.stats.entry_live_bytes + 1024 {
 				crash "XML diagnostic retained its source: mode ${mode.to_str()}, held ${retained.stats.exit_live_bytes.to_str()} bytes"

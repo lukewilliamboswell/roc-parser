@@ -1,3 +1,4 @@
+import MarkupDiagnosticOwnership
 import MarkupValidation
 import InitialNewline
 import ExpandedName
@@ -48,7 +49,7 @@ Markup :: [].{
 	## Validate all names, attribute values and child models in a supplied tree.
 	## Unavailable template values can only be skipped by internal slot parsing.
 	validate_tree : Parsed, Props -> Try(Parsed, [InvalidMarkup(Error)])
-	validate_tree = |parsed, props| MarkupValidation.check(parsed, props, [])
+	validate_tree = |parsed, props| MarkupValidation.check(parsed, props, []).map_err(MarkupDiagnosticOwnership.failure)
 
 	parse_xml : _
 	parse_xml = MarkupCore.parse_xml

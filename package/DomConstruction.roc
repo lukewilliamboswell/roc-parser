@@ -1,3 +1,4 @@
+import MarkupDiagnosticOwnership
 import Diagnostic
 import MarkupCore
 import HtmlContextRules as Rules
@@ -288,4 +289,18 @@ expect {
 }
 
 construction_error : DomConstruction.Problem -> [InvalidConstruction(Diagnostic(DomConstruction.Problem))]
-construction_error = |problem| InvalidConstruction(Diagnostic.{ problem, location: Unavailable(GeneratedValue), path: [] })
+construction_error = |problem| InvalidConstruction(Diagnostic.{ problem: own_construction(problem), location: Unavailable(GeneratedValue), path: [] })
+
+# Repair diagnostics own the supplied identities independently of their context.
+own_construction : DomConstruction.Problem -> DomConstruction.Problem
+own_construction = |problem| match problem {
+	Repair(detail) => Repair({
+		..detail,
+		parent: MarkupDiagnosticOwnership.own_name(detail.parent),
+		child: match detail.child {
+			Element(name) => Element(MarkupDiagnosticOwnership.own_name(name))
+			Text => Text
+		},
+	})
+	Unsupported(detail) => Unsupported({ ..detail, parent: MarkupDiagnosticOwnership.own_name(detail.parent), child: MarkupDiagnosticOwnership.own_name(detail.child) })
+}

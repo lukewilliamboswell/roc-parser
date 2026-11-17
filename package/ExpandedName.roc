@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import InitialNewline
 import Diagnostic
 import DomNameCore
@@ -25,8 +26,14 @@ ExpandedName := { namespace : ExpandedName.Namespace, local : Str, prefix : [Pre
 			Ok(parts) => Ok(ExpandedName.{ namespace: parts.namespace, local: parts.local, prefix: parts.prefix })
 			Err(reason) => {
 				problem = match reason {
-					InvalidCharacterError => InvalidCharacter({ spelling: props.spelling, context: props.context })
-					NamespaceError => InvalidNamespace({ namespace: props.namespace, spelling: props.spelling })
+					InvalidCharacterError => InvalidCharacter({ spelling: DiagnosticOwnership.own_text(props.spelling), context: props.context })
+					NamespaceError => InvalidNamespace({
+						namespace: match props.namespace {
+							Uri(value) => Uri(DiagnosticOwnership.own_text(value))
+							NoNamespace => NoNamespace
+						},
+						spelling: DiagnosticOwnership.own_text(props.spelling),
+					})
 				}
 				Err(InvalidDomName(Diagnostic.{ problem, location: Unavailable(GeneratedValue), path: [] }))
 			}

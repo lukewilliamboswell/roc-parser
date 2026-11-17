@@ -1,3 +1,5 @@
+import DiagnosticOwnership
+import MarkupDiagnosticOwnership
 import MarkupValidation
 import Parser
 import Diagnostic
@@ -31,52 +33,21 @@ Html := { parsed : MarkupCore.Parsed }.{
 
 	## Parse and validate a document, retaining recovery diagnostics when enabled.
 	parse_str : Str, Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
-	parse_str = |text, props| {
-		authored = authored_syntax(text, props, False)?
-		parsed : MarkupCore.Parsed
-		parsed = authored.parsed
-		domain = authored.domain
-		root = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
-		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
-		match node.kind {
-			Element(n) if n.namespace == Uri(MarkupCore.html_namespace) and n.local == "html" => {}
-			_ => return Err(
-				InvalidMarkup(
-					Diagnostic.{
-						problem: WrongRoot({
-							expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" },
-							actual: match node.kind {
-								Element(name) => Element(name)
-								_ => Text
-							},
-						}),
-						location: LineColumn({ line: 1, column: 1 }),
-						path: [],
-					},
-				),
-			)
-		}
-		checked = validate_authored(parsed, shared(props), domain)?
-		Ok(Html.{ parsed: project_authored(checked, props, False, domain)? })
-	}
+	parse_str = |source, props| parse_document(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Parse one or more roots in the configured fragment context.
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
-	parse_fragment = |text, props| {
-		{ parsed, domain } = authored_syntax(text, props, True)?
-		checked = validate_authored(parsed, shared(props), domain)?
-		Ok(Fragment.{ parsed: project_authored(checked, props, True, domain)? })
-	}
+	parse_fragment = |source, props| parse_fragment_source(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Syntax-only parsing retains browser tree construction and diagnostics.
 	## Use Fragment mode for the configured enclosing element; Document is default.
 	SourceProps := { mode : [Document, Fragment] ?? Document, options : Props ?? {} }
 	parse_source : Str, SourceProps -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
-	parse_source = |source, props| syntax(source, props.options, props.mode == Fragment)
+	parse_source = |source, props| syntax(source, props.options, props.mode == Fragment).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Validate a complete document for a checked constant or imported file.
 	validate : ValidationProps -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
-	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Check a complete HTML literal during compilation.
 	from_quote : Str -> Try(Html, [BadQuotedBytes(Str)])
@@ -88,7 +59,7 @@ Html := { parsed : MarkupCore.Parsed }.{
 	## Parse fixed segments and explicit text/whole-attribute holes. No textual
 	## sentinels are inserted, and structural positions cannot contain holes.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
-	parse_segments = |segments, props| HtmlTemplate.parse_segments(segments, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props))
+	parse_segments = |segments, props| HtmlTemplate.parse_segments(segments, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props)).map_err(MarkupDiagnosticOwnership.failure)
 
 	## A parsed template and its typed bindings
 	## Binding performs no source parse.
@@ -111,7 +82,7 @@ HtmlFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Validate imported fragment text with named diagnostics and options.
 	validate : Html.ValidationProps -> Try(Html.Fragment, [InvalidMarkup(MarkupCore.Error)])
-	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
+	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Check a fragment literal in the default body context.
 	from_quote : Str -> Try(Html.Fragment, [BadQuotedBytes(Str)])
@@ -457,4 +428,41 @@ expect match Html.parse_fragment("<svg a\u(0)b='x'></svg>", { strict_foreign_spe
 		_ => False
 	}
 	_ => False
+}
+
+parse_document : Str, Html.Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
+parse_document = |text, props| {
+	authored = authored_syntax(text, props, False)?
+	parsed : MarkupCore.Parsed
+	parsed = authored.parsed
+	domain = authored.domain
+	root = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+	node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	match node.kind {
+		Element(n) if n.namespace == Uri(MarkupCore.html_namespace) and n.local == "html" => {}
+		_ => return Err(
+			InvalidMarkup(
+				Diagnostic.{
+					problem: WrongRoot({
+						expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" },
+						actual: match node.kind {
+							Element(name) => Element(name)
+							_ => Text
+						},
+					}),
+					location: LineColumn({ line: 1, column: 1 }),
+					path: [],
+				},
+			),
+		)
+	}
+	checked = validate_authored(parsed, shared(props), domain)?
+	Ok(Html.{ parsed: project_authored(checked, props, False, domain)? })
+}
+
+parse_fragment_source : Str, Html.Props -> Try(Html.Fragment, [InvalidMarkup(MarkupCore.Error)])
+parse_fragment_source = |text, props| {
+	{ parsed, domain } = authored_syntax(text, props, True)?
+	checked = validate_authored(parsed, shared(props), domain)?
+	Ok(HtmlFragment.{ parsed: project_authored(checked, props, True, domain)? })
 }

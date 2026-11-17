@@ -1,3 +1,5 @@
+import DiagnosticOwnership
+import MarkupDiagnosticOwnership
 import MarkupValidation
 import Parser
 import Diagnostic
@@ -23,34 +25,15 @@ MathML := { parsed : MarkupCore.Parsed }.{
 
 	## Parse a complete document with the requested syntax and checks.
 	parse_str : Str, Props -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
-	parse_str = |source, props| {
-		parsed = if props.syntax == HtmlSyntax {
-			HtmlTree.parse(source, True, { namespace: MarkupCore.html_namespace, name: "body", defer_projection: True }, props)?
-		} else {
-			MarkupCore.parse_xml(source, props)?
-		}
-		index = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
-		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
-		match node.kind {
-			Element(name) if name.namespace == Uri(MarkupCore.mathml_namespace) and name.local == "math" => {}
-			Element(name) => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Element(name) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
-			_ => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Text }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
-		}
-		validated = MarkupValidation.check(parsed, props, [])?
-		Ok(MathML.{ parsed: project_checked(validated, props)? })
-	}
+	parse_str = |source, props| parse_document(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Parse any number of fragment roots in the format's default namespace.
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
-	parse_fragment = |source, props| {
-		parsed = fragment_syntax(source, props)?
-		validated = MarkupValidation.check(parsed, props, [])?
-		Ok(Fragment.{ parsed: project_checked(validated, props)? })
-	}
+	parse_fragment = |source, props| parse_fragment_source(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
-	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Convert a checked complete document literal.
 	from_quote : Str -> Try(MathML, [BadQuotedBytes(Str)])
@@ -58,38 +41,7 @@ MathML := { parsed : MarkupCore.Parsed }.{
 
 	## Parse fixed literal segments into an indexed plan without binding values.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
-	parse_segments = |segments, props| {
-		if props.syntax == HtmlSyntax {
-			return HtmlTemplate.parse_segments(segments, { name: "math", namespace: MarkupCore.mathml_namespace }, props)
-		}
-		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), MarkupCore.decode_xml_text)?
-		_ = MarkupValidate.text_slots(plan)?
-		var $holes = []
-		for slot in plan.metadata().slots {
-			match slot.target {
-				AttributeSlot(target) => {
-					$holes = $holes.append(target)
-				}
-				_ => {}
-			}
-		}
-		parsed = MarkupValidation.check(plan.metadata().parsed, props, $holes)?
-		slots = plan.metadata().slots.map(
-			|slot| {
-				match slot.target {
-					AttributeSlot(target) => {
-						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
-						match (node.kind, node.attributes.get(target.attribute)) {
-							(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language(NamespacedAttribute) else if (name.namespace == Uri(MarkupCore.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(MarkupCore.svg_namespace), name.local, attr.name.local) }
-							_ => slot
-						}
-					}
-					_ => slot
-				}
-			},
-		)
-		Ok(MarkupTemplate.rebuild({ ..plan.metadata(), parsed, slots }))
-	}
+	parse_segments = |source, props| parse_template_segments(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
 	## A parsed fragment bound to homogeneous downstream values, including signals.
 	Template(a) : MathmlTemplateValue(a)
@@ -120,7 +72,7 @@ MathmlFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Check imported fragment text with explicit options and a diagnostic name.
 	validate : MathML.ValidationProps -> Try(MathML.Fragment, [InvalidMarkup(MarkupCore.Error)])
-	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(props.name)) }))
+	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Check a fragment literal with strict defaults.
 	from_quote : Str -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
@@ -204,3 +156,62 @@ expect match MathML.parse_fragment("<annotation definitionurl='x'>x</annotation>
 expect MathML.parse_fragment("<annotation definitionURL='x'>x</annotation>", { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
 expect MathML.parse_segments(["<annotation definitionurl='", "'>x</annotation>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_err()
 expect MathML.parse_segments(["<annotation definitionURL='", "'>x</annotation>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
+
+parse_document : Str, MathML.Props -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
+parse_document = |source, props| {
+	parsed = if props.syntax == HtmlSyntax {
+		HtmlTree.parse(source, True, { namespace: MarkupCore.html_namespace, name: "body", defer_projection: True }, props)?
+	} else {
+		MarkupCore.parse_xml(source, props)?
+	}
+	index = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+	node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	match node.kind {
+		Element(name) if name.namespace == Uri(MarkupCore.mathml_namespace) and name.local == "math" => {}
+		Element(name) => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Element(name) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+		_ => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Text }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	}
+	validated = MarkupValidation.check(parsed, props, [])?
+	Ok(MathML.{ parsed: project_checked(validated, props)? })
+}
+
+parse_fragment_source : Str, MathML.Props -> Try(MathML.Fragment, [InvalidMarkup(MarkupCore.Error)])
+parse_fragment_source = |source, props| {
+	parsed = fragment_syntax(source, props)?
+	validated = MarkupValidation.check(parsed, props, [])?
+	Ok(MathmlFragment.{ parsed: project_checked(validated, props)? })
+}
+
+parse_template_segments : List(Str), MathML.Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
+parse_template_segments = |segments, props| {
+	if props.syntax == HtmlSyntax {
+		return HtmlTemplate.parse_segments(segments, { name: "math", namespace: MarkupCore.mathml_namespace }, props)
+	}
+	plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), MarkupCore.decode_xml_text)?
+	_ = MarkupValidate.text_slots(plan)?
+	var $holes = []
+	for slot in plan.metadata().slots {
+		match slot.target {
+			AttributeSlot(target) => {
+				$holes = $holes.append(target)
+			}
+			_ => {}
+		}
+	}
+	parsed = MarkupValidation.check(plan.metadata().parsed, props, $holes)?
+	slots = plan.metadata().slots.map(
+		|slot| {
+			match slot.target {
+				AttributeSlot(target) => {
+					node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
+					match (node.kind, node.attributes.get(target.attribute)) {
+						(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language(NamespacedAttribute) else if (name.namespace == Uri(MarkupCore.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(MarkupCore.svg_namespace), name.local, attr.name.local) }
+						_ => slot
+					}
+				}
+				_ => slot
+			}
+		},
+	)
+	Ok(MarkupTemplate.rebuild({ ..plan.metadata(), parsed, slots }))
+}

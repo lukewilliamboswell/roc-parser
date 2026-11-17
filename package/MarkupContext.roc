@@ -1,3 +1,4 @@
+import MarkupDiagnosticOwnership
 import Diagnostic
 import MarkupCore
 import DomName
@@ -433,4 +434,14 @@ expect {
 }
 
 placement_error : MarkupContext.Problem -> [InvalidPlacement(Diagnostic(MarkupContext.Problem))]
-placement_error = |problem| InvalidPlacement(Diagnostic.{ problem, location: Unavailable(GeneratedValue), path: [] })
+placement_error = |problem| InvalidPlacement(Diagnostic.{ problem: own_placement(problem), location: Unavailable(GeneratedValue), path: [] })
+
+# Native contexts may receive names sliced from a larger source document.
+own_placement : MarkupContext.Problem -> MarkupContext.Problem
+own_placement = |problem| match problem {
+	InvalidChild(detail) => InvalidChild({ parent: MarkupDiagnosticOwnership.own_name(detail.parent), child: MarkupDiagnosticOwnership.own_name(detail.child), expected: MarkupDiagnosticOwnership.own_child_grammar(detail.expected) })
+	InvalidText(detail) => InvalidText({ parent: MarkupDiagnosticOwnership.own_name(detail.parent), expected: MarkupDiagnosticOwnership.own_child_grammar(detail.expected) })
+	WouldRepair(reason) => WouldRepair(MarkupDiagnosticOwnership.own_reason(reason))
+	UnexpectedNamespace(detail) => UnexpectedNamespace({ element: MarkupDiagnosticOwnership.own_name(detail.element), expected: MarkupDiagnosticOwnership.own_namespace(detail.expected) })
+	UnsupportedContext(detail) => UnsupportedContext({ ..detail, element: MarkupDiagnosticOwnership.own_name(detail.element) })
+}
