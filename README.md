@@ -11,22 +11,30 @@ works with any platform. Runtime parsers return invalid input as an error value.
 Checked literals and imported constants can reject invalid input during
 compilation, with configurable validation checks.
 
-| Format | Specification | Manual |
-| --- | --- | --- |
-| CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) |
-| QIF | Quicken bank/cash/card records | [Reading QIF](docs/qif.adoc) |
-| OFX | Banking/card statements in SGML and XML | [Reading OFX](docs/ofx.adoc) |
-| YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) |
-| XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) |
-| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) |
-| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) |
-| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) |
-| JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) |
-| Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) |
-| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) |
-| HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) |
-| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) |
-| Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) |
+| Format | Specification | Manual | Throughput |
+| --- | --- | --- | ---: |
+| CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) | 51 MB/s |
+| QIF | Quicken bank/cash/card records | [Reading QIF](docs/qif.adoc) | 23 MB/s |
+| OFX | Banking/card statements in SGML and XML | [Reading OFX](docs/ofx.adoc) | 4.4 MB/s |
+| YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) | 56 MB/s |
+| XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) | 150 MB/s |
+| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) | 60 MB/s |
+| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) | 74 MB/s |
+| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) | 34 MB/s |
+| JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) | 96 MB/s |
+| Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) | 51 MB/s |
+| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) | 9.3 MB/s |
+| HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) | 350 MB/s |
+| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) | 230 MB/s |
+| Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) | Varies |
+
+Measured on an AMD Ryzen 7 9700X under Linux using one pinned logical core,
+Roc `nightly-2026-11-15-f25da45` and `--opt=speed --debug`. Values are the
+median of seven ~200-ms batches of in-memory parsing and result construction,
+excluding I/O, on representative ~64 KiB documents (HTTP: a 555-byte request
+head). MB/s uses 1,000,000 bytes per MB. See the [method and reproduction
+command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table) and
+[measurement receipts](bench/throughput.json).
 
 CSV, QIF and OFX support [chunked reading and writing](docs/streaming.adoc)
 through Roc’s builtin `Iter` and `Stream`. The other format parsers require
