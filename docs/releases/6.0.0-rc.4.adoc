@@ -23,18 +23,14 @@ The package exports fifteen roots: `AsciiDoc`, `CSV`, `HTTP`, `Html`,
 `JsonValue`, `Markdown`, `Markup`, `MathML`, `OFX`, `Parser`, `QIF`,
 `RocSyntax`, `Svg`, `Xml` and `Yaml`.
 
-[cols="1,2",options="header"]
-|===
-|Previous root |Current owner
-|`Utf8`, `Literal` |`Parser.Utf8`, `Parser.Quotation`
-|`Streaming` |Decoder and encoder receiver methods; constructors under `Parser`
-|`JsonStream` |`JsonValue.record_decoder`, `JsonValue.record_encoder`
-|`XmlNs` |`Xml.Namespaced`
-|`SvgPath` |`Svg.Path`
-|`DomName`, `MarkupFacts` |`Markup.Name` constructors and receiver queries
-|`DomConstruction` |`Html.RepairContext`
-|`MarkupContext`, `MarkupTemplate` |`Markup.Context`, `Markup.Template`
-|===
+* `Utf8` and `Literal` move to `Parser.Utf8` and `Parser.Quotation`.
+* `Streaming` operations become decoder and encoder receiver methods;
+  custom constructors live under `Parser`.
+* `JsonStream` becomes `JsonValue.record_decoder` and `JsonValue.record_encoder`.
+* `XmlNs` moves to `Xml.Namespaced`; `SvgPath` moves to `Svg.Path`.
+* `DomName` and `MarkupFacts` become `Markup.Name` constructors and receiver queries.
+* `DomConstruction` moves to `Html.RepairContext`.
+* `MarkupContext` and `MarkupTemplate` move to `Markup.Context` and `Markup.Template`.
 
 == Parsing and streaming
 
