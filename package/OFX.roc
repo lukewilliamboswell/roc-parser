@@ -1084,7 +1084,9 @@ capture_close = |input, span| {
 			return Err(UseStreaming)
 		}
 		value = { type: scalars.values.get(0) ?? "", posted: scalars.values.get(1) ?? "", amount: scalars.values.get(2) ?? "", id: scalars.values.get(3) ?? "", name: scalars.values.get(4) ?? "", memo: scalars.values.get(5) ?? "", check_number: scalars.values.get(6) ?? "", extensions }
-		validate_transaction_fields(value, True).map_err(|_| UseStreaming)?
+		# Every core slot came from core_text (or the empty default), so its
+		# joined text already has normalized edge whitespace.
+		validate_normalized_transaction_fields(value, True).map_err(|_| UseStreaming)?
 		if state.capture_tag != "STMTTRN" or state.stack.last().map_ok(|entry| entry.name) != Ok("STMTTRN") {
 			return Err(UseStreaming)
 		}
@@ -1386,6 +1388,13 @@ validate_transaction_fields = |value, checked_xml| {
 	if value.id != value.id.trim() or value.name != value.name.trim() or value.memo != value.memo.trim() or value.check_number != value.check_number.trim() {
 		return Err("writer values must use normalized OFX whitespace")
 	}
+	validate_normalized_transaction_fields(value, checked_xml)
+}
+
+# The direct XML projection establishes normalized values in core_text. Other
+# callers retain the whitespace guard above, including its diagnostic priority.
+validate_normalized_transaction_fields : OFX.Transaction, Bool -> Try({}, Str)
+validate_normalized_transaction_fields = |value, checked_xml| {
 	var $extension_names = []
 	var $rank = 0
 	for node in value.extensions {
@@ -2129,6 +2138,34 @@ expect ["20260101[+1]", "20260101[-12:WEST]", "20260101[14:]", "20260101235960.0
 expect ["DEBIT", "DIRECTDEBIT", "OTHER"].all(transaction_type) and ["", "credit", "DEBIT ", "INVALID"].all(|value| !transaction_type(value))
 
 expect ["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(|name| core_slot(name) < 7 and leaf_tag(name) and valid_name(name) and placement(name, "STMTTRN") and !capture_tag(name))
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
+	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
+		|name| {
+			padded = source.replace_each("<${name}>", "<${name}>\t\u(2003)\r\n").replace_each("</${name}>", "\u(A0) </${name}>")
+			xml_whole(padded.to_utf8(), {}).is_ok() and OFX.parse_str(padded) == OFX.parse_str(source) and OFX.parse_str(padded) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
+		},
+	)
+}
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
+	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
+		|name| {
+			padded = source.replace_each("<${name}>", "<${name}><![CDATA[ \u(2003)]]>")
+			xml_whole(padded.to_utf8(), {}).is_err() and OFX.parse_str(padded).is_err() and OFX.parse_str(padded) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
+		},
+	)
+}
+
+expect {
+	statement = OFX.parse_str(sample_xml)?.statements.first()?
+	value = statement.transactions.first()?
+	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	padded = "\u(2003)padded\u(A0)"
+	[{ ..value, type: "INVALID", id: padded }, { ..value, type: "INVALID", name: padded }, { ..value, type: "INVALID", memo: padded }, { ..value, type: "INVALID", check_number: padded }].all(|changed| validate_transaction_fields(changed, True) == Err("writer values must use normalized OFX whitespace") and OFX.write(opened.writer, Transaction(changed)).is_err())
+}
 
 expect {
 	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
