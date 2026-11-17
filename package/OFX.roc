@@ -88,34 +88,9 @@ OFX := { statements : List(OFX.Statement) }.{
 		if props.errors.error_policy != FailFast {
 			return Err(InvalidOfx(write_error("parse_bytes is fail-fast; use parse_iter or parse_report for recovery")))
 		}
-		var $state = decoder(props)
-		var $at = 0
-		var $statements = []
-		var $current = empty_statement(empty_context)
-		while True {
-			result = step($state, bytes.drop_first($at), Final)
-			$state = result.state
-			$at = $at + result.consumed
-			match result.outcome {
-				Item(StatementStart(context)) => {
-					$current = empty_statement(context)
-				}
-				Item(Transaction(transaction)) => {
-					$current = { ..$current, transactions: $current.transactions.append(transaction) }
-				}
-				Item(LedgerBalance(balance)) => {
-					$current = { ..$current, ledger_balance: Ok(balance) }
-				}
-				Item(AvailableBalance(balance)) => {
-					$current = { ..$current, available_balance: Ok(balance) }
-				}
-				Item(StatementEnd) => {
-					$statements = $statements.append($current)
-				}
-				Failed(error) | RecordError(error) => return Err(InvalidOfx(error))
-				Done => return Ok(OFX.{ statements: $statements })
-				NeedInput => return Err(InvalidOfx(problem($state, "incomplete OFX document")))
-			}
+		match xml_whole(bytes, props) {
+			Ok(document) => Ok(document)
+			Err(UseStreaming) => collect_bytes(bytes, props)
 		}
 	}
 
@@ -212,6 +187,39 @@ empty_header = { old_uid: "NONE", new_uid: "NONE", server_date: "20000101000000"
 
 empty_statement : OFX.Context -> OFX.Statement
 empty_statement = |context| { context, transactions: [], ledger_balance: Err(Missing), available_balance: Err(Missing) }
+
+collect_bytes : List(U8), OFX.Props -> Try(OFX, [InvalidOfx(OFX.Error)])
+collect_bytes = |bytes, props| {
+	var $state = initial(props)
+	var $at = 0
+	var $statements = []
+	var $current = empty_statement(empty_context)
+	while True {
+		result = advance($state, bytes.drop_first($at), Final)
+		$state = result.state
+		$at = $at + result.consumed
+		match result.outcome {
+			Item(StatementStart(context)) => {
+				$current = empty_statement(context)
+			}
+			Item(Transaction(transaction)) => {
+				$current = { ..$current, transactions: $current.transactions.append(transaction) }
+			}
+			Item(LedgerBalance(balance)) => {
+				$current = { ..$current, ledger_balance: Ok(balance) }
+			}
+			Item(AvailableBalance(balance)) => {
+				$current = { ..$current, available_balance: Ok(balance) }
+			}
+			Item(StatementEnd) => {
+				$statements = $statements.append($current)
+			}
+			Failed(error) | RecordError(error) => return Err(InvalidOfx(error))
+			Done => return Ok(OFX.{ statements: $statements })
+			NeedInput => return Err(InvalidOfx(problem($state, "incomplete OFX document")))
+		}
+	}
+}
 
 initial : OFX.Props -> State
 initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: Box.box(empty_context), started: False, in_statement: False, root_seen: False, root_closed: False, header_info: Box.box(empty_header), wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False, context_seen: [], balances_seen: [], terminal: False }
@@ -807,6 +815,229 @@ close_tag = |state, name, text, parsed| {
 		$s = { ..$s, root_closed: True }
 	}
 	Ok({ state: $s, outcome: Quiet })
+}
+
+# A whole UTF-8 XML document is lexed once. The same logical handlers validate
+# its hierarchy and values; only the current captured record needs XML nodes.
+# Any refusal falls back to the byte reader, which owns public diagnostics.
+Whole : { reader : State, nodes : List(Xml.Node), marks : List(U64), current : Box(OFX.Statement), statements : List(OFX.Statement) }
+
+xml_whole : List(U8), OFX.Props -> Try(OFX, [UseStreaming])
+xml_whole = |bytes, props| {
+	if props.syntax == Sgml or props.encoding == Windows1252 {
+		return Err(UseStreaming)
+	}
+	source = Str.from_utf8(bytes).map_err(|_| UseStreaming)?
+	opened = { reader: initial(props), nodes: [], marks: [], current: Box.box(empty_statement(empty_context)), statements: [] }
+	match Xml.fold_source(source, { max_depth: props.max_depth, max_elements: 18446744073709551615, max_attributes: 0 }, opened, |state, event| whole_event(bytes, state, event)) {
+		Folded(value) => {
+			if !value.reader.root_closed or value.reader.in_statement or !value.reader.stack.is_empty() or !value.marks.is_empty() {
+				return Err(UseStreaming)
+			}
+			Ok(OFX.{ statements: value.statements })
+		}
+		Failed(_) | Rejected(_, _) => Err(UseStreaming)
+	}
+}
+
+whole_span : Xml.SourceEvent -> Xml.SourceSpan
+whole_span = |event| match event {
+	Start(value) => value.span
+	End(span) | Declaration(span) | Gap(span) => span
+	Text(value) | CData(value) | Comment(value) => value.span
+	ProcessingInstruction(value) => value.span
+}
+
+whole_record_fits : State, U64 -> Bool
+whole_record_fits = |reader, end| {
+	if reader.capture_tag.is_empty() {
+		True
+	} else {
+		match reader.stack.get(reader.capture_depth) {
+			Ok(frame) => end >= frame.offset and end - frame.offset <= reader.props.max_record_bytes
+			Err(_) => False
+		}
+	}
+}
+
+whole_event : List(U8), Whole, Xml.SourceEvent -> Try(Whole, [UseStreaming])
+whole_event = |bytes, input, event| {
+	{ reader, nodes, marks, current, statements } = input
+	span = whole_span(event)
+	width = span.end - span.start
+	var $reader = { ..reader, offset: span.end }
+	match event {
+		Gap(_) if !$reader.header_done => {
+			$reader = { ..$reader, header: $reader.header.concat(bytes.sublist({ start: span.start, len: width })) }
+			if $reader.header.len() > $reader.props.max_token_bytes {
+				return Err(UseStreaming)
+			}
+			return Ok({ reader: $reader, nodes, marks, current, statements })
+		}
+		_ => {}
+	}
+	if !$reader.header_done {
+		$reader = read_header($reader).map_err(|_| UseStreaming)?
+	}
+	if width > $reader.props.max_token_bytes or !whole_record_fits($reader, span.end) {
+		return Err(UseStreaming)
+	}
+	whole = { reader: $reader, nodes, marks, current, statements }
+	match event {
+		Start(value) => {
+			if !value.attributes.is_empty() or !valid_name(value.name) {
+				return Err(UseStreaming)
+			}
+			whole_start(whole, value.name, value.empty, span)
+		}
+		End(_) => whole_close(whole)
+		Text(value) => {
+			if width > whole.reader.props.max_record_bytes and whole.reader.capture_tag.is_empty() {
+				return Err(UseStreaming)
+			}
+			whole_text(whole, value.value)
+		}
+		CData(value) => {
+			if whole.reader.capture_tag.is_empty() {
+				return Err(UseStreaming)
+			}
+			top = whole.reader.stack.last().map_ok(|frame| frame.name) ?? ""
+			if ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(top) and value.value != value.value.trim() {
+				return Err(UseStreaming)
+			}
+			whole_text(whole, value.value)
+		}
+		Comment(_) => Ok(whole)
+		Gap(_) => {
+			if width > whole.reader.props.max_record_bytes {
+				return Err(UseStreaming)
+			}
+			Ok(whole)
+		}
+		Declaration(_) | ProcessingInstruction(_) => {
+			{ reader: prior, nodes: ns, marks: ms, current: statement, statements: complete } = whole
+			consumed = consume_token({ ..prior, token: bytes.sublist({ start: span.start, len: width }) }).map_err(|_| UseStreaming)?
+			if consumed.state.encoding != Utf8 {
+				return Err(UseStreaming)
+			}
+			whole_action({ reader: { ..consumed.state, token: [] }, nodes: ns, marks: ms, current: statement, statements: complete }, consumed.outcome)
+		}
+	}
+}
+
+whole_start : Whole, Str, Bool, Xml.SourceSpan -> Try(Whole, [UseStreaming])
+whole_start = |input, name, empty, span| {
+	{ reader, nodes, marks, current, statements } = input
+	consumed = consume_name(reader, name, False, False, [], span.end - span.start, "").map_err(|_| UseStreaming)?
+	{ state: next, outcome } = consumed
+	if !whole_record_fits(next, span.end) {
+		return Err(UseStreaming)
+	}
+	marks = if (next.capture_tag.is_empty()) marks else marks.append(nodes.len())
+	whole = whole_action({ reader: next, nodes, marks, current, statements }, outcome)?
+	if empty {
+		whole_close(whole)
+	} else {
+		Ok(whole)
+	}
+}
+
+# Adjacent text across comments/CDATA has the same coalescing as Xml.parse_str.
+# Join a run once at close, so many small segments remain linear.
+whole_children : List(Xml.Node), U64 -> List(Xml.Node)
+whole_children = |nodes, first| {
+	var $out = List.with_capacity(nodes.len() - first)
+	var $at = first
+	var $single = ""
+	var $parts = []
+	while $at < nodes.len() {
+		match nodes.get($at) {
+			Ok(Text(value)) => {
+				if !value.is_empty() {
+					if $single.is_empty() {
+						$single = value
+					} else {
+						$parts = $parts.append(value)
+					}
+				}
+			}
+			Ok(node) => {
+				if !$single.is_empty() {
+					$out = $out.append(Text(if ($parts.is_empty()) $single else Str.join_with($parts.prepend($single), "")))
+					$single = ""
+					$parts = []
+				}
+				$out = $out.append(node)
+			}
+			Err(_) => {}
+		}
+		$at = $at + 1
+	}
+	if !$single.is_empty() {
+		$out = $out.append(Text(if ($parts.is_empty()) $single else Str.join_with($parts.prepend($single), "")))
+	}
+	$out
+}
+
+whole_close : Whole -> Try(Whole, [UseStreaming])
+whole_close = |input| {
+	{ reader, nodes, marks, current, statements } = input
+	name = reader.stack.last().map_err(|_| UseStreaming)?.name
+	var $nodes = nodes
+	var $marks = marks
+	var $parsed = Err(Missing)
+	if !reader.capture_tag.is_empty() {
+		first = $marks.last().map_err(|_| UseStreaming)?
+		node = Element({ name, attributes: [], children: whole_children($nodes, first) })
+		$nodes = $nodes.take_first(first)
+		$marks = $marks.drop_last(1)
+		if reader.stack.len() == reader.capture_depth + 1 {
+			$parsed = Ok(node)
+		} else {
+			$nodes = $nodes.append(node)
+		}
+	}
+	consumed = close_tag(reader, name, "", $parsed).map_err(|_| UseStreaming)?
+	whole_action({ reader: consumed.state, nodes: $nodes, marks: $marks, current, statements }, consumed.outcome)
+}
+
+whole_text : Whole, Str -> Try(Whole, [UseStreaming])
+whole_text = |input, value| {
+	{ reader, nodes, marks, current, statements } = input
+	if !reader.capture_tag.is_empty() {
+		Ok({ reader, nodes: if (value.is_empty()) nodes else nodes.append(Text(value)), marks, current, statements })
+	} else {
+		top = reader.stack.last().map_ok(|frame| frame.name) ?? ""
+		if !leaf_tag(top) {
+			if !value.trim().is_empty() {
+				return Err(UseStreaming)
+			}
+			return Ok({ reader, nodes, marks, current, statements })
+		}
+		next = consume_field(reader, top, value.trim()).map_err(|_| UseStreaming)?
+		Ok({ reader: next, nodes, marks, current, statements })
+	}
+}
+
+whole_action : Whole, Action -> Try(Whole, [UseStreaming])
+whole_action = |input, action| {
+	match action {
+		Quiet => Ok(input)
+		Rejected(_) => Err(UseStreaming)
+		Emitted(event) => {
+			{ reader, nodes, marks, current, statements } = input
+			match event {
+				StatementStart(context) => Ok({ reader, nodes, marks, current: Box.box(empty_statement(context)), statements })
+				Transaction(value) => {
+					prior = Box.unbox(current)
+					Ok({ reader, nodes, marks, current: Box.box({ ..prior, transactions: prior.transactions.append(value) }), statements })
+				}
+				LedgerBalance(value) => Ok({ reader, nodes, marks, current: Box.box({ ..Box.unbox(current), ledger_balance: Ok(value) }), statements })
+				AvailableBalance(value) => Ok({ reader, nodes, marks, current: Box.box({ ..Box.unbox(current), available_balance: Ok(value) }), statements })
+				StatementEnd => Ok({ reader, nodes, marks, current: Box.box(empty_statement(empty_context)), statements: statements.append(Box.unbox(current)) })
+			}
+		}
+	}
 }
 
 capture_tag : Str -> Bool
@@ -1491,4 +1722,13 @@ expect ["</>", "<OFX></>", "<OFX></OFX/>", "<OFX></ />", "<OFX><//>", "<OFX><>",
 expect {
 	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[]]></MEMO>")
 	OFX.parse_str(source)?.statements.first()?.transactions.first()?.memo == ""
+}
+
+expect xml_whole(sample_xml.to_utf8(), {}).is_ok()
+
+expect [sample_xml, "\u(feff)${sample_xml}", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}", sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>one<!-- gap --><![CDATA[two]]>&amp;three</MEMO>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR><ITEM>one<!-- gap --><![CDATA[two]]>&amp;three<INNER/>four</ITEM></VENDOR></STMTTRN>"), sample_xml.replace_each("-12.30", "bad"), sample_xml.replace_each("</NAME>", "</WRONG>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[ padded ]]></MEMO>"), "<OFX></OFX/>", "<OFX/>", "<!--before--><OFX/><!--after-->"].all(|source| OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
+
+expect {
+	bytes = sample_xml.to_utf8()
+	[0, 1, 8, 64, 128, 512, 1024].all(|limit| OFX.parse_bytes(bytes, { max_token_bytes: limit }) == collect_bytes(bytes, { max_token_bytes: limit }) and OFX.parse_bytes(bytes, { max_record_bytes: limit }) == collect_bytes(bytes, { max_record_bytes: limit }))
 }
