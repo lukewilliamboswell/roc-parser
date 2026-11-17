@@ -24,9 +24,10 @@ https://www.rfc-editor.org/rfc/rfc8259[RFC 8259], and also rejects repeated
 keys and nesting deeper than 128 levels. Options relax it for common
 variants, such as comments, trailing commas and a byte order mark, and add
 checks, such as size limits and I-JSON numbers. It reads complete documents
-held in memory; see <<json-unsupported,what is not supported>>.
+held in memory. For NDJSON or large top-level arrays, use
+<<json-streaming,chunked record reading and writing>>.
 
-Every example on this page comes from
+The complete-document examples on this page come from
 link:{src}/docs/examples/json-guide.roc[`docs/examples/json-guide.roc`],
 which CI checks and runs, and imports `parser.JsonValue`.
 
@@ -602,15 +603,72 @@ Because each value takes the whitespace after it, this reader also accepts
 several values on one line; it does not check that each value has a line of
 its own.
 
+[#json-streaming]
+== Read and write records in chunks
+
+Use `JsonStream` when NDJSON logs or a top-level JSON array are too large to
+hold in memory. `parse_iter(chunks, props)` takes an `Iter(List(U8))`;
+`parse_stream(chunks, props)` takes a `Stream(Try(List(U8), source_error))`.
+Both produce `Value(JsonValue)` events and a final `Finished(report)` inside
+`Try`. Chunk boundaries may split UTF-8, escapes, numbers or nested values.
+Empty chunks do not signal EOF. Consume through `Finished` to validate the
+array's closing bracket and any trailing input.
+
+The default `format: Ndjson` reads one complete value per LF-delimited line,
+accepts CRLF, ignores lines containing only JSON whitespace, and accepts a
+final value without LF. Each line must contain exactly one value. With
+`format: Array`, each item of the outer array becomes a value; nested objects
+and arrays within an item are collected before it is emitted. An empty
+array yields only `Finished`. Arbitrary top-level objects do not have a
+chunked event interface.
+
+The `json` field takes `JsonValue.Options` for each emitted value. Thus
+`max_depth` excludes the outer array wrapper, `max_items` limits containers
+inside each item rather than the number of streamed items, and `top_level`
+checks each item. Array wrapper comments, a leading BOM, and a trailing
+comma follow the corresponding JSON options; a BOM is accepted only at the
+start of the array document. For NDJSON, each nonblank line is a separate
+JSON document and uses those options independently.
+
+`max_record_bytes` defaults to 4 MiB and bounds the encoded unfinished value
+before parsing it. Readers retain one record and the current source chunk;
+retaining emitted values adds application memory. A returned string or
+number may share its record's bytes, but does not retain preceding records.
+Use a pull loop to process and discard values instead of collecting the
+whole stream.
+
+`errors` takes the shared <<streaming,error policy>>. NDJSON can report or
+skip a rejected line because its framing is independent. Array syntax
+errors, invalid encoding, resource limits and source failures are terminal.
+Diagnostics identify the record and its original one-based line and byte
+column. Source failures remain `SourceErr` and never produce `Finished`.
+
+`write_iter(values, props, chunk_bytes)` and
+`write_stream(values, props, chunk_bytes)` write compact NDJSON by default;
+`format: Array` writes an enclosing array. Writers validate each complete
+value before its first bytes, retain one encoded record, and emit chunks no
+larger than `chunk_bytes`. Their `max_record_bytes` bounds encoded JSON for
+one value, excluding the single LF, comma or bracket framing byte. It is
+checked before rendering. `sort_keys: True` sorts object members. A source
+or encoding failure can leave earlier records written; an array is closed
+only after successful source exhaustion.
+
+The complete link:{src}/examples/json-streaming.roc[`json-streaming.roc`]
+example reads NDJSON from stdin and writes one compact JSON array to stdout.
+It connects `parse_stream` through `Streaming.values_stream` to
+`write_stream`, so rejected records and missing completion remain errors.
+
 [#json-unsupported]
 == What is not supported
 
 These limits are by design:
 
-Streaming:: The parser reads a complete document held in memory and returns
-a tree; there is no event or token interface. Numbers, and strings without
-escapes, share the input's memory instead of being copied, so a value keeps
-the whole input alive while any part of it is in use.
+Document events:: `JsonValue` reads a complete document and returns a tree;
+it has no event or token interface. `JsonStream` incrementally emits NDJSON
+records or top-level array items, but collects each item as a tree. Numbers
+and unescaped strings share their input memory, so complete-document values
+can keep the whole document alive and streamed values can keep their record
+alive.
 JSON5:: Only the relaxations listed in <<json-options>> are available.
 Single-quoted strings, unquoted keys, hexadecimal numbers, leading or
 trailing decimal points, a leading `+`, and line breaks escaped inside
