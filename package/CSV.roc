@@ -1144,14 +1144,79 @@ scan_record = |bytes, start| {
 
 ## Offset of the first `,`, CR or LF at or after `start`, or the input length.
 scan_unquoted : List(U8), U64 -> U64
-scan_unquoted = |bytes, start| Utf8.find_any(bytes, start, delimiters)
+scan_unquoted = |bytes, start| {
+	comma = U8x16.splat(',')
+	cr = U8x16.splat('\r')
+	lf = U8x16.splat('\n')
+	var $pos = start
+	while True {
+		match U8x16.load(bytes, $pos) {
+			Ok(lanes) => {
+				mask = lanes.eq_lanes(comma).bitwise_or(lanes.eq_lanes(cr)).bitwise_or(lanes.eq_lanes(lf)).to_bitmask()
+				if mask != 0 {
+					return $pos + mask.count_trailing_zero_bits().to_u64()
+				}
+				$pos = $pos + 16
+			}
+			Err(_) => break
+		}
+	}
+	while $pos < bytes.len() {
+		if is_delimiter(bytes.get($pos) ?? 0) {
+			break
+		}
+		$pos = $pos + 1
+	}
+	$pos
+}
 
-# Bytes that end an unquoted field, found 16 at a time.
-delimiters : Utf8.ByteClass
-delimiters = Utf8.ByteClass.from_bytes([',', '\r', '\n'])
+find_quote : List(U8), U64 -> U64
+find_quote = |bytes, start| {
+	quote = U8x16.splat('"')
+	var $pos = start
+	while True {
+		match U8x16.load(bytes, $pos) {
+			Ok(lanes) => {
+				mask = lanes.eq_lanes(quote).to_bitmask()
+				if mask != 0 {
+					return $pos + mask.count_trailing_zero_bits().to_u64()
+				}
+				$pos = $pos + 16
+			}
+			Err(_) => break
+		}
+	}
+	while $pos < bytes.len() {
+		if bytes.get($pos) == Ok('"') {
+			break
+		}
+		$pos = $pos + 1
+	}
+	$pos
+}
 
-quote : Utf8.ByteClass
-quote = Utf8.ByteClass.from_bytes(['"'])
+# Exercise every vector lane, the scalar tail, and non-ASCII bytes without
+# depending on UTF-8 decoding or on the streaming scanner's implementation.
+expect [0, 'x', 0x80, 0xFF].all(
+	|fill| [',', '\r', '\n'].all(
+		|delimiter| (0..=48).iter().fold(
+			True,
+			|good, at| {
+				bytes = List.repeat(fill, at).append(delimiter).concat(List.repeat(fill, 19))
+				good and scan_unquoted(bytes, 0) == at and scan_unquoted(bytes, at + 1) == bytes.len()
+			},
+		),
+	),
+)
+expect [0, 'x', 0x80, 0xFF].all(
+	|fill| (0..=48).iter().fold(
+		True,
+		|good, at| {
+			bytes = List.repeat(fill, at).append('"').concat(List.repeat(fill, 19))
+			good and find_quote(bytes, 0) == at and find_quote(bytes, at + 1) == bytes.len()
+		},
+	),
+)
 
 is_delimiter : U8 -> Bool
 is_delimiter = |byte| byte == ',' or byte == '\r' or byte == '\n'
@@ -1162,7 +1227,7 @@ scan_quoted = |bytes, start| {
 	len = bytes.len()
 	var $field = []
 	var $chunk_start = start + 1
-	var $pos = Utf8.find_any(bytes, start + 1, quote)
+	var $pos = find_quote(bytes, start + 1)
 	while $pos < len {
 		if bytes.get($pos) == Ok('"') {
 			chunk = bytes.sublist({ start: $chunk_start, len: $pos - $chunk_start })
@@ -1171,7 +1236,7 @@ scan_quoted = |bytes, start| {
 			if bytes.get($pos + 1) == Ok('"') {
 				$field = $field.append('"')
 				$chunk_start = $pos + 2
-				$pos = Utf8.find_any(bytes, $pos + 2, quote)
+				$pos = find_quote(bytes, $pos + 2)
 			} else {
 				after = $pos + 1
 				if after >= len or is_delimiter(bytes.get(after) ?? 0) {
@@ -1180,7 +1245,7 @@ scan_quoted = |bytes, start| {
 				return Err({ at: after, problem: TextAfterQuote })
 			}
 		} else {
-			$pos = Utf8.find_any(bytes, $pos + 1, quote)
+			$pos = find_quote(bytes, $pos + 1)
 		}
 	}
 	Err({ at: start, problem: Unterminated })
