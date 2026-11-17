@@ -16,4 +16,12 @@ Diagnostic(problem) := {
 
 	## Counts can stop at the first violation without scanning additional input.
 	Observed : [Exact(U64), AtLeast(U64)]
+
+	## Text coordinates when known; binary and generated values have none.
+	line_column : Location -> Try({ line : U64, column : U64 }, [NoTextPosition])
+	line_column = |location| match location {
+		Text(position) => Ok({ line: position.line, column: position.column })
+		LineColumn(position) => Ok(position)
+		_ => Err(NoTextPosition)
+	}
 }
