@@ -1,8 +1,7 @@
+import Diagnostic
 import Streaming
 import Xml
 import Parser
-import Utf8
-import Literal
 
 ## Streaming banking and credit-card OFX 1.x SGML and 2.x XML statements.
 ## Amounts, identifiers, and timestamps remain exact strings. Unknown XML
@@ -13,8 +12,9 @@ OFX := { statements : List(OFX.Statement) }.{
 	to_hash : _
 
 	## Original encoded byte offset and one-based line and byte column.
-	Problem : [IncompleteDocument, UnfinishedStatement, HeaderTooLarge(U64), TokenTooLarge(U64), FieldTooLarge(U64), RecordTooLarge(U64), TrailingContent, NonAsciiHeader, SyntaxMismatch, SelfClosingEndTag, EmptyTagName, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(Streaming.EncodingError), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestingTooDeep(U64), NestedScalar, NestedStatement, InvalidParent(Str), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag(Str), MalformedRecord, TooManyFields(U64), EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Str), MissingAccountId, MissingBankId, InvalidStartTimestamp(Str), InvalidEndTimestamp(Str), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Str), InvalidAmount(Str), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), ExtensionTooDeep(U64), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
-	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
+	Resource : [HeaderBytes, TokenBytes, FieldBytes, RecordBytes, Depth, Fields, ExtensionDepth]
+	Problem : [LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), IncompleteDocument, UnfinishedStatement, TrailingContent, NonAsciiHeader, SyntaxMismatch, SelfClosingEndTag, EmptyTagName, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(Streaming.EncodingError), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestedScalar, NestedStatement, InvalidParent({ element : Str, parent : Str }), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag({ actual : Str, expected : Try(Str, [NoOpenElement]) }), MalformedRecord, EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Diagnostic.Excerpt), MissingAccountId, MissingBankId, InvalidStartTimestamp(Diagnostic.Excerpt), InvalidEndTimestamp(Diagnostic.Excerpt), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Diagnostic.Excerpt), InvalidAmount(Diagnostic.Excerpt), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
+	Error : Diagnostic(Problem)
 
 	## Writer wire syntax; readers detect either family.
 	Syntax : [Xml203, Sgml102]
@@ -23,10 +23,10 @@ OFX := { statements : List(OFX.Statement) }.{
 	TextEncoding : [Auto, Utf8, Windows1252]
 
 	## Bounded parser resources; limits are terminal errors.
-	Props := { syntax : [Auto, Xml, Sgml] ?? Auto, encoding : TextEncoding ?? Auto, max_token_bytes : U64 ?? 65_536, max_record_bytes : U64 ?? 4_194_304, max_depth : U64 ?? 64, max_fields : U64 ?? 1024 }
+	Props := { syntax : [Auto, Xml, Sgml] ?? Auto, encoding : TextEncoding ?? Auto, max_token_bytes : U64 ?? 65_536, max_record_bytes : U64 ?? 4_194_304, max_depth : U64 ?? 64, max_fields : U64 ?? 1024, errors : Streaming.RecoveryProps ?? {} }
 
 	## XML 2.03 and UTF-8 are the default output.
-	WriteProps := { syntax : Syntax ?? Xml203, encoding : Streaming.TextEncoding ?? Utf8, max_record_bytes : U64 ?? 4_194_304 }
+	WriteProps := { syntax : Syntax ?? Xml203, encoding : Streaming.TextEncoding ?? Utf8, max_record_bytes : U64 ?? 4_194_304, chunk_bytes : U64 ?? 65_536 }
 
 	## Account identifiers preserve leading zeroes. Empty optional fields are absent.
 	Account : { bank_id : Str, branch_id : Str, account_id : Str, account_type : Str, key : Str }
@@ -53,12 +53,12 @@ OFX := { statements : List(OFX.Statement) }.{
 	Statement : { context : Context, transactions : List(Transaction), ledger_balance : Try(Balance, [Missing]), available_balance : Try(Balance, [Missing]) }
 
 	## Configure bounded statement events for the common streaming API.
-	decoder : Props -> Streaming.Decoder(State, Event, Error)
-	decoder = |props| Streaming.decoder(initial(props), advance)
+	decoder : Props -> Streaming.Decoder(State, Event, [InvalidOfx(Error)])
+	decoder = |props| Streaming.decoder({ initial_state: initial(props), step: |state, bytes, end| Streaming.map_step_error(advance(state, bytes, end), |error| InvalidOfx(error)), errors: props.errors })
 
 	## Configure atomic item validation and document finalization.
 	encoder : WriteProps -> Streaming.Encoder(WriteState, Event, [InvalidOfx(Error)])
-	encoder = |props| Streaming.encoder(initial_writer(props), |state, event| write_event(state, event).map_ok(|result| { state: result.writer, bytes: result.bytes }), finish_writer)
+	encoder = |props| Streaming.encoder({ initial_state: initial_writer(props), encode: |state, event| write_event(state, event).map_ok(|result| { state: result.writer, bytes: result.bytes }), finish: finish_writer, chunk_bytes: props.chunk_bytes })
 
 	## Collect a complete encoded document with encounter-order fail-fast errors.
 	parse_bytes : List(U8), Props -> Try(OFX, [InvalidOfx(Error)])
@@ -70,15 +70,15 @@ OFX := { statements : List(OFX.Statement) }.{
 	}
 
 	## Parse already decoded UTF-8; contradictory encoding headers fail.
-	parse_str : Str -> Try(OFX, [InvalidOfx(Error)])
-	parse_str = |source| parse_bytes(source.to_utf8(), { encoding: Utf8 })
+	parse_str : Str, Props -> Try(OFX, [InvalidOfx(Error)])
+	parse_str = |source, props| parse_bytes(source.to_utf8(), { ..props, encoding: Utf8 })
 
 	## Complete OFX document as a byte combinator.
-	parser : Parser(Utf8.Bytes, OFX, Problem)
-	parser = Parser.custom(
-		|bytes| match parse_bytes(bytes, {}) {
+	parser : Props -> Parser(Parser.Utf8.Bytes, OFX, Problem)
+	parser = |props| Parser.custom(
+		|bytes| match parse_bytes(bytes, props) {
 			Ok(value) => Ok({ value, rest: [] })
-			Err(InvalidOfx(error)) => Err(ParseError({ problem: error.problem, offset: error.offset }))
+			Err(InvalidOfx(error)) => Err(ParseError(Diagnostic.{ location: InputOffset(text_position(error).offset), path: error.path, problem: error.problem }))
 		},
 	)
 
@@ -86,16 +86,24 @@ OFX := { statements : List(OFX.Statement) }.{
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Validate imported or quoted OFX.
-	validate : ValidationProps -> Try(OFX, [BadQuotedBytes(Str)])
-	validate = |props| parse_bytes(props.source.to_utf8(), { ..props.options, encoding: Utf8 }).map_err(|InvalidOfx(error)| Literal.error({ name: props.name, format: "OFX", line: error.line, column: error.column, message: Str.inspect(error.problem) }))
+	validate : ValidationProps -> Try(OFX, [InvalidOfx(Error)])
+	validate = |props| parse_bytes(props.source.to_utf8(), { ..props.options, encoding: Utf8 }).map_err(|InvalidOfx(error)| InvalidOfx({ ..error, path: [Source(props.name)].concat(error.path) }))
 
 	## Checked literal conversion.
 	from_quote : Str -> Try(OFX, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| validate({ source: source }).map_err(
+		|InvalidOfx(error)| {
+			position = Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }
+			Parser.Quotation.error({ name: "<literal>", format: "OFX", message: Str.inspect(error.problem), line: position.line, column: position.column })
+		},
+	)
 
 	## Collect encoded output; event writing remains bounded by record size.
-	to_bytes : OFX, WriteProps -> Try(List(U8), [InvalidOfx(Error)])
-	to_bytes = |document, props| {
+	encode : OFX, WriteProps -> Try(List(U8), [InvalidOfx(Error), InvalidChunkSize(Diagnostic(Streaming.ChunkSizeProblem))])
+	encode = |document, props| {
+		if props.chunk_bytes == 0 {
+			return Err(InvalidChunkSize(Diagnostic.{ problem: BelowMinimum({ minimum: 1, actual: 0 }), location: Unavailable(NotApplicable), path: [Key("chunk_bytes")] }))
+		}
 		var $writer = initial_writer(props)
 		var $bytes = []
 		for statement in document.statements {
@@ -190,11 +198,11 @@ collect_bytes = |bytes, props| {
 initial : OFX.Props -> State
 initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: Box.box(empty_context), started: False, in_statement: False, root_seen: False, root_closed: False, header_info: Box.box(empty_header), wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False, context_seen: [], balances_seen: [], terminal: False }
 
-located_problem : State, Parser.Problem(OFX.Problem) -> OFX.Error
-located_problem = |state, detail| { offset: state.offset, line: state.line, column: state.column, problem: detail }
+located_problem : State, OFX.Problem -> OFX.Error
+located_problem = |state, detail| Diagnostic.{ location: Text({ offset: state.offset, line: state.line, column: state.column }), path: [], problem: detail }
 
-write_error : Parser.Problem(OFX.Problem) -> OFX.Error
-write_error = |detail| { offset: 0, line: 0, column: 0, problem: detail }
+write_error : OFX.Problem -> OFX.Error
+write_error = |detail| Diagnostic.{ location: Unavailable(GeneratedValue), path: [], problem: detail }
 
 move : State, U8 -> State
 move = |state, byte| {
@@ -209,8 +217,8 @@ move = |state, byte| {
 	}
 }
 
-markup_start : Utf8.ByteClass
-markup_start = Utf8.ByteClass.from_bytes(['<'])
+markup_start : Parser.Utf8.ByteClass
+markup_start = Parser.Utf8.ByteClass.from_bytes(['<'])
 
 # Apply source coordinates once per span, visiting only its line endings.
 # In particular, CRLF remains one line ending even when split between calls.
@@ -223,7 +231,7 @@ move_span = |state, bytes, start, end| {
 	var $column = state.column
 	var $last_cr = state.last_cr
 	while $at < end {
-		next = Utf8.find_line_end(span_bytes, $at)
+		next = Parser.Utf8.find_line_end(span_bytes, $at)
 		if next >= end {
 			break
 		}
@@ -305,7 +313,7 @@ advance = |state, bytes, ending| {
 			$at = scanned.at
 			$s = { ..$s, token: scanned.token, quote: scanned.quote }
 			if $s.token.len() > $s.props.max_token_bytes {
-				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, TokenTooLarge($s.props.max_token_bytes))) }
+				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, LimitExceeded({ resource: TokenBytes, max: $s.props.max_token_bytes, observed: AtLeast(($s.props.max_token_bytes) + 1) }))) }
 			}
 			if scanned.complete {
 				match consume_token($s) {
@@ -321,13 +329,13 @@ advance = |state, bytes, ending| {
 				}
 			}
 		} else if $s.header_done and byte != '<' {
-			end = bounded_end($at, bounded_end($at, Utf8.find_any(bytes, $at, markup_start), $s.leaf.len(), $s.props.max_token_bytes), $s.capture.len() + $s.leaf.len(), $s.props.max_record_bytes)
+			end = bounded_end($at, bounded_end($at, Parser.Utf8.find_any(bytes, $at, markup_start), $s.leaf.len(), $s.props.max_token_bytes), $s.capture.len() + $s.leaf.len(), $s.props.max_record_bytes)
 			$borrowed_leaf = $s.leaf.is_empty()
 			$s = move_span($s, bytes, $at, end)
 			$s = { ..$s, leaf: $s.leaf.concat(bytes.sublist({ start: $at, len: end - $at })) }
 			$at = end
 			if $s.leaf.len() > $s.props.max_token_bytes {
-				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, FieldTooLarge($s.props.max_token_bytes))) }
+				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, LimitExceeded({ resource: FieldBytes, max: $s.props.max_token_bytes, observed: AtLeast(($s.props.max_token_bytes) + 1) }))) }
 			}
 		} else {
 			$s = move($s, byte)
@@ -343,7 +351,7 @@ advance = |state, bytes, ending| {
 				} else {
 					$s = { ..$s, header: $s.header.append(byte) }
 					if $s.header.len() > $s.props.max_token_bytes {
-						return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, HeaderTooLarge(state.props.max_token_bytes))) }
+						return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, LimitExceeded({ resource: HeaderBytes, max: state.props.max_token_bytes, observed: AtLeast((state.props.max_token_bytes) + 1) }))) }
 					}
 				}
 			} else {
@@ -363,7 +371,7 @@ advance = |state, bytes, ending| {
 			}
 		}
 		if $s.capture.len() + $s.leaf.len() > $s.props.max_record_bytes {
-			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, RecordTooLarge($s.props.max_record_bytes))) }
+			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, LimitExceeded({ resource: RecordBytes, max: $s.props.max_record_bytes, observed: AtLeast(($s.props.max_record_bytes) + 1) }))) }
 		}
 	}
 	if ending == Final {
@@ -492,7 +500,7 @@ consume_text = |state| {
 		}
 		return Ok(state)
 	}
-	decoded = Xml.parse_str("<v>${text}</v>").map_err(|_| located_problem(state, InvalidCharacterData))?.root.text().trim()
+	decoded = Xml.parse_str("<v>${text}</v>", {}).map_err(|_| located_problem(state, InvalidCharacterData))?.root.text().trim()
 	consume_field(state, top, decoded)
 }
 
@@ -544,7 +552,7 @@ Consumed : { state : State, outcome : Action }
 # without retaining aliases for a cold error arm.
 TokenFailure : { state : State, error : OFX.Error }
 
-token_failure : State, Parser.Problem(OFX.Problem) -> TokenFailure
+token_failure : State, OFX.Problem -> TokenFailure
 token_failure = |state, detail| { state, error: located_problem(state, detail) }
 
 consume_token : State -> Try(Consumed, TokenFailure)
@@ -563,7 +571,7 @@ consume_token = |state| {
 				return Err(token_failure(state, PaddedCdataUnsupported))
 			}
 		}
-		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| token_failure(state, MalformedCommentOrCdata))?
+		_ = Xml.parse_str("<v>${text}</v>", {}).map_err(|_| token_failure(state, MalformedCommentOrCdata))?
 		if state.syntax == Sgml102 {
 			return Err(token_failure(state, SgmlCommentUnsupported))
 		}
@@ -588,7 +596,7 @@ consume_token = |state| {
 			return Err(token_failure(state, PrologueOrder))
 		}
 		if marker == "xml" {
-			_ = Xml.parse_str("${text}<v/>").map_err(|_| token_failure(state, MalformedXmlDeclaration))?
+			_ = Xml.parse_str("${text}<v/>", {}).map_err(|_| token_failure(state, MalformedXmlDeclaration))?
 			if !state.header.is_empty() and state.header != [239, 187, 191] {
 				return Err(token_failure(state, XmlDeclarationOrder))
 			}
@@ -605,7 +613,7 @@ consume_token = |state| {
 				return Err(token_failure(state, MalformedProcessingInstruction))
 			}
 			attrs = Str.from_utf8_lossy(state.token.sublist({ start: 6, len: state.token.len() - 8 }))
-			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| token_failure(state, MalformedProcessingInstruction))?.root
+			node = Xml.parse_str("<p ${attrs}/>", {}).map_err(|_| token_failure(state, MalformedProcessingInstruction))?.root
 			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
 				return Err(token_failure(state, UnsupportedXmlHeader))
 			}
@@ -673,7 +681,7 @@ consume_name = |state, name, closing, self_closed, token, token_len, text| {
 		return Err(token_failure($s, UnknownSgmlTag(name)))
 	}
 	if $s.stack.len() >= $s.props.max_depth {
-		return Err(token_failure($s, NestingTooDeep($s.props.max_depth)))
+		return Err(token_failure($s, LimitExceeded({ resource: Depth, max: $s.props.max_depth, observed: AtLeast(($s.props.max_depth) + 1) })))
 	}
 	if leaf_tag($s.stack.last().map_ok(|frame| frame.name) ?? "") {
 		return Err(token_failure($s, NestedScalar))
@@ -689,7 +697,7 @@ consume_name = |state, name, closing, self_closed, token, token_len, text| {
 	}
 	parent = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !placement(name, parent) {
-		return Err(token_failure($s, InvalidParent(name)))
+		return Err(token_failure($s, InvalidParent({ element: own_identifier(name), parent: own_identifier(parent) })))
 	}
 	if name == "BANKACCTFROM" or name == "CCACCTFROM" {
 		if $s.started or $s.context_seen.contains("account") {
@@ -732,26 +740,26 @@ consume_name = |state, name, closing, self_closed, token, token_len, text| {
 close_tag : State, Str, Str, Try(Xml.Node, [Missing]) -> Try(Consumed, TokenFailure)
 close_tag = |state, name, text, parsed| {
 	if state.stack.last().map_ok(|frame| frame.name) != Ok(name) {
-		return Err(token_failure(state, MismatchedClosingTag(name)))
+		return Err(token_failure(state, MismatchedClosingTag({ actual: own_identifier(name), expected: state.stack.last().map_ok(|frame| own_identifier(frame.name)).map_err(|_| NoOpenElement) })))
 	}
 	var $s = { ..state, stack: state.stack.drop_last(1) }
 	if !$s.capture_tag.is_empty() {
 		$s = { ..$s, capture: $s.capture.concat(text.to_utf8()) }
 		if $s.stack.len() == $s.capture_depth {
 			if $s.capture.len() > $s.props.max_record_bytes {
-				return Err(token_failure($s, RecordTooLarge($s.props.max_record_bytes)))
+				return Err(token_failure($s, LimitExceeded({ resource: RecordBytes, max: $s.props.max_record_bytes, observed: AtLeast(($s.props.max_record_bytes) + 1) })))
 			}
 			root = match parsed {
 				Ok(node) => node
 				Err(Missing) => {
 					captured = decode($s, $s.capture).map_err(|error| { state: $s, error })?
-					Xml.parse_str(captured).map_err(|_| token_failure($s, MalformedRecord))?.root
+					Xml.parse_str(captured, {}).map_err(|_| token_failure($s, MalformedRecord))?.root
 				}
 			}
 			$s = { ..$s, capture: [], capture_tag: "" }
 			if name == "STMTTRN" {
 				if children(root).len() > $s.props.max_fields {
-					return Err(token_failure($s, TooManyFields($s.props.max_fields)))
+					return Err(token_failure($s, LimitExceeded({ resource: Fields, max: $s.props.max_fields, observed: AtLeast(($s.props.max_fields) + 1) })))
 				}
 				match transaction(root) {
 					Ok(value) => return Ok({ state: $s, outcome: Emitted(Transaction(value)) })
@@ -1213,7 +1221,7 @@ has_element_children = |node| match node {
 	}
 }
 
-unique : Xml.Node -> Try({}, Parser.Problem(OFX.Problem))
+unique : Xml.Node -> Try({}, OFX.Problem)
 unique = |node| {
 	var $names = []
 	for child in children(node) {
@@ -1226,14 +1234,14 @@ unique = |node| {
 	Ok({})
 }
 
-account_from : Xml.Node -> Try(OFX.Account, Parser.Problem(OFX.Problem))
+account_from : Xml.Node -> Try(OFX.Account, OFX.Problem)
 account_from = |node| {
 	unique(node)?
 	scalar_fields(node, if (node.name() == Ok("CCACCTFROM")) ["ACCTID", "ACCTKEY"] else ["BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY"])?
 	Ok({ bank_id: field(node, "BANKID"), branch_id: field(node, "BRANCHID"), account_id: field(node, "ACCTID"), account_type: field(node, "ACCTTYPE"), key: field(node, "ACCTKEY") })
 }
 
-transaction : Xml.Node -> Try(OFX.Transaction, Parser.Problem(OFX.Problem))
+transaction : Xml.Node -> Try(OFX.Transaction, OFX.Problem)
 transaction = |node| match node {
 	Text(_) => Err(UnexpectedTransactionText)
 	Element(element) => {
@@ -1311,7 +1319,7 @@ transaction = |node| match node {
 	}
 }
 
-validate_context : OFX.Context -> Try({}, Parser.Problem(OFX.Problem))
+validate_context : OFX.Context -> Try({}, OFX.Problem)
 validate_context = |context| {
 	if !timestamp(context.header.server_date) or context.header.language.count_utf8_bytes() != 3 or !context.header.language.to_utf8().all(|byte| byte >= 'A' and byte <= 'Z') {
 		return Err(InvalidSignon)
@@ -1329,7 +1337,7 @@ validate_context = |context| {
 		return Err(InvalidWrapper)
 	}
 	if context.currency.count_utf8_bytes() != 3 or !context.currency.to_utf8().all(|b| b >= 'A' and b <= 'Z') {
-		return Err(InvalidCurrency(context.currency))
+		return Err(InvalidCurrency(Diagnostic.excerpt((context.currency).to_utf8())))
 	}
 	if context.account.account_id.is_empty() {
 		return Err(MissingAccountId)
@@ -1338,18 +1346,18 @@ validate_context = |context| {
 		return Err(MissingBankId)
 	}
 	if !context.start.is_empty() and !timestamp(context.start) {
-		return Err(InvalidStartTimestamp(context.start))
+		return Err(InvalidStartTimestamp(Diagnostic.excerpt((context.start).to_utf8())))
 	}
 	if !context.end.is_empty() and !timestamp(context.end) {
-		return Err(InvalidEndTimestamp(context.end))
+		return Err(InvalidEndTimestamp(Diagnostic.excerpt((context.end).to_utf8())))
 	}
 	Ok({})
 }
 
-validate_transaction : OFX.Transaction -> Try({}, Parser.Problem(OFX.Problem))
+validate_transaction : OFX.Transaction -> Try({}, OFX.Problem)
 validate_transaction = |value| validate_transaction_fields(value, False)
 
-validate_transaction_fields : OFX.Transaction, Bool -> Try({}, Parser.Problem(OFX.Problem))
+validate_transaction_fields : OFX.Transaction, Bool -> Try({}, OFX.Problem)
 validate_transaction_fields = |value, checked_xml| {
 	if value.id != value.id.trim() or value.name != value.name.trim() or value.memo != value.memo.trim() or value.check_number != value.check_number.trim() {
 		return Err(UnnormalizedTransaction)
@@ -1359,7 +1367,7 @@ validate_transaction_fields = |value, checked_xml| {
 
 # The direct XML projection establishes normalized values in core_text. Other
 # callers retain the whitespace guard above, including its diagnostic priority.
-validate_normalized_transaction_fields : OFX.Transaction, Bool -> Try({}, Parser.Problem(OFX.Problem))
+validate_normalized_transaction_fields : OFX.Transaction, Bool -> Try({}, OFX.Problem)
 validate_normalized_transaction_fields = |value, checked_xml| {
 	var $extension_names = []
 	var $rank = 0
@@ -1383,10 +1391,10 @@ validate_normalized_transaction_fields = |value, checked_xml| {
 		return Err(InvalidTransactionType(value.type))
 	}
 	if !timestamp(value.posted) {
-		return Err(InvalidPostedTimestamp(value.posted))
+		return Err(InvalidPostedTimestamp(Diagnostic.excerpt((value.posted).to_utf8())))
 	}
 	if !decimal(value.amount) {
-		return Err(InvalidAmount(value.amount))
+		return Err(InvalidAmount(Diagnostic.excerpt((value.amount).to_utf8())))
 	}
 	if value.id.is_empty() {
 		return Err(MissingTransactionId)
@@ -1400,7 +1408,7 @@ transaction_type = |value| match value {
 	_ => False
 }
 
-balance_from : Xml.Node -> Try(OFX.Balance, Parser.Problem(OFX.Problem))
+balance_from : Xml.Node -> Try(OFX.Balance, OFX.Problem)
 balance_from = |node| {
 	unique(node)?
 	scalar_fields(node, ["BALAMT", "DTASOF"])?
@@ -1542,12 +1550,12 @@ escape = |value| value.replace_each("&", "&amp;").replace_each("<", "&lt;").repl
 scalar : Str, Str, OFX.Syntax -> Str
 scalar = |name, value, syntax| if (value.is_empty()) "" else "<${name}>${escape(value)}${if (syntax == Xml203) "</${name}>" else ""}\n"
 
-node_xml : Xml.Node, OFX.Syntax, U64 -> Try(Str, Parser.Problem(OFX.Problem))
+node_xml : Xml.Node, OFX.Syntax, U64 -> Try(Str, OFX.Problem)
 node_xml = |node, syntax, depth| match node {
 	Text(value) => if (valid_text(value)) Ok(escape(value)) else Err(InvalidExtensionText(value))
 	Element(element) => {
 		if depth >= 64 {
-			return Err(ExtensionTooDeep(64))
+			return Err(LimitExceeded({ resource: ExtensionDepth, max: 64, observed: AtLeast((64) + 1) }))
 		}
 		if !valid_name(element.name) {
 			return Err(InvalidExtensionName(element.name))
@@ -1677,7 +1685,7 @@ write_event = |writer, event| {
 	}
 	bytes = encode_text($text, writer.props.encoding).map_err(|error| InvalidOfx(error))?
 	if bytes.len() > writer.props.max_record_bytes {
-		return Err(InvalidOfx(write_error(RecordTooLarge(writer.props.max_record_bytes))))
+		return Err(InvalidOfx(write_error(LimitExceeded({ resource: RecordBytes, max: writer.props.max_record_bytes, observed: AtLeast((writer.props.max_record_bytes) + 1) }))))
 	}
 	Ok({ writer: $next, bytes })
 }
@@ -1686,45 +1694,45 @@ sample_xml : Str
 sample_xml = "<OFX><BANKMSGSRSV1><STMTTRNRS><TRNUID>0</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>012</BANKID><ACCTID>000123</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20260101</DTSTART><DTEND>20260201</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260103120000[-5:EST]</DTPOSTED><TRNAMT>-12.30</TRNAMT><FITID>00001</FITID><NAME>Café &amp; tea</NAME><MEMO>One</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260201</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"
 
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
 	statement.context.account.account_id == "000123" and value.amount == "-12.30" and value.id == "00001" and value.name == "Café & tea" and value.posted == "20260103120000[-5:EST]"
 }
 
 expect {
-	document = OFX.parse_str(sample_xml)?
-	xml = OFX.to_bytes(document, {})?
-	sgml = OFX.to_bytes(document, { syntax: Sgml102 })?
+	document = OFX.parse_str(sample_xml, {})?
+	xml = OFX.encode(document, {})?
+	sgml = OFX.encode(document, { syntax: Sgml102 })?
 	OFX.parse_bytes(xml, {}) == Ok(document) and OFX.parse_bytes(sgml, {}) == Ok(document)
 }
 
 expect {
-	document = OFX.parse_str(sample_xml)?
-	encoded = OFX.to_bytes(document, { syntax: Sgml102, encoding: Windows1252 })?
+	document = OFX.parse_str(sample_xml, {})?
+	encoded = OFX.encode(document, { syntax: Sgml102, encoding: Windows1252 })?
 	encoded.contains(233) and OFX.parse_bytes(encoded, {}) == Ok(document) and OFX.parse_bytes(encoded, { encoding: Utf8 }).is_err()
 }
 
 expect {
 	bytes = sample_xml.to_utf8()
-	expected = List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({})))
-	actual = List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({})))
+	expected = List.from_iter((OFX.decoder({})).read_iter([bytes].iter()))
+	actual = List.from_iter((OFX.decoder({})).read_iter(bytes.map(|byte| [byte]).iter()))
 	expected == actual and expected.last() == Ok(Ok(Finished({ emitted_items: 4, rejected_records: 0 })))
 }
 
 expect {
 	invalid = sample_xml.replace_each("-12.30", "bad")
-	reported = List.from_iter(Streaming.read_iter([invalid.to_utf8()].iter(), OFX.decoder({}).with_errors({ error_policy: ReportInvalidRecords })))
-	skipped = List.from_iter(Streaming.read_iter([invalid.to_utf8()].iter(), OFX.decoder({}).with_errors({ error_policy: SkipInvalidRecords })))
-	reported.len() == 5 and skipped.len() == 4 and reported.last() == Ok(Ok(Finished({ emitted_items: 3, rejected_records: 1 }))) and OFX.parse_str(invalid).is_err()
+	reported = List.from_iter((OFX.decoder({ errors: { policy: ReportInvalidRecords } })).read_iter([invalid.to_utf8()].iter()))
+	skipped = List.from_iter((OFX.decoder({ errors: { policy: SkipInvalidRecords } })).read_iter([invalid.to_utf8()].iter()))
+	reported.len() == 5 and skipped.len() == 4 and reported.last() == Ok(Ok(Finished({ emitted_items: 3, rejected_records: 1 }))) and OFX.parse_str(invalid, {}).is_err()
 }
 
 expect OFX.parse_bytes(sample_xml.to_utf8(), { max_depth: 3 }).is_err()
 expect OFX.parse_bytes(sample_xml.to_utf8(), { max_token_bytes: 5 }).is_err()
 expect OFX.parse_bytes(sample_xml.to_utf8(), { syntax: Sgml }).is_err()
-expect OFX.parse_str(sample_xml.replace_each("</OFX>", "")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<!DOCTYPE OFX><OFX>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("20260103120000[-5:EST]", "20260230000000")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</OFX>", ""), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<!DOCTYPE OFX><OFX>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("20260103120000[-5:EST]", "20260230000000"), {}).is_err()
 expect decimal("-0.000001") and !decimal("NaN") and !decimal("1e3")
 expect timestamp("20240229120000.123[5.5:IST]") and !timestamp("20230229")
 
@@ -1773,20 +1781,20 @@ placement = |name, parent| match name {
 	_ => True
 }
 
-expect OFX.parse_str(sample_xml.replace_each("</BANKTRANLIST>", "</BANKTRANLIST><CURDEF>USD</CURDEF>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "</LEDGERBAL><LEDGERBAL><BALAMT>999</BALAMT><DTASOF>20260201</DTASOF></LEDGERBAL>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("<BANKTRANLIST>", "").replace_each("</BANKTRANLIST>", "")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><!-- bad -- comment -->")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</BANKTRANLIST>", "</BANKTRANLIST><CURDEF>USD</CURDEF>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "</LEDGERBAL><LEDGERBAL><BALAMT>999</BALAMT><DTASOF>20260201</DTASOF></LEDGERBAL>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<BANKTRANLIST>", "").replace_each("</BANKTRANLIST>", ""), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><!-- bad -- comment -->"), {}).is_err()
 expect OFX.parse_bytes("\u(feff)${sample_xml}".to_utf8(), {}).is_ok()
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
 	opened = write_event(initial_writer({ encoding: Windows1252 }), StatementStart(statement.context))?
 	write_event(opened.writer, Transaction({ ..value, name: "😀" })).is_err()
 }
 
-transaction_text : OFX.Transaction, OFX.Syntax -> Try(Str, Parser.Problem(OFX.Problem))
+transaction_text : OFX.Transaction, OFX.Syntax -> Try(Str, OFX.Problem)
 transaction_text = |value, syntax| {
 	var $body = "<STMTTRN>"
 	var $extensions = value.extensions
@@ -1811,10 +1819,10 @@ transaction_text = |value, syntax| {
 field_rank : Str -> U64
 field_rank = |name| ["TRNTYPE", "DTPOSTED", "DTUSER", "DTAVAIL", "TRNAMT", "FITID", "CORRECTFITID", "CORRECTACTION", "SRVRTID", "CHECKNUM", "REFNUM", "SIC", "PAYEEID", "NAME", "PAYEE", "EXTDNAME", "BANKACCTTO", "CCACCTTO", "MEMO", "IMAGEDATA", "CURRENCY", "ORIGCURRENCY", "INV401KSOURCE"].find_first_index(|known| known == name) ?? 999
 
-expect OFX.parse_str(sample_xml.replace_each("<BANKMSGSRSV1>", "<BANKMSGSRSV1><CURDEF>USD</CURDEF>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("</OFX>", "<TAXMSGSRSV1></TAXMSGSRSV1></OFX>")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<BANKMSGSRSV1>", "<BANKMSGSRSV1><CURDEF>USD</CURDEF>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</OFX>", "<TAXMSGSRSV1></TAXMSGSRSV1></OFX>"), {}).is_err()
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
 	opened = write_event(initial_writer({}), StatementStart(statement.context))?
@@ -1833,7 +1841,7 @@ expect {
 	OFX.parse_bytes(sample_xml.to_utf8(), { max_record_bytes: record.count_utf8_bytes() - 1 }).is_err()
 }
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
 	opened = write_event(initial_writer({}), StatementStart(statement.context))?
@@ -1841,17 +1849,17 @@ expect {
 	write_event(opened.writer, Transaction({ ..value, extensions: [nul] })).is_err()
 }
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	context = document.statements.first()?.context
 	write_event(initial_writer({ syntax: Sgml102 }), StatementStart({ ..context, header: { ..context.header, old_uid: "a:b" } })).is_err() and write_event(initial_writer({ syntax: Sgml102 }), StatementStart({ ..context, header: { ..context.header, old_uid: "a<b" } })).is_err()
 }
 expect {
 	bytes = "\u(feff)${sample_xml}".to_utf8()
-	List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({}))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({})))
+	List.from_iter((OFX.decoder({})).read_iter([bytes].iter())) == List.from_iter((OFX.decoder({})).read_iter(bytes.map(|byte| [byte]).iter()))
 }
 
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	statement = document.statements.first()?
 	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	balance = statement.ledger_balance?
@@ -1860,8 +1868,8 @@ expect {
 }
 expect !timestamp("20260101[5:EST:extra]") and !timestamp("20260101[5:EST]extra]")
 
-expect OFX.parse_str("<?xml version=\"1.0\"?><?xml version=\"1.0\"?>${sample_xml}").is_err()
-expect OFX.parse_str(" <?xml version=\"1.0\"?>${sample_xml}").is_err()
+expect OFX.parse_str("<?xml version=\"1.0\"?><?xml version=\"1.0\"?>${sample_xml}", {}).is_err()
+expect OFX.parse_str(" <?xml version=\"1.0\"?>${sample_xml}", {}).is_err()
 
 valid_name : Str -> Bool
 valid_name = |name| {
@@ -1881,13 +1889,13 @@ valid_name = |name| {
 	True
 }
 expect {
-	document = OFX.parse_str(sample_xml)?
+	document = OFX.parse_str(sample_xml, {})?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
 	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	["1EXT", ".EXT"].all(|name| write_event(opened.writer, Transaction({ ..value, extensions: [Element({ name, attributes: [], children: [Text("x")] })] })).is_err())
 }
-expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><1EXT></1EXT>")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><1EXT></1EXT>"), {}).is_err()
 
 aggregate_whitespace : Xml.Node -> Bool
 aggregate_whitespace = |node| match node {
@@ -1900,7 +1908,7 @@ aggregate_whitespace = |node| match node {
 	)
 }
 
-scalar_fields : Xml.Node, List(Str) -> Try({}, Parser.Problem(OFX.Problem))
+scalar_fields : Xml.Node, List(Str) -> Try({}, OFX.Problem)
 scalar_fields = |node, allowed| {
 	if !aggregate_whitespace(node) {
 		return Err(InvalidAggregate)
@@ -1916,13 +1924,13 @@ scalar_fields = |node, allowed| {
 	}
 	Ok({})
 }
-expect OFX.parse_str(sample_xml.replace_each("</BANKACCTFROM>", "<EXTRA>x</EXTRA></BANKACCTFROM>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "<EXTRA>x</EXTRA></LEDGERBAL>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("<STMTTRN>", "<STMTTRN>discarded")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</BANKACCTFROM>", "<EXTRA>x</EXTRA></BANKACCTFROM>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "<EXTRA>x</EXTRA></LEDGERBAL>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<STMTTRN>", "<STMTTRN>discarded"), {}).is_err()
 
-xml_encoding : Str -> Try([Utf8, Windows1252, Ascii], Parser.Problem(OFX.Problem))
+xml_encoding : Str -> Try([Utf8, Windows1252, Ascii], OFX.Problem)
 xml_encoding = |text| {
-	xml = Xml.parse_str("${text}<v/>").map_err(|_| MalformedXmlDeclaration)?
+	xml = Xml.parse_str("${text}<v/>", {}).map_err(|_| MalformedXmlDeclaration)?
 	match xml.declaration {
 		Err(_) => Err(MissingXmlDeclaration)
 		Ok(declaration) => match declaration.encoding {
@@ -1936,16 +1944,16 @@ xml_encoding = |text| {
 	}
 }
 expect OFX.parse_bytes("<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}".to_utf8(), { encoding: Windows1252 }).is_err()
-expect OFX.parse_str("<?xml version=\"1.0\" encoding=\"invalid-utf-8\"?>${sample_xml}").is_err()
+expect OFX.parse_str("<?xml version=\"1.0\" encoding=\"invalid-utf-8\"?>${sample_xml}", {}).is_err()
 
-expect OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "<![CDATA[  padded  ]]>")).is_err()
-expect OFX.parse_str(sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[  padded  ]]></MEMO>")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "<![CDATA[  padded  ]]>"), {}).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[  padded  ]]></MEMO>"), {}).is_err()
 expect {
-	document = OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "  ordinary  "))?
+	document = OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "  ordinary  "), {})?
 	document.statements.first()?.transactions.first()?.name == "ordinary"
 }
 
-expect ["", "\t\r\n", "plain & < > ]]> text", "Café 日本", "\u(20)\u(D7FF)\u(E000)\u(FFFD)", "\u(10000)\u(10FFFF)", "\u(0)", "\u(8)", "\u(B)", "\u(C)", "\u(1F)", "\u(FFFE)", "\u(FFFF)"].all(|value| valid_text(value) == Xml.parse_str("<v>${escape(value)}</v>").is_ok())
+expect ["", "\t\r\n", "plain & < > ]]> text", "Café 日本", "\u(20)\u(D7FF)\u(E000)\u(FFFD)", "\u(10000)\u(10FFFF)", "\u(0)", "\u(8)", "\u(B)", "\u(C)", "\u(1F)", "\u(FFFE)", "\u(FFFF)"].all(|value| valid_text(value) == Xml.parse_str("<v>${escape(value)}</v>", {}).is_ok())
 expect ["0", "+0", "-1", "123456789012345678901234567890.0001", "0.00"].all(decimal)
 expect ["", "+", "-", ".5", "1.", "1.2.3", "1e2", " 1", "1 ", "1\n"].all(|value| !decimal(value))
 
@@ -1978,51 +1986,51 @@ expect {
 
 expect {
 	bytes = sample_xml.replace_each(">", ">\r\n").replace_each("-12.30", "bad").to_utf8()
-	List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({}))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({})))
+	List.from_iter((OFX.decoder({})).read_iter([bytes].iter())) == List.from_iter((OFX.decoder({})).read_iter(bytes.map(|byte| [byte]).iter()))
 }
 
 expect {
 	source = sample_xml.replace_each("Café &amp; tea", "<![CDATA[a>b]]>").replace_each("<MEMO>", "<!-- > ' \" -->\r\n<MEMO>")
 	bytes = source.to_utf8()
-	List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({}))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({}))) and OFX.parse_str(source)?.statements.first()?.transactions.first()?.name == "a>b"
+	List.from_iter((OFX.decoder({})).read_iter([bytes].iter())) == List.from_iter((OFX.decoder({})).read_iter(bytes.map(|byte| [byte]).iter())) and OFX.parse_str(source, {})?.statements.first()?.transactions.first()?.name == "a>b"
 }
 
 expect {
 	bytes = "\r\n${sample_xml}".to_utf8()
-	[0, 1, 3, 7, 8, 16].all(|limit| List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({ max_token_bytes: limit }))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({ max_token_bytes: limit }))))
+	[0, 1, 3, 7, 8, 16].all(|limit| List.from_iter((OFX.decoder({ max_token_bytes: limit })).read_iter([bytes].iter())) == List.from_iter((OFX.decoder({ max_token_bytes: limit })).read_iter(bytes.map(|byte| [byte]).iter())))
 }
 
 expect {
 	bytes = sample_xml.to_utf8()
 	body = Str.from_utf8(bytes.sublist({ start: 5, len: bytes.len() - 11 }))?
 	second = body.replace_each("<TRNUID>0", "<TRNUID>2").replace_each("<CURDEF>AUD", "<CURDEF>USD").replace_each("<ACCTID>000123", "<ACCTID>000456")
-	document = OFX.parse_str("<OFX>${body}${second}</OFX>")?
+	document = OFX.parse_str("<OFX>${body}${second}</OFX>", {})?
 	first = document.statements.first()?.context
 	last = document.statements.last()?.context
 	document.statements.len() == 2 and first.account.account_id == "000123" and first.currency == "AUD" and first.transaction_id == "0" and last.account.account_id == "000456" and last.currency == "USD" and last.transaction_id == "2"
 }
 
 expect {
-	failed = OFX.decoder({}).step("<OFX></BAD>".to_utf8(), Final)
+	failed = OFX.decoder({}).step({ bytes: "<OFX></BAD>".to_utf8(), end: Final })
 	match failed.outcome {
-		Failed(error) => {
-			after = failed.state.step("unread".to_utf8(), Final)
-			error.offset == 11 and error.line == 1 and error.column == 12 and error.problem == MismatchedClosingTag("BAD") and after.consumed == 0 and after.outcome == Done
+		Failed(InvalidOfx(error)) => {
+			after = failed.state.step({ bytes: "unread".to_utf8(), end: Final })
+			text_position(error).offset == 11 and text_position(error).line == 1 and text_position(error).column == 12 and error.problem == MismatchedClosingTag({ actual: "BAD", expected: Ok("OFX") }) and after.consumed == 0 and after.outcome == Done
 		}
 		_ => False
 	}
 }
 
-expect ["</>", "<OFX></>", "<OFX></OFX/>", "<OFX></ />", "<OFX><//>", "<OFX><>", "<?OFX?>", "<?OFX ?>", "<?xml?>", "<?xml ?>", "<![CDATA[>", "<![CDATA[]]>", "<OFX><![CDATA[]]></OFX>"].all(|source| OFX.parse_str(source).is_err())
+expect ["</>", "<OFX></>", "<OFX></OFX/>", "<OFX></ />", "<OFX><//>", "<OFX><>", "<?OFX?>", "<?OFX ?>", "<?xml?>", "<?xml ?>", "<![CDATA[>", "<![CDATA[]]>", "<OFX><![CDATA[]]></OFX>"].all(|source| OFX.parse_str(source, {}).is_err())
 
 expect {
 	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[]]></MEMO>")
-	OFX.parse_str(source)?.statements.first()?.transactions.first()?.memo == ""
+	OFX.parse_str(source, {})?.statements.first()?.transactions.first()?.memo == ""
 }
 
 expect xml_whole(sample_xml.to_utf8(), {}).is_ok()
 
-expect [sample_xml, "\u(feff)${sample_xml}", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}", sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>one<!-- gap --><![CDATA[two]]>&amp;three</MEMO>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR><ITEM>one<!-- gap --><![CDATA[two]]>&amp;three<INNER/>four</ITEM></VENDOR></STMTTRN>"), sample_xml.replace_each("-12.30", "bad"), sample_xml.replace_each("</NAME>", "</WRONG>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[ padded ]]></MEMO>"), "<OFX></OFX/>", "<OFX/>", "<!--before--><OFX/><!--after-->"].all(|source| OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
+expect [sample_xml, "\u(feff)${sample_xml}", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}", sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>one<!-- gap --><![CDATA[two]]>&amp;three</MEMO>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR><ITEM>one<!-- gap --><![CDATA[two]]>&amp;three<INNER/>four</ITEM></VENDOR></STMTTRN>"), sample_xml.replace_each("-12.30", "bad"), sample_xml.replace_each("</NAME>", "</WRONG>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[ padded ]]></MEMO>"), "<OFX></OFX/>", "<OFX/>", "<!--before--><OFX/><!--after-->"].all(|source| OFX.parse_str(source, {}) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
 
 expect {
 	bytes = sample_xml.to_utf8()
@@ -2030,22 +2038,22 @@ expect {
 }
 
 expect {
-	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO><MEMO>duplicate</MEMO></STMTTRN>")?.root
+	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO><MEMO>duplicate</MEMO></STMTTRN>", {})?.root
 	transaction(node) == Err(DuplicateField("MEMO"))
 }
 
 expect {
-	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO></STMTTRN>")?.root
+	node = Xml.parse_str("<STMTTRN>text<MEMO><EXTRA/></MEMO></STMTTRN>", {})?.root
 	transaction(node) == Err(UnexpectedTransactionText)
 }
 
 expect {
-	node = Xml.parse_str("<STMTTRN><MEMO><EXTRA/></MEMO></STMTTRN>")?.root
+	node = Xml.parse_str("<STMTTRN><MEMO><EXTRA/></MEMO></STMTTRN>", {})?.root
 	transaction(node) == Err(NestedTransactionScalar)
 }
 
 expect {
-	statement = OFX.parse_str(sample_xml)?.statements.first()?
+	statement = OFX.parse_str(sample_xml, {})?.statements.first()?
 	value = statement.transactions.first()?
 	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	write_event(opened.writer, Transaction({ ..value, name: "bad\u(0)" })).is_err() and write_event(opened.writer, Transaction({ ..value, memo: "bad\u(FFFF)" })).is_err()
@@ -2063,12 +2071,12 @@ expect {
 
 expect {
 	source = sample_xml.replace_each("</STMTTRN>", "<VENDOR><VALUE>a<INNER/>b</VALUE><![CDATA[ padded ]]></VENDOR></STMTTRN>")
-	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source, {}) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
 }
 
 expect {
 	source = sample_xml.replace_each("</STMTTRN>", "<VENDOR><OFX/></VENDOR></STMTTRN>").replace_each("<LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260201</DTASOF></LEDGERBAL>", "")
-	xml_whole(source.to_utf8(), {}).is_err() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+	xml_whole(source.to_utf8(), {}).is_err() and OFX.parse_str(source, {}) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
 }
 
 expect {
@@ -2079,10 +2087,10 @@ expect {
 
 expect {
 	source = sample_xml.replace_each("<NAME>Café &amp; tea</NAME>", "<NAME>Café <!-- gap --><![CDATA[& tea]]></NAME>").replace_each("<MEMO>One</MEMO>", "<MEMO/><CHECKNUM>00042</CHECKNUM><PAYEE><NAME>Other</NAME></PAYEE><VENDOR>extension</VENDOR>")
-	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+	xml_whole(source.to_utf8(), {}).is_ok() and OFX.parse_str(source, {}) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
 }
 
-expect [sample_xml.replace_each("</STMTTRN>", "<NAME/></STMTTRN>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><VENDOR/></MEMO>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO bad='attribute'>One</MEMO>"), sample_xml.replace_each("</STMTTRN>", "unexpected text</STMTTRN>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR/><VENDOR/></STMTTRN>"), sample_xml.replace_each("<FITID>00001</FITID>", ""), sample_xml.replace_each("<TRNAMT>-12.30</TRNAMT>", "<TRNAMT>invalid</TRNAMT>")].all(|source| OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
+expect [sample_xml.replace_each("</STMTTRN>", "<NAME/></STMTTRN>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><VENDOR/></MEMO>"), sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO bad='attribute'>One</MEMO>"), sample_xml.replace_each("</STMTTRN>", "unexpected text</STMTTRN>"), sample_xml.replace_each("</STMTTRN>", "<VENDOR/><VENDOR/></STMTTRN>"), sample_xml.replace_each("<FITID>00001</FITID>", ""), sample_xml.replace_each("<TRNAMT>-12.30</TRNAMT>", "<TRNAMT>invalid</TRNAMT>")].all(|source| OFX.parse_str(source, {}) == collect_bytes(source.to_utf8(), { encoding: Utf8 }))
 
 expect {
 	bytes = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM/><VENDOR/></STMTTRN>").to_utf8()
@@ -2091,8 +2099,8 @@ expect {
 
 expect {
 	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO>a<!--1-->b<![CDATA[c]]><!--2-->d</MEMO>")
-	document = OFX.parse_str(source)?
-	document.statements.first()?.transactions.first()?.memo == "abcd" and OFX.parse_str(source) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
+	document = OFX.parse_str(source, {})?
+	document.statements.first()?.transactions.first()?.memo == "abcd" and OFX.parse_str(source, {}) == collect_bytes(source.to_utf8(), { encoding: Utf8 })
 }
 
 expect ["00010101", "19000228", "20000229", "20240229", "24000229", "20260101", "2026010123", "202601012359", "20260101235960", "20260228235959", "99991231235960"].all(|value| timestamp(value) and timestamp_general(value))
@@ -2110,7 +2118,7 @@ expect {
 	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
 		|name| {
 			padded = source.replace_each("<${name}>", "<${name}>\t\u(2003)\r\n").replace_each("</${name}>", "\u(A0) </${name}>")
-			xml_whole(padded.to_utf8(), {}).is_ok() and OFX.parse_str(padded) == OFX.parse_str(source) and OFX.parse_str(padded) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
+			xml_whole(padded.to_utf8(), {}).is_ok() and OFX.parse_str(padded, {}) == OFX.parse_str(source, {}) and OFX.parse_str(padded, {}) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
 		},
 	)
 }
@@ -2120,13 +2128,13 @@ expect {
 	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
 		|name| {
 			padded = source.replace_each("<${name}>", "<${name}><![CDATA[ \u(2003)]]>")
-			xml_whole(padded.to_utf8(), {}).is_err() and OFX.parse_str(padded).is_err() and OFX.parse_str(padded) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
+			xml_whole(padded.to_utf8(), {}).is_err() and OFX.parse_str(padded, {}).is_err() and OFX.parse_str(padded, {}) == collect_bytes(padded.to_utf8(), { encoding: Utf8 })
 		},
 	)
 }
 
 expect {
-	statement = OFX.parse_str(sample_xml)?.statements.first()?
+	statement = OFX.parse_str(sample_xml, {})?.statements.first()?
 	value = statement.transactions.first()?
 	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	padded = "\u(2003)padded\u(A0)"
@@ -2137,7 +2145,23 @@ expect {
 	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
 	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
 		|name| {
-			[source.replace_each("<${name}>", "<${name} forbidden='attribute'>"), source.replace_each("</${name}>", "<INNER/></${name}>"), source.replace_each("</STMTTRN>", "<${name}/></STMTTRN>")].all(|invalid| xml_whole(invalid.to_utf8(), {}).is_err() and OFX.parse_str(invalid) == collect_bytes(invalid.to_utf8(), { encoding: Utf8 }))
+			[source.replace_each("<${name}>", "<${name} forbidden='attribute'>"), source.replace_each("</${name}>", "<INNER/></${name}>"), source.replace_each("</STMTTRN>", "<${name}/></STMTTRN>")].all(|invalid| xml_whole(invalid.to_utf8(), {}).is_err() and OFX.parse_str(invalid, {}) == collect_bytes(invalid.to_utf8(), { encoding: Utf8 }))
 		},
 	)
+}
+
+text_position : OFX.Error -> { offset : U64, line : U64, column : U64 }
+text_position = |error| match error.location {
+	Text(position) => position
+	_ => crash "OFX: text coordinates requested for a non-source diagnostic"
+}
+
+own_identifier : Str -> Str
+own_identifier = |text| {
+	source = text.to_utf8()
+	var $copy = List.with_capacity(source.len())
+	for byte in source {
+		$copy = $copy.append(byte)
+	}
+	Str.from_utf8($copy) ?? crash "owned UTF-8 identifier changed its bytes"
 }
