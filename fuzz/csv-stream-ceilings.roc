@@ -38,9 +38,47 @@ drain = |records, field_bytes, retain| {
 	crash "missing completion"
 }
 
+## Return only the diagnostic after allocating its large input inside the
+## measured region. Excerpts must own their short bytes rather than the source.
+retain_error : U64, Bool -> CSV.Error
+retain_error = |size, unknown_tag| {
+	if unknown_tag {
+		result : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+		result = CSV.parse("status\n${Str.repeat("x", size)}")
+		match result {
+			Err(InvalidCsv(error)) => error
+			_ => crash "invalid tag did not yield a CSV error"
+		}
+	} else {
+		result : Try(List({ count : U64 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+		result = CSV.parse("count\n${Str.repeat("x", size)}")
+		match result {
+			Err(InvalidCsv(error)) => error
+			_ => crash "invalid number did not yield a CSV error"
+		}
+	}
+}
+
 test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	choice = (bytes.first() ?? 0).to_u64()
+	if choice == 255 {
+		for unknown_tag in [False, True] {
+			measured = Fuzz.measure!(if (unknown_tag) "csv-unknown-tag-retained" else "csv-expected-value-retained", || retain_error(262_144 + choice, unknown_tag))
+			valid = match measured.value.problem {
+				ExpectedValue({ expected: U64, bytes: excerpt }) => !unknown_tag and excerpt == Str.repeat("x", 40).to_utf8()
+				UnknownTag(excerpt) => unknown_tag and excerpt == Str.repeat("x", 40).to_utf8()
+				_ => False
+			}
+			if !valid {
+				crash "CSV diagnostic changed its problem payload"
+			}
+			if measured.stats.exit_live_bytes > measured.stats.entry_live_bytes + 2048 {
+				crash "CSV diagnostic excerpt pinned a large source field"
+			}
+		}
+		return Fuzz.keep
+	}
 	shape = choice % 3
 	n = choice // 3 + 1
 	records = if (shape == 1) 4 else n * 32
@@ -71,5 +109,5 @@ target = Fuzz.target_with!({
 	generator: Fuzz.raw_bytes,
 	test!,
 	show: Str.inspect,
-	examples: [0.U8, 1, 2, 252, 253, 254].map(|byte| Fuzz.example({ name: "shape-${byte.to_str()}", revision: "1", make: || [byte] })),
+	examples: [0.U8, 1, 2, 252, 253, 254, 255].map(|byte| Fuzz.example({ name: if (byte == 255) "retained-error-excerpts-256KiB" else "shape-${byte.to_str()}", revision: "1", make: || [byte] })),
 })

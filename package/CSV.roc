@@ -579,7 +579,7 @@ CSV := { records : List(CSV.Record) }.{
 					start_payloads: |s, count| if (count == 0) Ok(s) else Err(cell_error(s, UnsupportedCell(TagPayload))),
 					next_payload: |s, _, _| Ok(s),
 					finish_payloads: |s, _| Ok(s),
-					missing: cell_error(state, UnknownTag(bytes.take_first(excerpt_len))),
+					missing: cell_error(state, UnknownTag(error_excerpt(bytes))),
 				},
 			)
 		}
@@ -949,8 +949,18 @@ dec_from_bytes = |bytes| {
 excerpt_len : U64
 excerpt_len = 40
 
+## Detach diagnostic bytes from a potentially much larger field or source.
+error_excerpt : List(U8) -> List(U8)
+error_excerpt = |bytes| {
+	var $out = List.with_capacity(U64.min(bytes.len(), excerpt_len))
+	for byte in bytes.take_first(excerpt_len) {
+		$out = $out.append(byte)
+	}
+	$out
+}
+
 expected_problem : CSV.ValueType, List(U8) -> Parser.Problem(CSV.Problem(p))
-expected_problem = |expected, bytes| ExpectedValue({ expected, bytes: bytes.take_first(excerpt_len) })
+expected_problem = |expected, bytes| ExpectedValue({ expected, bytes: error_excerpt(bytes) })
 
 ## Explain why a record parser left fields unread, preferring the furthest
 ## failure (such as a field that stopped a `Parser.many`).
