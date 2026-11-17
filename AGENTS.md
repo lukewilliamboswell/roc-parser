@@ -17,6 +17,15 @@ wrappers that only duplicate an existing operation. Before 1.0, breaking changes
 are permitted when a well-supported simpler design improves usability. Migrate
 the implementation, callers, tests and documentation together.
 
+Organize the public API around the values and tasks a consumer has. Use
+receiver-style operations on those values and qualified constructors with
+defaulted props records for configuration. Shared implementation alone does not
+justify a standalone public module; keep it private and expose its operations
+through the owning format or type. Choose export boundaries for discoverability
+and clear ownership.
+Follow the [Roc style guide](https://gist.github.com/lukewilliamboswell/241a4e8adb7c89c7e0e02f1d303a8fa1)
+when shaping constructors, methods, props and public types.
+
 ## Errors
 
 Represent library failures with descriptive tag unions and structured payloads,
