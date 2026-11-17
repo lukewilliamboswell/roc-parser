@@ -201,7 +201,7 @@ XmlCore := {
 				Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
 				Err(XmlFail(failure)) => {
 					match decoded.encoding {
-						InvalidAt(index) if failure.offset >= decoded.bytes.len() => Err(ParseError(Diagnostic.{ problem: InvalidUtf8, location: InputOffset(index), path: [] }))
+						InvalidAt(index) if failure.offset >= decoded.bytes.len() or incomplete_source(failure.problem) => Err(ParseError(Diagnostic.{ problem: InvalidUtf8, location: InputOffset(index), path: [] }))
 						_ => Err(ParseError(Diagnostic.{ problem: failure.problem, location: InputOffset(failure.offset), path: [] }))
 					}
 				}
@@ -469,10 +469,6 @@ XmlCore := {
 			}
 		}
 
-		## The document's XML declaration, or `Err(Missing)` when it has none.
-		declaration : Reader -> Try(XmlCore.Declaration, [Missing])
-		declaration = |input_reader| Box.unbox(input_reader.declaration)
-
 		## Original position and declaration of this pull reader.
 		metadata : Reader -> XmlCore.Metadata
 		metadata = |input_reader| {
@@ -480,21 +476,13 @@ XmlCore := {
 			{ location: Text({ offset: input_reader.cursor.at, line: at.line, column: at.column }), declaration: Box.unbox(input_reader.declaration) }
 		}
 
-		## Where the most recent event starts: the `<` of its tag, or the
-		## first byte of its text. Before the first event, the root's start
-		## tag. Lines and columns count as in [XmlCore.Error].
-		location : Reader -> { line : U64, column : U64 }
-		location = |input_reader| {
-			at = position(input_reader.bytes, input_reader.cursor.at)
-			{ line: at.line, column: at.column }
-		}
 	}
 
 	## A [XmlCore.Reader] positioned before the root element, after reading and
 	## checking the document's prolog.
 	##
 	## ```roc
-	## expect XmlCore.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
+	## expect XmlCore.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.metadata().declaration.is_ok()) == Ok(True)
 	##
 	## expect XmlCore.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, problem: RootText }))
 	## ```
@@ -573,6 +561,13 @@ xml_input_prefix = |input| match Str.from_utf8(input) {
 			}
 		}
 	}
+}
+
+# These scanners report the opening token when their closing bytes are absent.
+incomplete_source : XmlCore.Problem -> Bool
+incomplete_source = |problem| match problem {
+	UnclosedElement(_) | UnclosedCData | UnclosedComment | UnclosedInstruction | UnclosedAttribute => True
+	_ => False
 }
 
 Failure : { offset : U64, problem : XmlCore.Problem }
@@ -2317,7 +2312,7 @@ expect {
 					match after_a.next() {
 						Event(Text(_), after_text) =>
 							match after_text.next() {
-								Event(Start(_), after_b) => after_a.location() == { line: 1, column: 1 } and after_text.location() == { line: 1, column: 4 } and after_b.location() == { line: 2, column: 3 }
+								Event(Start(_), after_b) => (Diagnostic.line_column(after_a.metadata().location) ?? { line: 1, column: 1 }) == { line: 1, column: 1 } and (Diagnostic.line_column(after_text.metadata().location) ?? { line: 1, column: 1 }) == { line: 1, column: 4 } and (Diagnostic.line_column(after_b.metadata().location) ?? { line: 1, column: 1 }) == { line: 2, column: 3 }
 								_ => False
 							}
 
@@ -2427,7 +2422,7 @@ expect {
 		Err(_) => False
 	}
 }
-expect XmlCore.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
+expect XmlCore.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.metadata().declaration.is_ok()) == Ok(True)
 expect XmlCore.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml(Diagnostic.{ problem: RootText, location: Text({ offset: 0, line: 1, column: 1 }), path: [] }))
 
 # Doc examples: element_with.
@@ -3739,3 +3734,13 @@ expect match XmlCore.parser.run("<r>".to_utf8().concat([0xFF]).concat("</r>".to_
 	Err(ParseError(error)) => error.problem == InvalidUtf8 and error.location == InputOffset(3)
 	_ => False
 }
+
+## Token scanners retain the invalid byte offset even when reporting unfinished openings.
+expect ["<r><!--x", "<r><![CDATA[x", "<r><?x y", "<r a='x"].all(
+	|prefix| {
+		match XmlCore.parser.run(prefix.to_utf8().concat([0xFF]).concat("'?>]]>--></r>".to_utf8())) {
+			Err(ParseError(error)) => error.problem == InvalidUtf8 and error.location == InputOffset(prefix.count_utf8_bytes())
+			_ => False
+		}
+	},
+)

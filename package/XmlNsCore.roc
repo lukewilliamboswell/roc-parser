@@ -177,13 +177,10 @@ XmlNsCore := {
 			}
 		}
 
-		## The document's XML declaration, or `Err(Missing)` when it has none.
-		declaration : Reader -> Try(XmlCore.Declaration, [Missing])
-		declaration = |input_reader| input_reader.inner.declaration()
+		## Original position and declaration of this pull reader.
+		metadata : Reader -> XmlCore.Metadata
+		metadata = |input_reader| input_reader.inner.metadata()
 
-		## Where the most recent event starts, as [XmlCore.Reader] reports it.
-		location : Reader -> { line : U64, column : U64 }
-		location = |input_reader| input_reader.inner.location()
 	}
 
 	## A [XmlNsCore.Reader] positioned before the root element. The limits of
@@ -259,7 +256,7 @@ XmlNsCore := {
 	parse : Str, XmlCore.ReaderProps -> Try(XmlNsCore, ReadError)
 	parse = |input, props| {
 		opened = XmlNsCore.reader(input, props)?
-		declaration = opened.declaration()
+		declaration = opened.metadata().declaration
 		match opened.next() {
 			Event(Start(_), after_start) =>
 				match after_start.element() {

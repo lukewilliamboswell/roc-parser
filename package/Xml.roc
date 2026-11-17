@@ -28,6 +28,7 @@ Xml := { declaration : Try(XmlCore.Declaration, [Missing]), root : XmlCore.Node 
 	ReadError : XmlCore.ReadError
 	StreamProps : XmlCore.StreamProps
 	StreamError : XmlCore.StreamError
+	Metadata : XmlCore.Metadata
 	Decoder : XmlCore.Decoder
 	decoder : _
 	decoder = XmlCore.decoder
