@@ -92,6 +92,8 @@ TARGETS = dict(
         target("xml-roundtrip", max_input_size=1024),
         target("xml-malformed", max_input_size=1024),
         target("xml-reader", "xml", "raw", "xml", timeout=10),
+        target("xml-stream", "xml-stream", "raw", "xml", max_input_size=2048, timeout=10),
+        target("xml-stream-ceilings", max_input_size=1, timeout=20, examples=True),
         # The first three bytes choose the limits; the rest is the document.
         target("xml-limits", "xml-limits", "raw", "xml", max_input_size=1024),
         # Two bytes choose a shape and a size; its examples hold the ceilings.

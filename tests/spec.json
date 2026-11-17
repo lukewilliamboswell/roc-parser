@@ -196,6 +196,35 @@
       ]
     },
     {
+      "path": "examples/xml-streaming.roc",
+      "cases": [
+        {
+          "name": "atom",
+          "args": [],
+          "stdin": "<feed xmlns=\"http://www.w3.org/2005/Atom\"><entry/><entry/></feed>",
+          "stdout": "2 entries\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "prefixed",
+          "args": [],
+          "stdin": "<a:feed xmlns:a=\"http://www.w3.org/2005/Atom\"><a:entry/><a:entry/></a:feed>",
+          "stdout": "2 entries\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "other-namespace",
+          "args": [],
+          "stdin": "<feed xmlns=\"urn:other\"><entry/></feed>",
+          "stdout": "0 entries\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/xml-svg.roc",
       "cases": [
         {

@@ -46,9 +46,10 @@ and [library versions and measurement receipts](bench/throughput.json).
 CSV, QIF, OFX and JSON record streams support
 [chunked reading and writing](docs/streaming.adoc) through Roc’s builtin `Iter`
 and `Stream`. JSON supports NDJSON records and top-level array items through
-`JsonStream`; complete JSON documents use `JsonValue`. The other format parsers
-require complete input in memory. JSON and namespace-aware XML also support whole-document
-writing, with `JsonValue.to_str` and `XmlNs.render`.
+`JsonStream`; complete JSON documents use `JsonValue`. XML, including namespaces,
+supports chunked event reading. The other format parsers require complete input
+in memory. JSON and namespace-aware XML also support whole-document writing,
+with `JsonValue.to_str` and `XmlNs.render`.
 
 ## Try it
 

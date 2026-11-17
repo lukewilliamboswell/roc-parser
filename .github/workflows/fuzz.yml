@@ -64,6 +64,8 @@ jobs:
           - xml-roundtrip
           - xml-malformed
           - xml-reader
+          - xml-stream
+          - xml-stream-ceilings
           - xml-limits
           - xml-ceilings
           - xmlns-raw

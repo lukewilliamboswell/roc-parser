@@ -3,7 +3,8 @@
 :idprefix: _
 :idseparator: _
 
-Use the CSV, QIF, OFX and JSON record APIs when input is too large to keep in memory.
+Use the CSV, QIF, OFX and JSON record APIs, or XML event APIs, when input is too
+large to keep in memory.
 The package parses bytes without performing I/O. Roc's builtin `Iter` supplies
 pure chunks; builtin `Stream` supplies effectful chunks from a file or stdin.
 The pinned basic-cli platform provides `File.Reader.chunks`, `Stdin.chunks` and
@@ -18,10 +19,13 @@ Choose the format's reader and output unit:
 |QIF |`QIF.parse_iter`, `QIF.parse_stream` |Section context and transaction records
 |OFX |`OFX.parse_iter`, `OFX.parse_stream` |Statement context and transaction records
 |JSON |`JsonStream.parse_iter`, `JsonStream.parse_stream` |NDJSON records or top-level array items
+|XML |`Xml.parse_iter`, `Xml.parse_stream` |Start, end and bounded text events
+|XML with namespaces |`XmlNs.parse_iter`, `XmlNs.parse_stream` |Events with resolved names
 |===
 
 CSV, QIF, OFX and JSON also provide record writers. See
-xref:json.adoc#json-streaming[JSON record streams] for JSON-specific setup.
+xref:json.adoc#json-streaming[JSON record streams] and
+xref:xml.adoc#xml-streaming[chunked XML events] for format-specific setup.
 
 == Consume a document completely
 
@@ -34,6 +38,9 @@ Readers yield `Try` items. Successful events are `Value(value)`,
 `Finished(report)`. Terminal failures yield an error once and stop. Source
 failures retain their original value under `SourceErr`; they never finalize a
 truncated document as though it had reached EOF.
+
+XML text fragments may split adjacent character data into several events;
+concatenate them when an application needs one text value.
 
 Drain the reader through `Finished` to validate the whole document. Stopping
 early releases the remaining pipeline when its values are dropped, but leaves
@@ -55,8 +62,8 @@ completely framed but failed semantic decoding. `ReportInvalidRecords` emits
 rejected records; metadata/context events count as emitted items too.
 
 JSON recovery applies to independently framed NDJSON lines. Errors within a
-JSON array are terminal; the reader does not guess where valid input resumes
-after broken syntax.
+JSON array or XML document are terminal; these readers do not guess where valid
+input resumes after broken syntax.
 
 These policies never recover from broken framing, invalid encoding, source
 failures, invalid account/statement context, or resource-limit failures. For
@@ -99,6 +106,7 @@ transient execution failures are never stored. Cached answers remain usable
 without installed oracle packages when their version receipt matches the
 requested dependency pins.
 
+[#streaming-decoder]
 == Implement another chunk decoder
 
 `Streaming.Step` returns the updated state, the number of bytes consumed from
