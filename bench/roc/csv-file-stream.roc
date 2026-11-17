@@ -10,6 +10,7 @@ import cli.Path
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
+import parser.Streaming
 
 ## Read a real file (argument 1), or stdin, with bounded source buffers.
 ## Timing includes reads. The process never preloads or retains the document.

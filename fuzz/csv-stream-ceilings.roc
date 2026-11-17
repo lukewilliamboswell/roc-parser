@@ -77,7 +77,6 @@ test! = |bytes| {
 				crash "CSV diagnostic excerpt pinned a large source field"
 			}
 		}
-		return Fuzz.keep
 	}
 	shape = choice % 3
 	n = choice // 3 + 1

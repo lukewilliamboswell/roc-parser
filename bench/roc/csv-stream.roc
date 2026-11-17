@@ -5,6 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import parser.CSV
+import parser.Streaming
 import parser.Parser
 import Bench
 
