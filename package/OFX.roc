@@ -517,6 +517,13 @@ consume_text = |state| {
 		return Ok(state)
 	}
 	decoded = Xml.parse_str("<v>${text}</v>").map_err(|_| problem(state, "invalid OFX character data"))?.root.text().trim()
+	consume_field(state, top, decoded)
+}
+
+# Both byte-chunk parsing and the validated XML source fold reach this handler
+# with decoded, normalized field content.
+consume_field : State, Str, Str -> Try(State, OFX.Error)
+consume_field = |state, top, decoded| {
 	if ["CURDEF", "DTSTART", "DTEND"].contains(top) {
 		if state.started or state.context_seen.contains(top) {
 			return Err(problem(state, "duplicate or late OFX context field"))
@@ -653,6 +660,11 @@ consume_token = |state| {
 	# capture/stack aliases alive and force copies on every append below.
 	token = state.token
 	token_len = token.len()
+	consume_name(state, name, closing, self_closed, token, token_len, text)
+}
+
+consume_name : State, Str, Bool, Bool, List(U8), U64, Str -> Try(Consumed, TokenFailure)
+consume_name = |state, name, closing, self_closed, token, token_len, text| {
 	var $s = state
 	top = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if $s.syntax == Sgml102 and leaf_tag(top) and !(closing and name == top) {
@@ -662,7 +674,7 @@ consume_token = |state| {
 		$s = { ..$s, stack: $s.stack.drop_last(1) }
 	}
 	if closing {
-		return close_tag($s, name, text)
+		return close_tag($s, name, text, Err(Missing))
 	}
 	if $s.root_closed {
 		return Err(token_failure($s, "content after OFX root"))
@@ -726,7 +738,7 @@ consume_token = |state| {
 	}
 	$s = { ..$s, stack: $s.stack.append({ name, offset: $s.offset - token_len }) }
 	if self_closed {
-		return close_tag($s, name, "")
+		return close_tag($s, name, "", Err(Missing))
 	}
 	if name == "STMTTRN" or name == "LEDGERBAL" or name == "AVAILBAL" {
 		if !$s.in_statement {
@@ -741,8 +753,8 @@ consume_token = |state| {
 	Ok({ state: $s, outcome: Quiet })
 }
 
-close_tag : State, Str, Str -> Try(Consumed, TokenFailure)
-close_tag = |state, name, text| {
+close_tag : State, Str, Str, Try(Xml.Node, [Missing]) -> Try(Consumed, TokenFailure)
+close_tag = |state, name, text, parsed| {
 	if state.stack.last().map_ok(|frame| frame.name) != Ok(name) {
 		return Err(token_failure(state, "mismatched OFX closing tag"))
 	}
@@ -753,8 +765,13 @@ close_tag = |state, name, text| {
 			if $s.capture.len() > $s.props.max_record_bytes {
 				return Err(token_failure($s, "OFX record exceeds max_record_bytes"))
 			}
-			captured = decode($s, $s.capture).map_err(|error| { state: $s, error })?
-			root = Xml.parse_str(captured).map_err(|_| token_failure($s, "malformed OFX record"))?.root
+			root = match parsed {
+				Ok(node) => node
+				Err(Missing) => {
+					captured = decode($s, $s.capture).map_err(|error| { state: $s, error })?
+					Xml.parse_str(captured).map_err(|_| token_failure($s, "malformed OFX record"))?.root
+				}
+			}
 			$s = { ..$s, capture: [], capture_tag: "" }
 			if name == "STMTTRN" {
 				if children(root).len() > $s.props.max_fields {
