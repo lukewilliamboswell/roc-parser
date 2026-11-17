@@ -1,4 +1,5 @@
 import XmlNsTypes
+import Streaming
 import Xml
 
 ## XML with namespaces resolved, following
@@ -108,6 +109,28 @@ XmlNs := {
 		End(Name),
 		Text(Str),
 	]
+
+	## Chunked namespace errors retain original byte positions.
+	StreamError : [InvalidXml(Xml.StreamError), InvalidNamespace({ problem : Problem, offset : U64, line : U64, column : U64 })]
+
+	## Incremental XML decoder with namespace bindings scoped to open elements.
+	Decoder : NamespaceChunkState
+
+	## Start a namespace-aware chunk decoder with Xml's finite resource bounds.
+	decoder : Xml.StreamProps -> Decoder
+	decoder = |props| { inner: Xml.decoder({ ..props, namespaces: True }), scope: empty_scope, done: False }
+
+	## Resolve one event. Malformed syntax and namespace errors are terminal.
+	decode_step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, StreamError)
+	decode_step = namespace_chunk_step
+
+	## Read pure chunks, resolving namespaces before emitting each start tag.
+	parse_iter : Iter(List(U8)), Xml.StreamProps -> Iter(Try(Streaming.ReadEvent(Event, StreamError), Streaming.ReadError(StreamError)))
+	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), decode_step, {})
+
+	## Read effectful byte chunks, retaining original source failures.
+	parse_stream : Stream(Try(List(U8), source_error)), Xml.StreamProps -> _
+	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), decode_step, {})
 
 	## A pull reader that resolves namespaces as it reads, as [Xml.Reader]
 	## does for names as written. Keep only the latest reader and `return`
@@ -1863,3 +1886,91 @@ expect {
 	doc.root.name() == Ok({ namespace: Uri("urn:é"), local: "根", prefix: Prefix("é") }) and doc.root.attribute(Uri("urn:é"), "属性") == Ok("值") and doc.root.children_named(Uri("urn:é"), "子").len() == 1
 }
 expect problem_of("<a:·x xmlns:a='urn:a'/>") == Ok(NotAQName("a:·x"))
+
+NamespaceChunkState : { inner : Xml.Decoder, scope : Scope, done : Bool }
+
+namespace_chunk_step : NamespaceChunkState, List(U8), Streaming.InputEnd -> Streaming.Step(NamespaceChunkState, XmlNs.Event, XmlNs.StreamError)
+namespace_chunk_step = |state, bytes, end| {
+	if state.done {
+		return { state, consumed: 0, outcome: Done }
+	}
+	next = Xml.decode_step(state.inner, bytes, end)
+	updated = { ..state, inner: next.state }
+	match next.outcome {
+		Item(Start(tag)) => match resolve_start(state.scope, tag.name, tag.attributes) {
+			Ok(resolved) => { state: { ..updated, scope: resolved.scope }, consumed: next.consumed, outcome: Item(Start({ name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes })) }
+			Err(problem) => {
+				at = Xml.decoder_location(next.state)
+				{ state: { ..updated, done: True }, consumed: next.consumed, outcome: Failed(InvalidNamespace({ problem, offset: at.offset, line: at.line, column: at.column })) }
+			}
+		}
+		Item(End(_)) => {
+			name = state.scope.names.last() ?? { namespace: NoNamespace, local: "", prefix: Unprefixed }
+			{ state: { ..updated, scope: pop_scope(state.scope) }, consumed: next.consumed, outcome: Item(End(name)) }
+		}
+		Item(Text(text)) => { state: updated, consumed: next.consumed, outcome: Item(Text(text)) }
+		NeedInput => { state: updated, consumed: next.consumed, outcome: NeedInput }
+		Done => { state: { ..updated, done: True }, consumed: next.consumed, outcome: Done }
+		Failed(error) | RecordError(error) => { state: { ..updated, done: True }, consumed: next.consumed, outcome: Failed(InvalidXml(error)) }
+	}
+}
+
+namespace_chunk_test_read : List(List(U8)), Xml.StreamProps -> _
+namespace_chunk_test_read = |chunks, props| Streaming.collect(XmlNs.parse_iter(chunks.iter(), props))
+
+expect {
+	bytes = "<r xmlns='urn:outer' xmlns:p='urn:p'><p:a p:x='1'><b xmlns='urn:inner'/></p:a><b/></r>".to_utf8()
+	wanted = namespace_chunk_test_read([bytes], {})?
+	var $same = namespace_chunk_test_read([[]].concat(bytes.map(|byte| [byte])).append([]), {}) == Ok(wanted)
+	for split in (0.U64).to(bytes.len() + 1) {
+		$same = $same and namespace_chunk_test_read([bytes.take_first(split), [], bytes.drop_first(split)], {}) == Ok(wanted)
+	}
+	names = wanted.keep_if(
+		|event| match event {
+			Start(_) => True
+			_ => False
+		},
+	).map(
+		|event| match event {
+			Start(tag) => tag.name.namespace
+			_ => NoNamespace
+		},
+	)
+	$same and names == [Uri("urn:outer"), Uri("urn:p"), Uri("urn:inner"), Uri("urn:outer")]
+}
+
+expect [
+	"<p:a/>",
+	"<a p:x='1'/>",
+	"<a xmlns:p=''/>",
+	"<a xmlns:xml='wrong'/>",
+	"<a xmlns:p='http://www.w3.org/XML/1998/namespace'/>",
+	"<a xmlns='http://www.w3.org/2000/xmlns/'/>",
+	"<a xmlns:p='u' xmlns:q='u' p:x='1' q:x='2'/>",
+	"<a:b:c/>",
+	"<a><?p:bad?></a>",
+].all(
+	|source| {
+		bytes = source.to_utf8()
+		namespace_chunk_test_read([bytes], {}).is_err()
+			and namespace_chunk_test_read([bytes], {}) == namespace_chunk_test_read(bytes.map(|byte| [byte]), {})
+	},
+)
+
+expect {
+	bytes = "<a>\r\n<p:x/></a>".to_utf8()
+	match namespace_chunk_test_read(bytes.map(|byte| [byte]), {}) {
+		Err(ReadFailed(ParseErr(InvalidNamespace({ problem: UndeclaredPrefix("p"), offset: 5, line: 2, column: 1 })))) => True
+		_ => False
+	}
+}
+
+expect {
+	bytes = "<a xmlns='u' x='1' xml:lang='en'><b xmlns=''/></a>".to_utf8()
+	match namespace_chunk_test_read([bytes], {}) {
+		Ok([Start(first), Start(second), End(_), End(_)]) =>
+			first.name.namespace == Uri("u") and second.name.namespace == NoNamespace
+				and first.attributes.map(|a| a.name.namespace) == [NoNamespace, Uri(XmlNs.xml_namespace)]
+		_ => False
+	}
+}

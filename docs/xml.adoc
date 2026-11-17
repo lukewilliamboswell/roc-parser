@@ -203,9 +203,65 @@ element with your own error, reported with its location.
 
 Keep only the latest reader, as here, and `return` from the `Done` arm rather
 than setting a flag: then each step updates the reader in place, and a loop
-that keeps no events holds memory for the open elements only. The same
+that keeps no events holds working memory for the open elements, in addition to the complete input. The same
 limits apply as for `Xml.parse`, and `location` gives the line and column of
 the most recent event.
+
+[#xml-streaming]
+== Read XML from byte chunks
+
+Use `Xml.parse_iter(chunks, props)` for pure byte chunks or
+`Xml.parse_stream(chunks, props)` for a file, stdin or another effectful source.
+`XmlNs.parse_iter` and `XmlNs.parse_stream` resolve namespace names with the same
+interface. Each reader emits `Value(Start(...))`, `Value(End(...))` and
+`Value(Text(...))`, followed by `Finished(report)` after successful source
+exhaustion. `<a/>` emits both a start and an end event. Comments and processing
+instructions are validated and omitted.
+
+The complete https://github.com/lukewilliamboswell/roc-parser/blob/main/examples/xml-streaming.roc[xml-streaming.roc program]
+counts Atom entries from stdin. Its loop matches expanded names, so the source
+can use either a default namespace or a prefix:
+
+[source,roc]
+----
+include::../examples/xml-streaming.roc[tag=count,indent=0]
+----
+
+Run it from the repository root with `roc examples/xml-streaming.roc` and supply
+a complete Atom feed on stdin. A feed with two Atom `entry` elements prints
+`2 entries` after the entire input has passed validation.
+
+Consume through `Finished` to validate closing tags and the trailing document
+content. A source failure is returned under `SourceErr`; it never finalizes a
+truncated document. Malformed XML, namespace problems and resource limits stop
+the reader. XML structure has no record-skipping recovery policy.
+
+The chunk readers accept UTF-8 bytes and an optional UTF-8 BOM. A chunk can end
+inside a Unicode character, CRLF, reference, attribute, comment, declaration or
+CDATA terminator. A declaration naming a different encoding is an error; decode
+other encodings before using this interface. Empty chunks do not signal EOF.
+
+Unlike `Xml.reader`, chunk readers can emit several adjacent `Text` events.
+Text can also be separated at comments, processing instructions and CDATA
+boundaries. Concatenate text when the application needs the tree reader's
+coalesced result. Each event contains complete UTF-8 characters and decoded
+references; line ending normalization is preserved across chunk boundaries.
+
+`Xml.StreamProps` sets finite limits for depth (1,024), total elements
+(4,194,304), attributes per element (1,024), token bytes (65,536), text fragment
+bytes (65,536) and retained open-element context bytes (4,194,304). Tokens
+include complete tags, comments, processing instructions and references;
+CDATA content is emitted in bounded text fragments. `max_text_bytes` must be at
+least four. The context budget charges each open element's complete start tag,
+including namespace declarations. A resource limit is terminal. Retaining output
+or earlier decoder states adds to the application's memory use.
+
+For a custom pull loop, start with `Xml.decoder(props)` and call
+`Xml.decode_step(state, bytes, More)` until the source ends, then use `Final`.
+The return value follows the shared xref:streaming.adoc#streaming-decoder[chunk decoder contract].
+`Xml.decoder_location` gives the latest event's original byte offset, line and
+column, and `Xml.decoder_declaration` gives the declaration parsed so far.
+`XmlNs.decoder` and `XmlNs.decode_step` provide the namespace-aware version.
 
 [#xml-namespaces]
 == Resolve namespaces

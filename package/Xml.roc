@@ -1,4 +1,5 @@
 import XmlTypes
+import Streaming
 import Parser
 import Utf8
 import MarkupScan
@@ -220,6 +221,41 @@ Xml := {
 		InvalidXml(Xml.Error),
 		LimitExceeded({ limit : Limit, max : U64, line : U64, column : U64 }),
 	]
+
+	## Bounds for chunked XML. Tokens include complete tags, comments, and PIs.
+	## Text and CDATA may be split into multiple Text events, independently of
+	## input chunk boundaries. The decoder accepts UTF-8 bytes only.
+	StreamProps := { max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, max_token_bytes : U64 ?? 65_536, max_text_bytes : U64 ?? 65_536, max_context_bytes : U64 ?? 4_194_304, namespaces : Bool ?? False }
+
+	## Original byte offset and one-based physical line and byte column.
+	StreamError : { offset : U64, line : U64, column : U64, message : Str }
+
+	## Incremental decoder retaining bounded unfinished syntax and open names.
+	Decoder : ChunkState
+
+	## Construct a lazy byte decoder. Text bounds must allow one UTF-8 scalar.
+	decoder : StreamProps -> Decoder
+	decoder = chunk_initial
+
+	## Decode at most one event. Final is supplied only at source exhaustion.
+	decode_step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, StreamError)
+	decode_step = chunk_step
+
+	## Read chunked XML without constructing a tree. Structural errors stop.
+	parse_iter : Iter(List(U8)), StreamProps -> Iter(Try(Streaming.ReadEvent(Event, StreamError), Streaming.ReadError(StreamError)))
+	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), decode_step, {})
+
+	## Effectful counterpart of parse_iter, preserving source errors.
+	parse_stream : Stream(Try(List(U8), source_error)), StreamProps -> _
+	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), decode_step, {})
+
+	## Position of the most recently emitted event, in original input bytes.
+	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
+	decoder_location = |state| state.event_at
+
+	## Declaration parsed so far; non-UTF-8 declarations are rejected.
+	decoder_declaration : Decoder -> Try(Declaration, [Missing])
+	decoder_declaration = |state| state.declaration
 
 	## An exact byte interval in XML source.
 	SourceSpan : { start : U64, end : U64 }
@@ -2526,3 +2562,522 @@ expect Xml.fold_source(
 		_ => Ok(count + 1)
 	},
 ) == Rejected(Stopped, { line: 2, column: 1 })
+
+# Chunk framing is separate from token validation. Each token is scanned once
+# to find its end and once by the same parser as the complete-input reader.
+ChunkAt : { offset : U64, line : U64, column : U64 }
+
+ChunkMode : [Initial, Bom, Data, Markup([Prefix, Tag, Comment, Instruction]), CData]
+
+ChunkState : {
+	props : Xml.StreamProps,
+	mode : ChunkMode,
+	token : List(U8),
+	quote : U8,
+	text : List(U8),
+	text_at : ChunkAt,
+	token_at : ChunkAt,
+	event_at : ChunkAt,
+	utf8_left : U8,
+	reference : Bool,
+	reference_bytes : U64,
+	brackets : U8,
+	cdata_brackets : U64,
+	cdata_at : ChunkAt,
+	skip_text_lf : Bool,
+	open : List({ name : Str, retained_bytes : U64 }),
+	context_bytes : U64,
+	elements : U64,
+	closed : Bool,
+	pending_end : Bool,
+	declaration : Try(Xml.Declaration, [Missing]),
+	offset : U64,
+	line : U64,
+	column : U64,
+	previous_cr : Bool,
+	done : Bool,
+	bom : Bool,
+}
+
+chunk_initial : Xml.StreamProps -> ChunkState
+chunk_initial = |props| {
+	at = { offset: 0, line: 1, column: 1 }
+	{ props, mode: Initial, token: [], quote: 0, text: [], text_at: at, token_at: at, event_at: at, utf8_left: 0, reference: False, reference_bytes: 0, brackets: 0, cdata_brackets: 0, cdata_at: at, skip_text_lf: False, open: [], context_bytes: 0, elements: 0, closed: False, pending_end: False, declaration: Err(Missing), offset: 0, line: 1, column: 1, previous_cr: False, done: False, bom: False }
+}
+
+chunk_at : ChunkState -> ChunkAt
+chunk_at = |state| { offset: state.offset, line: state.line, column: state.column }
+
+chunk_advance : ChunkState, U8 -> ChunkState
+chunk_advance = |state, byte| {
+	if byte == '\r' {
+		{ ..state, offset: state.offset + 1, line: state.line + 1, column: 1, previous_cr: True }
+	} else if byte == '\n' {
+		{ ..state, offset: state.offset + 1, line: state.line + (if (state.previous_cr) 0 else 1), column: 1, previous_cr: False }
+	} else {
+		{ ..state, offset: state.offset + 1, column: state.column + 1, previous_cr: False }
+	}
+}
+
+chunk_error : ChunkAt, Str -> Xml.StreamError
+chunk_error = |at, message| { offset: at.offset, line: at.line, column: at.column, message }
+
+chunk_fail : ChunkState, U64, ChunkAt, Str -> Streaming.Step(ChunkState, Xml.Event, Xml.StreamError)
+chunk_fail = |state, consumed, at, message| { state: { ..state, done: True }, consumed, outcome: Failed(chunk_error(at, message)) }
+
+chunk_locate : ChunkAt, List(U8), ReadFailure -> Xml.StreamError
+chunk_locate = |base, bytes, failure| {
+	problem = match failure {
+		XmlFail(value) => value
+		LimitFail(value) => { offset: value.offset, message: "XML attribute limit exceeded" }
+	}
+	at = locate(bytes, problem.offset, problem.message)
+	{ offset: base.offset + problem.offset, line: base.line + at.line - 1, column: if (at.line == 1) base.column + at.column - 1 else at.column, message: at.message }
+}
+
+chunk_utf8_left : U8, U8 -> U8
+chunk_utf8_left = |left, byte| {
+	if left > 0 {
+		if (byte >= 0x80 and byte < 0xC0) left - 1 else 0
+	} else if byte >= 0xC2 and byte <= 0xDF {
+		1
+	} else if byte >= 0xE0 and byte <= 0xEF {
+		2
+	} else if byte >= 0xF0 and byte <= 0xF4 {
+		3
+	} else 0
+}
+
+chunk_append_text : ChunkState, U8 -> ChunkState
+chunk_append_text = |state, byte| {
+	at = if (state.text.is_empty()) chunk_at(state) else state.text_at
+	{ ..state, text: state.text.append(byte), text_at: at, utf8_left: chunk_utf8_left(state.utf8_left, byte) }
+}
+
+chunk_emit_text : ChunkState, U64, Bool -> Streaming.Step(ChunkState, Xml.Event, Xml.StreamError)
+chunk_emit_text = |state, consumed, cdata| {
+	bytes = state.text
+	parsed = if cdata {
+		wrapped = "<![CDATA[".to_utf8().concat(bytes).concat("]]>".to_utf8())
+		read_source_cdata("", wrapped, 0).map_err(
+			|failure| {
+				problem = match failure {
+					XmlFail(value) => { ..value, offset: if (value.offset >= 9) value.offset - 9 else 0 }
+					LimitFail(_) => { offset: 0, message: "XML text limit exceeded" }
+				}
+				chunk_locate(state.text_at, bytes, XmlFail(problem))
+			},
+		)
+	} else {
+		read_source_text("", bytes, 0).map_err(|failure| chunk_locate(state.text_at, bytes, failure))
+	}
+	match parsed {
+		Ok(value) => { state: { ..state, text: [], event_at: state.text_at, skip_text_lf: bytes.last() == Ok('\r') and (if (cdata) state.mode == CData else state.mode == Data) }, consumed, outcome: Item(Text(value.val)) }
+		Err(error) => { state: { ..state, done: True }, consumed, outcome: Failed(error) }
+	}
+}
+
+chunk_prefix : List(U8), Str -> Bool
+chunk_prefix = |bytes, target| target.to_utf8().take_first(bytes.len()) == bytes and bytes.len() <= target.count_utf8_bytes()
+
+chunk_suffix : List(U8), Str -> Bool
+chunk_suffix = |bytes, target| bytes.len() >= target.count_utf8_bytes() and bytes.drop_first(bytes.len() - target.count_utf8_bytes()) == target.to_utf8()
+
+chunk_finish_markup : ChunkState -> Try({ state : ChunkState, event : [Emit(Xml.Event), Silent] }, Xml.StreamError)
+chunk_finish_markup = |state| {
+	bytes = state.token
+	at = state.token_at
+	finish = { ..state, mode: Data, token: [], quote: 0, brackets: 0 }
+	match state.mode {
+		Markup(Comment) => {
+			_ = skip_comment(bytes, 0).map_err(|failure| chunk_locate(at, bytes, failure))?
+			Ok({ state: finish, event: Silent })
+		}
+		Markup(Instruction) => {
+			if starts_with_at(bytes, 0, "<?xml".to_utf8()) and is_space_at(bytes, 5) and (at.offset == 0 or (state.bom and at.offset == 3)) {
+				declaration = parse_xml_declaration(bytes, 0).map_err(|failure| chunk_locate(at, bytes, failure))?
+				match declaration.val.encoding {
+					Ok(OtherEncoding(_)) => return Err(chunk_error(at, "chunked XML accepts only UTF-8 encoding declarations"))
+					_ => {}
+				}
+				Ok({ state: { ..finish, declaration: Ok(declaration.val) }, event: Silent })
+			} else {
+				_ = skip_processing_instruction(bytes, 0, state.props.namespaces).map_err(|failure| chunk_locate(at, bytes, failure))?
+				Ok({ state: finish, event: Silent })
+			}
+		}
+		Markup(Tag) => {
+			if bytes.get(1) == Ok('/') {
+				opened = state.open.last().map_err(|_| chunk_error(at, "unexpected end tag outside the root element"))?
+				# The shared validator compares names by ranges in one byte list.
+				comparison = bytes.concat(opened.name.to_utf8())
+				_ = read_end_tag("", comparison, 0, { start: bytes.len(), end: comparison.len() }).map_err(|failure| chunk_locate(at, bytes, failure))?
+				open = state.open.drop_last(1)
+				Ok({ state: { ..finish, open, context_bytes: state.context_bytes - opened.retained_bytes, closed: open.is_empty(), event_at: at }, event: Emit(End(opened.name)) })
+			} else {
+				if state.closed {
+					return Err(chunk_error(at, "unexpected content after the root element"))
+				}
+				if state.open.len() >= state.props.max_depth {
+					return Err(chunk_error(at, "XML depth limit exceeded"))
+				}
+				if state.elements >= state.props.max_elements {
+					return Err(chunk_error(at, "XML element limit exceeded"))
+				}
+				if bytes.len() > state.props.max_context_bytes - U64.min(state.context_bytes, state.props.max_context_bytes) {
+					return Err(chunk_error(at, "XML open-element context byte limit exceeded"))
+				}
+				tag = parse_start_tag("", bytes, 0, state.props.max_attributes).map_err(|failure| chunk_locate(at, bytes, failure))?
+				Ok({ state: { ..finish, open: state.open.append({ name: tag.name, retained_bytes: bytes.len() }), context_bytes: state.context_bytes + bytes.len(), elements: state.elements + 1, pending_end: tag.empty, event_at: at }, event: Emit(Start({ name: tag.name, attributes: tag.attributes })) })
+			}
+		}
+		_ => Err(chunk_error(at, "incomplete XML markup"))
+	}
+}
+
+chunk_step : ChunkState, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkState, Xml.Event, Xml.StreamError)
+chunk_step = |initial, bytes, end| {
+	var $state = initial
+	var $index = 0.U64
+	if $state.done {
+		return { state: $state, consumed: 0, outcome: Done }
+	}
+	if $state.props.max_text_bytes < 4 {
+		return chunk_fail($state, 0, chunk_at($state), "max_text_bytes must be at least 4")
+	}
+	if $state.pending_end {
+		opened = $state.open.last() ?? { name: "", retained_bytes: 0 }
+		open = $state.open.drop_last(1)
+		return { state: { ..$state, open, context_bytes: $state.context_bytes - opened.retained_bytes, closed: open.is_empty(), pending_end: False }, consumed: 0, outcome: Item(End(opened.name)) }
+	}
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		match $state.mode {
+			Initial => {
+				$state = { ..$state, mode: if (byte == 0xEF) Bom else Data }
+			}
+			Bom => {
+				$state = chunk_advance({ ..$state, token: $state.token.append(byte) }, byte)
+				$index = $index + 1
+				if $state.token.len() == 3 {
+					if $state.token != [0xEF, 0xBB, 0xBF] {
+						return chunk_fail($state, $index, { offset: 0, line: 1, column: 1 }, "invalid UTF-8 byte order mark")
+					}
+					$state = { ..$state, mode: Data, token: [], bom: True }
+				}
+			}
+			Data => {
+				if $state.skip_text_lf and byte == '\n' {
+					$state = chunk_advance({ ..$state, skip_text_lf: False }, byte)
+					$index = $index + 1
+				} else if byte == '<' and !$state.reference {
+					if !$state.text.is_empty() {
+						return chunk_emit_text($state, $index, False)
+					}
+					$state = chunk_advance({ ..$state, mode: Markup(Prefix), token: ['<'], token_at: chunk_at($state), skip_text_lf: False, brackets: 0 }, byte)
+					$index = $index + 1
+				} else if $state.open.is_empty() {
+					if !is_space(byte) {
+						return chunk_fail($state, $index, chunk_at($state), if ($state.closed) "unexpected content after the root element" else "expected a root element, but found text")
+					}
+					$state = chunk_advance($state, byte)
+					$index = $index + 1
+				} else {
+					if $state.reference and $state.reference_bytes >= $state.props.max_token_bytes {
+						return chunk_fail($state, $index, chunk_at($state), "XML reference byte limit exceeded")
+					}
+					if byte == '>' and $state.brackets >= 2 {
+						return chunk_fail($state, $index, { offset: $state.offset - 2, line: $state.line, column: $state.column - 2 }, "']]>' is not allowed in character data")
+					}
+					if $state.text.is_empty() {
+						$state = { ..$state, text_at: chunk_at($state) }
+					}
+					$state = chunk_append_text({ ..$state, skip_text_lf: False }, byte)
+					$state = { ..$state, reference: if ($state.reference) byte != ';' else byte == '&', reference_bytes: if ($state.reference or byte == '&') $state.reference_bytes + 1 else 0, brackets: if (byte == ']') U8.min($state.brackets + 1, 2) else 0 }
+					$state = chunk_advance($state, byte)
+					$index = $index + 1
+					if !$state.reference and $state.utf8_left == 0 and $state.text.len() >= $state.props.max_text_bytes - 3 {
+						return chunk_emit_text($state, $index, False)
+					}
+				}
+			}
+			Markup(kind) => {
+				if $state.token.len() >= $state.props.max_token_bytes {
+					return chunk_fail($state, $index, $state.token_at, "XML token byte limit exceeded")
+				}
+				$state = chunk_advance({ ..$state, token: $state.token.append(byte) }, byte)
+				$index = $index + 1
+				var $complete = False
+				match kind {
+					Prefix => {
+						if $state.token.len() == 2 and byte == '?' {
+							$state = { ..$state, mode: Markup(Instruction) }
+						} else if $state.token.len() == 2 and byte != '!' {
+							$state = { ..$state, mode: Markup(Tag) }
+							$complete = byte == '>'
+						} else if $state.token == "<!--".to_utf8() {
+							$state = { ..$state, mode: Markup(Comment) }
+						} else if $state.token == "<![CDATA[".to_utf8() {
+							if $state.open.is_empty() {
+								return chunk_fail($state, $index, $state.token_at, "CDATA is only allowed inside the root element")
+							}
+							$state = { ..$state, mode: CData, token: [], cdata_brackets: 0, skip_text_lf: False }
+						} else if !chunk_prefix($state.token, "<!--") and !chunk_prefix($state.token, "<![CDATA[") {
+							return chunk_fail($state, $index, $state.token_at, "expected a comment or CDATA section; DTDs are unsupported")
+						}
+					}
+					Tag => {
+						if $state.quote != 0 {
+							if byte == $state.quote {
+								$state = { ..$state, quote: 0 }
+							}
+						} else if byte == '\'' or byte == '"' {
+							$state = { ..$state, quote: byte }
+						} else {
+							$complete = byte == '>'
+						}
+					}
+					Comment => {
+						$complete = $state.token.len() >= 7 and chunk_suffix($state.token, "-->")
+					}
+					Instruction => {
+						$complete = chunk_suffix($state.token, "?>")
+					}
+				}
+				if $complete {
+					match chunk_finish_markup($state) {
+						Ok(result) => {
+							$state = result.state
+							match result.event {
+								Emit(event) => return { state: $state, consumed: $index, outcome: Item(event) }
+								Silent => {}
+							}
+						}
+						Err(error) => return { state: { ..$state, done: True }, consumed: $index, outcome: Failed(error) }
+					}
+				}
+			}
+			CData => {
+				if $state.skip_text_lf and byte == '\n' {
+					$state = chunk_advance({ ..$state, skip_text_lf: False }, byte)
+					$index = $index + 1
+				} else if byte == ']' {
+					# Only the last two brackets can belong to the terminator.
+					if $state.cdata_brackets == 2 {
+						at = if ($state.text.is_empty()) $state.cdata_at else $state.text_at
+						$state = { ..chunk_append_text($state, ']'), text_at: at }
+						$state = { ..$state, cdata_at: { ..$state.cdata_at, offset: $state.cdata_at.offset + 1, column: $state.cdata_at.column + 1 } }
+					} else {
+						$state = { ..$state, cdata_at: if ($state.cdata_brackets == 0) chunk_at($state) else $state.cdata_at, cdata_brackets: $state.cdata_brackets + 1 }
+					}
+					$state = chunk_advance({ ..$state, skip_text_lf: False }, byte)
+					$index = $index + 1
+				} else if byte == '>' and $state.cdata_brackets == 2 {
+					$state = chunk_advance({ ..$state, mode: Data, cdata_brackets: 0, skip_text_lf: False, brackets: 0 }, byte)
+					$index = $index + 1
+					if !$state.text.is_empty() {
+						return chunk_emit_text($state, $index, True)
+					}
+				} else {
+					while $state.cdata_brackets > 0 {
+						at = if ($state.text.is_empty()) $state.cdata_at else $state.text_at
+						$state = { ..chunk_append_text($state, ']'), text_at: at, cdata_brackets: $state.cdata_brackets - 1, cdata_at: { ..$state.cdata_at, offset: $state.cdata_at.offset + 1, column: $state.cdata_at.column + 1 } }
+						if $state.text.len() >= $state.props.max_text_bytes - 3 {
+							return chunk_emit_text($state, $index, True)
+						}
+					}
+					$state = chunk_append_text({ ..$state, skip_text_lf: False }, byte)
+					$state = chunk_advance($state, byte)
+					$index = $index + 1
+				}
+				if $state.mode == CData and $state.utf8_left == 0 and $state.text.len() >= $state.props.max_text_bytes - 3 {
+					return chunk_emit_text($state, $index, True)
+				}
+			}
+		}
+	}
+	if end == More {
+		return { state: $state, consumed: $index, outcome: NeedInput }
+	}
+	if $state.mode == Data and !$state.text.is_empty() {
+		return chunk_emit_text($state, $index, False)
+	}
+	if $state.mode != Data or !$state.closed {
+		return chunk_fail($state, $index, chunk_at($state), "incomplete XML document at end of input")
+	}
+	{ state: { ..$state, done: True }, consumed: $index, outcome: Done }
+}
+
+chunk_test_read : List(List(U8)), Xml.StreamProps -> _
+chunk_test_read = |chunks, props| Streaming.collect(Xml.parse_iter(chunks.iter(), props))
+
+chunk_test_splits : Str, Xml.StreamProps -> Bool
+chunk_test_splits = |source, props| {
+	bytes = source.to_utf8()
+	wanted = chunk_test_read([bytes], props)
+	var $same = chunk_test_read([[]].concat(bytes.map(|byte| [byte])).append([]), props) == wanted
+	for split in (0.U64).to(bytes.len() + 1) {
+		$same = $same and chunk_test_read([bytes.take_first(split), [], bytes.drop_first(split)], props) == wanted
+	}
+	$same
+}
+
+expect chunk_test_read(["<a x='&amp;'>hello<b/>world</a>".to_utf8()], {}) == Ok([
+	Start({ name: "a", attributes: [{ name: "x", value: "&" }] }),
+	Text("hello"),
+	Start({ name: "b", attributes: [] }),
+	End("b"),
+	Text("world"),
+	End("a"),
+])
+
+expect [
+	"<a/>",
+	"\u(FEFF)<?xml version='1.0' encoding='UTF-8'?><a x='é&#13;\r\nx'>😀&amp;\r\ntext<![CDATA[<&😀\r\n]]]>]</a><!-- tail -->",
+	"<?before ok?><a>before<!-- a > b -->after<?inside data?><b></b></a><?after?>",
+	"<a>abc\r\nxyz&#13;\n<![CDATA[\r\n]]>&#x1F600;</a>",
+	"<a><![CDATA[]]]]]]]]]]]]]]]]]]]]]]]]]]]]></a>",
+].all(|source| chunk_test_read([source.to_utf8()], { max_text_bytes: 4 }).is_ok() and chunk_test_splits(source, { max_text_bytes: 4 }))
+
+expect {
+	values = chunk_test_read(["<a>A\r\nB\r&#10;C\r<![CDATA[\n]]>D</a>".to_utf8()], { max_text_bytes: 4 })?
+	Str.join_with(
+		values.map(
+			|event| match event {
+				Text(value) => value
+				_ => ""
+			},
+		),
+		"",
+	) == "A\nB\n\nC\n\nD"
+}
+
+expect [
+	"",
+	"<a>",
+	"<a></b>",
+	"<a/><b/>",
+	"<a/>x",
+	"<a/>\u(FEFF)",
+	"<a x='1' x='2'/>",
+	"<a>&unknown;</a>",
+	"<a>&#0;</a>",
+	"<a>]]></a>",
+	"<a>abc]]></a>",
+	"<a><!-- bad -- comment --></a>",
+	"<a><?xml version='1.0'?></a>",
+	"   <?xml version='1.0'?><a/>",
+	"<?xml version='1.0' encoding='UTF-16'?><a/>",
+	"<!DOCTYPE a><a/>",
+	"<![CDATA[x]]><a/>",
+	"<a><![CDATA[unterminated</a>",
+	"<a x='unterminated>",
+	"<a><!--unterminated",
+	"<a><?unfinished",
+	"<a>&unfinished",
+].all(|source| chunk_test_read([source.to_utf8()], { max_text_bytes: 4 }).is_err() and chunk_test_splits(source, { max_text_bytes: 4 }))
+
+expect [[0xEF.U8], [0xEF, 0xBB], [0xEF, 0xBB, 0], "<a>".to_utf8().concat([0xF0, 0x9F]).concat("</a>".to_utf8()), "<a>".to_utf8().concat([0xFF]).concat("</a>".to_utf8())].all(
+	|bytes| {
+		chunk_test_read([bytes], {}).is_err() and chunk_test_read(bytes.map(|byte| [byte]), {}).is_err()
+	},
+)
+
+expect {
+	read = |source, props| chunk_test_read([source.to_utf8()], props)
+	read("<a/>", { max_token_bytes: 4 }).is_ok()
+		and read("<a/>", { max_token_bytes: 3 }).is_err()
+		and read("<a><b/></a>", { max_depth: 1 }).is_err()
+		and read("<a><b/></a>", { max_depth: 2 }).is_ok()
+		and read("<a><b/></a>", { max_elements: 1 }).is_err()
+		and read("<a x='1'/>", { max_attributes: 0 }).is_err()
+		and read("<a/>", { max_context_bytes: 4 }).is_ok()
+		and read("<a><b/></a>", { max_context_bytes: 6 }).is_err()
+		and read("<a>&#00000000000065;</a>", { max_token_bytes: 8 }).is_err()
+		and read("<a/>", { max_text_bytes: 3 }).is_err()
+}
+
+expect {
+	source = "<root><![CDATA[${Str.repeat("x", 10000)}]]>${Str.repeat("é", 10000)}</root>"
+	values = chunk_test_read([source.to_utf8()], { max_text_bytes: 32, max_token_bytes: 16 })?
+	values.all(
+		|event| match event {
+			Text(text) => text.count_utf8_bytes() <= 32
+			_ => True
+		},
+	)
+		and Str.join_with(
+			values.map(
+				|event| match event {
+					Text(text) => text
+					_ => ""
+				},
+			),
+			"",
+		).count_utf8_bytes() == 30000
+}
+
+expect {
+	first = Xml.decode_step(Xml.decoder({}), "<root/>unread".to_utf8(), More)
+	match first.outcome {
+		Item(Start({ name: "root", .. })) => first.consumed == 7
+		_ => False
+	}
+}
+
+expect {
+	result = chunk_test_read(["<a>\r\n<b/>\r\n</wrong>".to_utf8()], {})
+	match result {
+		Err(ReadFailed(ParseErr(error))) => error.offset == 11 and error.line == 3 and error.column == 1
+		_ => False
+	}
+}
+
+expect ["<r><![CDATA[\r]]>\n</r>", "<r>\r<![CDATA[\n]]></r>"].all(
+	|source| {
+		parsed = chunk_test_read([source.to_utf8()], { max_text_bytes: 4 }) ?? return False
+		Str.join_with(
+			parsed.map(
+				|event| match event {
+					Text(value) => value
+					_ => ""
+				},
+			),
+			"",
+		) == "\n\n"
+			and chunk_test_splits(source, { max_text_bytes: 4 })
+	},
+)
+
+expect {
+	source = "<r><![CDATA[${Str.repeat("x", 28)}]]😀]]></r>"
+	parsed = chunk_test_read([source.to_utf8()], { max_text_bytes: 32 })?
+	parsed.all(
+		|event| match event {
+			Text(value) => value.count_utf8_bytes() <= 32
+			_ => True
+		},
+	)
+		and chunk_test_splits(source, { max_text_bytes: 4 })
+}
+
+expect chunk_test_read(["\r\r<A /><!-->Z1\r\n1-->".to_utf8()], {}).is_ok()
+	and chunk_test_splits("\r\r<A /><!-->Z1\r\n1-->", {})
+
+expect {
+	match chunk_test_read(["<a>]]></a>".to_utf8()], { max_text_bytes: 4 }) {
+		Err(ReadFailed(ParseErr({ offset: 3, line: 1, column: 4, .. }))) => True
+		_ => False
+	}
+}
+
+expect {
+	source = "<r>${Str.repeat("<i/>", 1000)}</r>"
+	chunk_test_read([source.to_utf8()], { max_context_bytes: 7, max_token_bytes: 4 }).is_ok()
+}
+
+expect {
+	first = Xml.decode_step(Xml.decoder({}), "<?xml version='1.0'?>\n<r/>".to_utf8(), More)
+	Xml.decoder_declaration(first.state) == Ok({ version: { major: 1, minor: 0 }, encoding: Err(Missing) })
+		and Xml.decoder_location(first.state) == { offset: 22, line: 2, column: 1 }
+}
