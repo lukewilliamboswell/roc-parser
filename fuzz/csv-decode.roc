@@ -244,9 +244,9 @@ quote_all = |fields, start| {
 decoder : Parser(CSV.Record, Row, _)
 decoder =
 	CSV.record(|id| |score| |name| { id, score, name })
-		.keep(CSV.field(CSV.u64))
-		.keep(CSV.field(CSV.f64))
-		.keep(CSV.field(CSV.string))
+		.keep(CSV.field(CSV.u64({})))
+		.keep(CSV.field(CSV.f64({})))
+		.keep(CSV.field(CSV.string({})))
 
 same_f64 : F64, F64 -> Bool
 same_f64 = |a, b| (a.is_nan() and b.is_nan()) or (a == b and (a != 0.0 or (1.0 / a) == (1.0 / b)))

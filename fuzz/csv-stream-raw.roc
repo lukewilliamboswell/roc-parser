@@ -32,7 +32,7 @@ chunks = |bytes, width| Iter.custom(
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
 	width = (bytes.first() ?? 0).to_u64() % 31 + 1
-	expected = Utf8.parse_bytes(CSV.parser, bytes)
+	expected = Utf8.parse_bytes(CSV.parser({}), bytes)
 	actual = Streaming.collect(Streaming.read_iter(chunks(bytes, width), CSV.decoder({})))
 	match (expected, actual) {
 		(Ok(rows), Ok(found)) => {

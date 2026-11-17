@@ -14,7 +14,7 @@ main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
-	match CSV.parse_with(Parser.many(CSV.field(CSV.string)), input) {
+	match CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), input) {
 		Ok(rows) => Ok(rows.fold(0, |total, row| row.fold(total + 1, |sum, field| sum + field.to_utf8().iter().with_index().fold(0, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))))
 		Err(_) => Err(1)
 	}

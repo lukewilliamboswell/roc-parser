@@ -109,13 +109,13 @@ column_names = |text| {
 Movie : { title : Str, year : U64, cast : List(Str) }
 
 cast : Parser(Utf8.Bytes, List(Str), _)
-cast = CSV.string.map(|text| Str.split_on(text, ";"))
+cast = CSV.string({}).map(|text| Str.split_on(text, ";"))
 
 movie : Parser(CSV.Record, Movie, _)
 movie =
 	CSV.record(|title| |year| |actors| { title, year, cast: actors })
-		.keep(CSV.field(CSV.string))
-		.keep(CSV.field(CSV.u64))
+		.keep(CSV.field(CSV.string({})))
+		.keep(CSV.field(CSV.u64({})))
 		.keep(CSV.field(cast))
 
 # end::combinators[]

@@ -213,7 +213,7 @@ exact dialect.
   tuples.
 * `CSV.parse_with` matches columns by position instead, with a record parser
   you build from `CSV.record`, `CSV.field` and `.keep(...)`. Field parsers
-  `CSV.string`, `CSV.u64` and `CSV.f64` are provided, and any
+  `CSV.string({})`, `CSV.u64({})` and `CSV.f64({})` are provided, and any
   `Parser(Utf8.Bytes, a, _)` works.
 * `CSV.parse_records` returns the raw records, each a `CSV.Record` (a
   `List(List(U8))`), when rows differ in shape or you want to inspect them

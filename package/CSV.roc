@@ -54,7 +54,7 @@ CSV := { records : List(CSV.Record) }.{
 	Record : List(List(U8))
 
 	## Native CSV failures. Payload bytes are bounded excerpts of source data.
-	Problem : [Syntax(CSVReader.Problem), ExpectedValue({ expected : ValueType, bytes : List(U8) }), MissingField, WidthMismatch({ found : U64, expected : U64 }), EmptyHeader, DuplicateHeader(Str), UnsupportedCell([Record, Tuple, TagPayload]), InvalidValue, UnknownTag(List(U8))]
+	Problem(p) : [Syntax(CSVReader.Problem), ExpectedValue({ expected : ValueType, bytes : List(U8) }), MissingField, WidthMismatch({ found : U64, expected : U64 }), EmptyHeader, DuplicateHeader(Str), UnsupportedCell([Record, Tuple, TagPayload]), InvalidValue, UnknownTag(List(U8)), ..p]
 
 	## The scalar type expected by a cell decoder.
 	ValueType : [Text, Boolean, Empty, U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, Dec, F32, F64]
@@ -63,7 +63,7 @@ CSV := { records : List(CSV.Record) }.{
 	Located(problem) : { record : U64, field : U64, line : U64, column : U64, problem : problem }
 
 	## A CSV syntax or type-directed decoding failure.
-	Error : Located(Parser.Problem(Problem))
+	Error : Located(Parser.Problem(Problem([])))
 
 	## A custom positional parser failure, preserving its own tagged problem.
 	RowError(problem) : Located([ParserFailure(Parser.Problem(problem)), UnreadFields({ found : U64, read : U64 })])
@@ -127,8 +127,8 @@ CSV := { records : List(CSV.Record) }.{
 	##
 	## It reads records until its input ends, so it consumes all of it or fails
 	## with the offset of the malformed field. It accepts any bytes.
-	parser : Parser(Utf8.Bytes, List(Record), Problem)
-	parser = Parser.custom(
+	parser : {} -> Parser(Utf8.Bytes, List(Record), Problem(p))
+	parser = |_| Parser.custom(
 		|bytes| {
 			match scan_table(bytes) {
 				Ok(records) => Ok({ value: records, rest: [] })
@@ -164,7 +164,7 @@ CSV := { records : List(CSV.Record) }.{
 	##
 	## ```roc
 	## user : Parser(CSV.Record, { name : Str, age : U64 }, _)
-	## user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
+	## user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.u64({})))
 	##
 	## expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 	## ```
@@ -227,7 +227,7 @@ CSV := { records : List(CSV.Record) }.{
 	## Name : { first : Str, last : Str }
 	##
 	## name : Parser(CSV.Record, Name, _)
-	## name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.string))
+	## name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.string({})))
 	##
 	## expect CSV.parse_with(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
 	## ```
@@ -261,8 +261,8 @@ CSV := { records : List(CSV.Record) }.{
 	}
 
 	## Parse one field as a valid UTF-8 string, kept verbatim (no trimming).
-	string : Parser(Utf8.Bytes, Str, Problem)
-	string = Parser.custom(
+	string : {} -> Parser(Utf8.Bytes, Str, Problem(p))
+	string = |_| Parser.custom(
 		|bytes| {
 			match Str.from_utf8(bytes) {
 				Ok(text) => Ok({ value: text, rest: [] })
@@ -276,8 +276,8 @@ CSV := { records : List(CSV.Record) }.{
 	## The field must be ASCII decimal digits with an optional leading `+`, and
 	## fit in a U64 (the grammar of Rust's `u64::from_str`). Whitespace,
 	## underscores, signs other than `+` and `0x`-style prefixes are rejected.
-	u64 : Parser(Utf8.Bytes, U64, Problem)
-	u64 = Parser.custom(
+	u64 : {} -> Parser(Utf8.Bytes, U64, Problem(p))
+	u64 = |_| Parser.custom(
 		|bytes| {
 			match int_from_bytes(bytes, U64.from_str, False) {
 				Ok(value) => Ok({ value, rest: [] })
@@ -294,8 +294,8 @@ CSV := { records : List(CSV.Record) }.{
 	## Rust's `f64::from_str`. Magnitudes too large for an F64 become infinity
 	## and too small ones become zero. Whitespace, underscores and hexadecimal
 	## forms are rejected.
-	f64 : Parser(Utf8.Bytes, F64, Problem)
-	f64 = Parser.custom(
+	f64 : {} -> Parser(Utf8.Bytes, F64, Problem(p))
+	f64 = |_| Parser.custom(
 		|bytes| {
 			match decimal_f64(bytes) {
 				Ok(value) => Ok({ value, rest: [] })
@@ -859,7 +859,7 @@ checked_records = |source, name, header, lints| {
 smaller : U64, U64 -> U64
 smaller = |a, b| if (a < b) a else b
 
-width_problem : U64, U64 -> Parser.Problem(CSV.Problem)
+width_problem : U64, U64 -> Parser.Problem(CSV.Problem([]))
 width_problem = |found, expected| WidthMismatch({ found, expected })
 
 ## Lowercase ASCII, trim spaces, and turn runs of spaces, `-` and `_` into one `_`.
@@ -889,7 +889,7 @@ current_cell = |state| {
 	}
 }
 
-cell_error : CSV.State, Parser.Problem(CSV.Problem) -> [InvalidCsv(CSV.Error)]
+cell_error : CSV.State, Parser.Problem(CSV.Problem([])) -> [InvalidCsv(CSV.Error)]
 cell_error = |state, problem| InvalidCsv({ record: state.record, field: state.cell + 1, line: 0, column: 0, problem })
 
 cell_int : CSV.State, (Str -> Try(n, [BadNumStr])), Bool, CSV.ValueType -> Try({ value : n, rest : CSV.State }, [InvalidCsv(CSV.Error)])
@@ -949,7 +949,7 @@ dec_from_bytes = |bytes| {
 excerpt_len : U64
 excerpt_len = 40
 
-expected_problem : CSV.ValueType, List(U8) -> Parser.Problem(CSV.Problem)
+expected_problem : CSV.ValueType, List(U8) -> Parser.Problem(CSV.Problem(p))
 expected_problem = |expected, bytes| ExpectedValue({ expected, bytes: bytes.take_first(excerpt_len) })
 
 ## Explain why a record parser left fields unread, preferring the furthest
@@ -1158,7 +1158,7 @@ all_digits = |bytes| !bytes.is_empty() and bytes.all(|b| b >= '0' and b <= '9')
 lowercase_ascii : List(U8) -> List(U8)
 lowercase_ascii = |bytes| bytes.map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b)
 
-## Parse a float using the grammar documented on `CSV.f64`.
+## Parse a float using the grammar documented on `CSV.f64({})`.
 decimal_f64 : List(U8) -> Try(F64, [NotAFloat])
 decimal_f64 = |bytes| {
 	{ negative, unsigned } =
@@ -1210,7 +1210,7 @@ decimal_f64 = |bytes| {
 
 parses_u64 : Str, Try(U64, {}) -> Bool
 parses_u64 = |text, expected| {
-	actual = Utf8.parse_bytes(CSV.u64, text.to_utf8())
+	actual = Utf8.parse_bytes(CSV.u64({}), text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted
 		(Err(_), Err({})) => True
@@ -1220,7 +1220,7 @@ parses_u64 = |text, expected| {
 
 parses_f64 : Str, Try(F64, {}) -> Bool
 parses_f64 = |text, expected| {
-	actual = Utf8.parse_bytes(CSV.f64, text.to_utf8())
+	actual = Utf8.parse_bytes(CSV.f64({}), text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted or (value.is_nan() and wanted.is_nan())
 		(Err(_), Err({})) => True
@@ -1287,8 +1287,8 @@ expect error_of(records("x\n\"a\"b,c")) == Ok({ record: 2, field: 1, line: 2, co
 expect error_of(records("a,\"b")) == Ok({ record: 1, field: 2, line: 1, column: 3, problem: Syntax(UnterminatedQuotedField) })
 
 # The composable parser accepts any bytes and reports malformed fields by offset.
-expect Utf8.parse_bytes(CSV.parser, [0xFF, ',', 0xC3]) == Ok([[[0xFF], [0xC3]]])
-expect Utf8.parse_bytes(CSV.parser, "a\n\"b".to_utf8()) == Err(ParseError({ problem: Syntax(UnterminatedQuotedField), offset: 2 }))
+expect Utf8.parse_bytes(CSV.parser({}), [0xFF, ',', 0xC3]) == Ok([[[0xFF], [0xC3]]])
+expect Utf8.parse_bytes(CSV.parser({}), "a\n\"b".to_utf8()) == Err(ParseError({ problem: Syntax(UnterminatedQuotedField), offset: 2 }))
 
 # The header helper splits off the column names.
 expect CSV.split_header([]) == { header: [], rows: [] }
@@ -1296,7 +1296,7 @@ expect CSV.split_header([["a".to_utf8()], ["1".to_utf8()]]) == { header: ["a"], 
 
 # A hand-built record parser decodes every row, as in the module docs.
 user : Parser(CSV.Record, { name : Str, age : U64 }, _)
-user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
+user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.u64({})))
 
 expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 
@@ -1322,7 +1322,7 @@ expect {
 	}
 }
 expect {
-	all_fields = Parser.many(CSV.field(CSV.u64))
+	all_fields = Parser.many(CSV.field(CSV.u64({})))
 	row_error_of(CSV.decode(all_fields, [["1".to_utf8(), [0xFF, 0xFE]]])) == Ok({ record: 1, field: 2, line: 0, column: 0, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: [0xFF, 0xFE] }) })) })
 }
 
@@ -1479,7 +1479,7 @@ expect {
 
 expect {
 	name : Parser(CSV.Record, { first : Str, last : Str }, _)
-	name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.string))
+	name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.string({})))
 	CSV.parse_with(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
 }
 
@@ -1630,7 +1630,7 @@ expect {
 	encoded.all(|result| result.map_ok(|bytes| bytes.len() <= 1) == Ok(True)) and stream_records_for_test(encoded.map(|chunk| chunk ?? [])) == Ok([["a,b".to_utf8(), "é".to_utf8()], [[]]])
 }
 expect {
-	decode = Parser.many(CSV.field(CSV.u64))
+	decode = Parser.many(CSV.field(CSV.u64({})))
 	events = Streaming.read_iter(["1\nwrong\n2\n".to_utf8()].iter(), CSV.positional_decoder(decode, {}).with_errors({ error_policy: ReportInvalidRecords }))
 	match Streaming.collect_report(events) {
 		Ok({ values, errors, report }) => values == [[1], [2]] and errors.len() == 1 and errors.all(
@@ -1656,7 +1656,7 @@ expect {
 	}
 }
 expect {
-	decode = Parser.many(CSV.field(CSV.u64))
+	decode = Parser.many(CSV.field(CSV.u64({})))
 	match CSV.parse_with(decode, "bad\n\"unterminated") {
 		Err(InvalidRow(error)) => error.record == 1 and error.problem == ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: "bad".to_utf8() }) }))
 		_ => False

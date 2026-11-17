@@ -113,7 +113,7 @@ generate = |bytes| {
 }
 
 all_fields : Parser(CSV.Record, List(Str), _)
-all_fields = Parser.many(CSV.field(CSV.string))
+all_fields = Parser.many(CSV.field(CSV.string({})))
 
 show_rows : List(List(Str)) -> Str
 show_rows = |rows| Str.inspect(rows)

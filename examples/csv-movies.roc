@@ -50,12 +50,12 @@ movie_info_parser =
 			{ title, release_year, actors }
 		},
 	)
-		.keep(CSV.field(CSV.string))
-		.keep(CSV.field(CSV.u64))
+		.keep(CSV.field(CSV.string({})))
+		.keep(CSV.field(CSV.u64({})))
 		.keep(CSV.field(actors_parser))
 
 actors_parser : Parser(Utf8.Bytes, List(Str), _)
-actors_parser = CSV.string.map(
+actors_parser = CSV.string({}).map(
 	|val| {
 		val.split_on(",")
 	},

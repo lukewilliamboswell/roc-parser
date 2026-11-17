@@ -172,7 +172,7 @@ include::examples/csv-guide.roc[tag=header,indent=0]
 include::examples/csv-guide.expected[lines=11]
 ----
 
-`CSV.parser` is the same reader as a `Parser(Utf8.Bytes, List(CSV.Record), CSV.Problem)`,
+`CSV.parser({})` is the same reader as a `Parser(Utf8.Bytes, List(CSV.Record), CSV.Problem([]))`,
 for use inside larger parsers. It accepts any bytes.
 
 == Hand-built record parsers
@@ -180,8 +180,8 @@ for use inside larger parsers. It accepts any bytes.
 When a column needs custom handling, such as a list stored in one cell,
 describe one row with `CSV.record`, giving it a function that takes one
 argument per column, then add one `.keep(CSV.field(...))` per column in
-order. A field parser is any `Parser(Utf8.Bytes, a, problem)`; `CSV.string`,
-`CSV.u64` and `CSV.f64` read cells with the rules above:
+order. A field parser is any `Parser(Utf8.Bytes, a, problem)`; `CSV.string({})`,
+`CSV.u64({})` and `CSV.f64({})` read cells with the rules above:
 
 [source,roc]
 ----

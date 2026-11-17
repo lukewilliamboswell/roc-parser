@@ -29,7 +29,7 @@ parse = |input| {
 		},
 	)
 	var $sum = 0.U64
-	for event in Streaming.read_iter(chunks, CSV.positional_decoder(Parser.many(CSV.field(CSV.string)), {})) {
+	for event in Streaming.read_iter(chunks, CSV.positional_decoder(Parser.many(CSV.field(CSV.string({}))), {})) {
 		match event {
 			Ok(Value(row)) => {
 				$sum = row.fold($sum + 1, |total, field| field.to_utf8().iter().with_index().fold(total, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))

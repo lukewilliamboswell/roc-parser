@@ -20,7 +20,7 @@ import parser.Utf8
 ##   records (records are independent);
 ## - every record also parses alone, serialized with no line break.
 ##
-## Every input, UTF-8 or not, also goes through the byte-level CSV.parser and
+## Every input, UTF-8 or not, also goes through the byte-level CSV.parser({}) and
 ## CSV.decode with string and number field parsers, which must not crash on
 ## fields that are not UTF-8 and must agree with CSV.parse_records on text.
 ## An input starting with byte 0x01 has its 0xC3 bytes removed first, so that
@@ -46,22 +46,22 @@ parse = |text| {
 ## fail on any field. Nothing may crash, and source payloads stay bounded.
 check_bytes : List(U8) -> {}
 check_bytes = |bytes| {
-	match Utf8.parse_bytes(CSV.parser, bytes) {
+	match Utf8.parse_bytes(CSV.parser({}), bytes) {
 		Err(ParseError({ problem: _, offset })) if offset > bytes.len() => crash "offset beyond the input"
 		Err(_) => {}
 		Ok(rows) => {
 			when_text = |text| {
 				match parse(text) {
 					Ok(again) if again == rows => {}
-					_ => crash "CSV.parser and parse_records disagree\n${Str.inspect(text)}"
+					_ => crash "CSV.parser({}) and parse_records disagree\n${Str.inspect(text)}"
 				}
 			}
 			match Str.from_utf8(bytes) {
 				Ok(text) => when_text(text)
 				Err(_) => {}
 			}
-			strings = CSV.decode(Parser.many(CSV.field(CSV.string)), rows)
-			numbers = CSV.decode(Parser.many(CSV.field(CSV.u64)).skip(Parser.many(CSV.field(CSV.f64))), rows)
+			strings = CSV.decode(Parser.many(CSV.field(CSV.string({}))), rows)
+			numbers = CSV.decode(Parser.many(CSV.field(CSV.u64({}))).skip(Parser.many(CSV.field(CSV.f64({})))), rows)
 			_ = [bounded(strings), bounded(numbers)]
 			{}
 		}
