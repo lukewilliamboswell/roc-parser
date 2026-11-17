@@ -89,10 +89,12 @@ $ python3 scripts/readme_throughput.py --cpu 3
 ----
 
 The runner builds Roc drivers serially with `--opt=speed --debug`, then pins
-the timed runs to that CPU. It parses one deterministic document of about
-64 KiB for each concrete README format, constructs the result and consumes a
+the timed runs to that CPU. It parses one deterministic document for each
+concrete README format, constructs the result and consumes a
 checksum. CSV, QIF and OFX use whole-document collection; the markup formats
-use validated fragments. HTTP uses a Content-Length request, AsciiDoc parses
+use validated fragments. Documents are about 64 KiB, except HTTP, which uses a
+555-byte browser GET request with realistic headers and no body. Opaque body
+bytes would inflate throughput without adding parsing work. AsciiDoc parses
 without rendering, and Roc source produces a complete lossless syntax tree.
 These are representative workloads, not cross-format speed comparisons.
 

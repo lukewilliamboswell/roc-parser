@@ -23,8 +23,10 @@ TARGET_BYTES = 64 * 1024
 
 
 def documents() -> list[bench.Doc]:
-    selected = [doc for doc in bench.build_corpus() if doc.kind == "medium"
-                and (doc.format != "http" or doc.name == "post-medium")]
+    selected = [doc for doc in bench.build_corpus() if doc.kind == "medium" and doc.format != "http"]
+    # HTTP bodies are opaque bytes: a large body would inflate the advertised
+    # rate without adding parsing work. Measure the realistic browser head.
+    selected.append(bench.Doc("http", "sample-browser-get", "sample", bench.samples()["http"]["sample-browser-get"]))
     for name, head, unit, tail in (
         ("html", "<div>", '<span data-x="v">text</span>', "</div>"),
         ("svg", "<g>", '<path d="M0 0L10 10Z" pathLength="1"/>', "</g>"),

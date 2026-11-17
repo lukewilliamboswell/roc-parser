@@ -14,7 +14,10 @@ class ReadmeThroughputTests(unittest.TestCase):
                     "markdown", "asciidoc", "http", "roc-syntax"}
         self.assertEqual({document.format for document in documents}, expected)
         self.assertEqual(len(documents), len(expected))
-        self.assertTrue(all(65536 <= len(document.data) < 67000 for document in documents))
+        self.assertTrue(all(65536 <= len(document.data) < 67000 for document in documents if document.format != "http"))
+        request = next(document for document in documents if document.format == "http")
+        self.assertEqual(len(request.data), 555)
+        self.assertTrue(request.data.endswith(b"\r\n\r\n"))
         self.assertEqual([document.sha256 for document in documents],
                          [document.sha256 for document in throughput.documents()])
 
