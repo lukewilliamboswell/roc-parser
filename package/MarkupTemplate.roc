@@ -1,4 +1,5 @@
-import Markup
+import Diagnostic
+import MarkupCore
 
 ## Parsed literal plans with explicit, indexed holes. Static segments are kept
 ## separately from bound values
@@ -8,13 +9,31 @@ import Markup
 MarkupTemplate :: [].{
 
 	## Position and consumer constraint for one hole in the fixed tree.
-	Slot : { index : U64, location : Markup.Span, target : [TextSlot({ node : U64 }), AttributeSlot({ node : U64, attribute : U64 })], expected : Markup.ValueGrammar }
+	Slot : { index : U64, location : MarkupCore.Span, target : [TextSlot({ node : U64 }), AttributeSlot({ node : U64, attribute : U64 })], expected : MarkupCore.ValueGrammar }
 
 	## A template's immutable structure and its original static segments.
-	Plan : { segments : List(Str), parsed : Markup.Parsed, slots : List(Slot) }
+	Plan :: { segments : List(Str), parsed : MarkupCore.Parsed, slots : List(Slot) }.{
+
+		## Static source regions and slots established by checked parsing.
+		metadata : Plan -> PlanMetadata
+		metadata = |plan| { segments: plan.segments, parsed: plan.parsed, slots: plan.slots }
+
+		## Bind an iterator, checking the expected arity.
+		bind : Plan, Iter(a) -> Try(Bound(a), [InvalidMarkup(MarkupCore.Error)])
+		bind = |plan, values| MarkupTemplate.bind_values(plan, values)
+	}
+	PlanMetadata : { segments : List(Str), parsed : MarkupCore.Parsed, slots : List(Slot) }
+	parts : Plan -> PlanMetadata
+	parts = |plan| plan.metadata()
+	rebuild : PlanMetadata -> Plan
+	rebuild = |parts_value| Plan.{ segments: parts_value.segments, parsed: parts_value.parsed, slots: parts_value.slots }
 
 	## Values retain their original type, including closures and reactive values.
-	Bound(a) := { plan : Plan, values : List(a) }.{
+	Bound(a) :: { plan : Plan, values : List(a) }.{
+
+		## Inspect validated bindings without enabling unchecked assembly.
+		metadata : Bound(a) -> { plan : Plan, values : List(a) }
+		metadata = |bound| { plan: bound.plan, values: bound.values }
 
 		## Look up one bound value without interpreting it as markup.
 		binding : Bound(a), U64 -> Try(a, [Missing])
@@ -24,27 +43,27 @@ MarkupTemplate :: [].{
 	## Parse fixed syntax and legal text/whole-attribute holes. Parser and decoder
 	## callbacks let HTML and XML use their own normalization rules. Structural
 	## recovery is rejected because repaired positions cannot promise fixed slots.
-	parse_segments : List(Str), (Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])), (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Plan, [InvalidMarkup(Markup.Error)])
+	parse_segments : List(Str), (Str -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])), (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(Plan, [InvalidMarkup(MarkupCore.Error)])
 	parse_segments = |segments, parse, decode| parse_segments_with(segments, {}, parse, decode)
 
 	## Parse a plan with the same source, node, and slot ceilings as runtime parsing.
-	parse_segments_with : List(Str), Markup.Props, (Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])), (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Plan, [InvalidMarkup(Markup.Error)])
+	parse_segments_with : List(Str), MarkupCore.Props, (Str -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])), (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(Plan, [InvalidMarkup(MarkupCore.Error)])
 	parse_segments_with = |segments, props, parse, decode| {
 		if segments.is_empty() {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		var $source_size = 0
 		for segment in segments {
 			if segment.count_utf8_bytes() > props.max_source_bytes - $source_size {
-				return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
+				return Err(InvalidMarkup(Diagnostic.{ problem: SourceTooLarge(props.max_source_bytes), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			}
 			$source_size = $source_size + segment.count_utf8_bytes()
 		}
 		if segments.len() - 1 > props.max_slots {
-			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: TemplateSlots, max: props.max_slots }), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: TemplateSlots, max: props.max_slots, observed: AtLeast(props.max_slots + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
-		if $source_size > Markup.work_budget(props, $source_size) or segments.len() > Markup.work_budget(props, $source_size) {
-			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: TemplateWork, max: Markup.work_budget(props, $source_size) }), line: 1, column: 1 }))
+		if $source_size > MarkupCore.work_budget(props, $source_size) or segments.len() > MarkupCore.work_budget(props, $source_size) {
+			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: TemplateWork, max: MarkupCore.work_budget(props, $source_size), observed: AtLeast(MarkupCore.work_budget(props, $source_size) + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		source_text = Str.join_with(segments, "")
 		var $holes = []
@@ -62,13 +81,13 @@ MarkupTemplate :: [].{
 		parsed = match parse(source_text) {
 			Ok(value) => value
 			Err(error) => {
-				_ = classify_holes(Markup.Source.from_str(source_text), $holes, props.syntax)?
+				_ = classify_holes(MarkupCore.Source.from_str(source_text), $holes, props.syntax)?
 				return Err(error)
 			}
 		}
 		positions = classify_holes(parsed.source, $holes, props.syntax)?
 		if parsed.tree.nodes.len() > props.max_nodes {
-			return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: props.max_nodes }), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Nodes, max: props.max_nodes, observed: AtLeast(props.max_nodes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		if !parsed.diagnostics.is_empty() {
 			return Err(template_error(parsed.source, 0, 0, RecoveryRequired))
@@ -78,21 +97,21 @@ MarkupTemplate :: [].{
 
 	## Fallibly bind a manually supplied iterator, checking its arity.
 	## Stop at the first excess value; BindingCount.actual is the observed count.
-	bind : Plan, Iter(a) -> Try(Bound(a), [InvalidMarkup(Markup.Error)])
-	bind = |plan, values| {
+	bind_values : Plan, Iter(a) -> Try(Bound(a), [InvalidMarkup(MarkupCore.Error)])
+	bind_values = |plan, values| {
 		if plan.segments.is_empty() {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		expected = plan.segments.len() - 1
 		var $items = []
 		for value in values {
 			if $items.len() == expected {
-				return Err(InvalidMarkup({ problem: BindingCount({ expected: expected, actual: $items.len() + 1 }), line: 1, column: 1 }))
+				return Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: expected, actual: $items.len() + 1 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			}
 			$items = $items.append(value)
 		}
 		if $items.len() != expected {
-			return Err(InvalidMarkup({ problem: BindingCount({ expected: expected, actual: $items.len() }), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: expected, actual: $items.len() }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		Ok(Bound.{ plan, values: $items })
 	}
@@ -112,13 +131,13 @@ MarkupTemplate :: [].{
 	## Apply exact clone provenance after a format-specific tree projection.
 	## Projection edges identify newly appended copies in creation order. One
 	## logical binding can drive several rendered slots without being re-read.
-	fanout : Plan, Markup.Parsed, List({ original : U64, clone : U64 }), Markup.Props -> Try(Plan, [InvalidMarkup(Markup.Error)])
+	fanout : Plan, MarkupCore.Parsed, List({ original : U64, clone : U64 }), MarkupCore.Props -> Try(Plan, [InvalidMarkup(MarkupCore.Error)])
 	fanout = |plan, projected, clones, props| {
 		if plan.segments.is_empty() {
-			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: Interpolation({ index: 0, reason: MissingStaticSegment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		if projected.tree.nodes.len() > props.max_nodes {
-			return Err(projection_error(ResourceLimit({ resource: Nodes, max: props.max_nodes })))
+			return Err(projection_error(LimitExceeded({ resource: Nodes, max: props.max_nodes, observed: AtLeast(props.max_nodes + 1) })))
 		}
 		if projected.source.bytes != plan.parsed.source.bytes {
 			return Err(projection_error(Unsupported(TemplateSourceChanged)))
@@ -134,7 +153,7 @@ MarkupTemplate :: [].{
 			$by_node = $by_node.insert(index, ($by_node.get(index) ?? []).append(slot))
 			if reachable.contains(index) {
 				if $slots.len() >= props.max_slots {
-					return Err(projection_error(ResourceLimit({ resource: TemplateSlots, max: props.max_slots })))
+					return Err(projection_error(LimitExceeded({ resource: TemplateSlots, max: props.max_slots, observed: AtLeast(props.max_slots + 1) })))
 				}
 				$slots = $slots.append(slot)
 			}
@@ -153,7 +172,7 @@ MarkupTemplate :: [].{
 					if reachable.contains(edge.clone) {
 						for base in base_slots {
 							if $slots.len() >= props.max_slots {
-								return Err(projection_error(ResourceLimit({ resource: TemplateSlots, max: props.max_slots })))
+								return Err(projection_error(LimitExceeded({ resource: TemplateSlots, max: props.max_slots, observed: AtLeast(props.max_slots + 1) })))
 							}
 							target = match base.target {
 								TextSlot(_) => TextSlot({ node: edge.clone })
@@ -170,15 +189,15 @@ MarkupTemplate :: [].{
 	}
 
 	## Format a structural hole error for Roc's interpolation conversion hook.
-	interpolation_error : Markup.Error -> [InvalidInterpolation(Str)]
-	interpolation_error = |error| InvalidInterpolation("${error.line.to_str()}:${error.column.to_str()}: ${Str.inspect(error.problem)}")
+	interpolation_error : MarkupCore.Error -> [InvalidInterpolation(Str)]
+	interpolation_error = |error| InvalidInterpolation("${(Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line.to_str()}:${(Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column.to_str()}: ${Str.inspect(error.problem)}")
 }
 
 Hole : { index : U64, offset : U64 }
 
 Position : { hole : Hole, kind : [Data, CData, Attribute] }
 
-classify_holes : Markup.Source, List(Hole), Markup.Syntax -> Try(List(Position), [InvalidMarkup(Markup.Error)])
+classify_holes : MarkupCore.Source, List(Hole), MarkupCore.Syntax -> Try(List(Position), [InvalidMarkup(MarkupCore.Error)])
 classify_holes = |source, holes, syntax| {
 	var $positions = []
 	var $token_index = 0
@@ -256,7 +275,7 @@ classify_holes = |source, holes, syntax| {
 	Ok($positions)
 }
 
-whole_attribute : Markup.Source, Markup.Span, U64, Markup.Syntax -> Bool
+whole_attribute : MarkupCore.Source, MarkupCore.Span, U64, MarkupCore.Syntax -> Bool
 whole_attribute = |source, span, hole, syntax| {
 	bytes = source.bytes
 	var $pos = span.start + 1
@@ -310,7 +329,7 @@ whole_attribute = |source, span, hole, syntax| {
 	False
 }
 
-build_plan : List(Str), Markup.Parsed, List(Position), Markup.Props, (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
+build_plan : List(Str), MarkupCore.Parsed, List(Position), MarkupCore.Props, (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
 build_plan = |segments, parsed, positions, props, decode| {
 	# Sorting intervals and locating slots is bounded by an explicit structural
 	# progress estimate, in addition to the engine's source-scanning budget.
@@ -321,8 +340,8 @@ build_plan = |segments, parsed, positions, props, decode| {
 		$size = $size // 2
 	}
 	structural_work = (parsed.tree.nodes.len() + positions.len() + 1) * (4 + $levels * 3)
-	if structural_work > Markup.work_budget(props, parsed.source.bytes.len()) {
-		return Err(InvalidMarkup({ problem: ResourceLimit({ resource: TemplateWork, max: Markup.work_budget(props, parsed.source.bytes.len()) }), line: 1, column: 1 }))
+	if structural_work > MarkupCore.work_budget(props, parsed.source.bytes.len()) {
+		return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: TemplateWork, max: MarkupCore.work_budget(props, parsed.source.bytes.len()), observed: AtLeast(MarkupCore.work_budget(props, parsed.source.bytes.len()) + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 	}
 	var $nodes = parsed.tree.nodes
 	var $slots = []
@@ -387,7 +406,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 			}
 			match attribute_intervals.get($attribute_cursor) {
 				Ok(entry) if entry.span.start < hole.offset and entry.span.end > hole.offset => {
-					$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: AttributeSlot({ node: entry.node, attribute: entry.attribute }), expected: Language("attribute") })
+					$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: AttributeSlot({ node: entry.node, attribute: entry.attribute }), expected: Language(Attribute) })
 				}
 				_ => return Err(template_error(parsed.source, hole.offset, hole.index, LostAttributeHole))
 			}
@@ -435,7 +454,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 			Implied(at) => { start: at, end: at }
 			Cloned(copy) => copy.source
 		}
-		cdata_markup = props.syntax == XmlSyntax or ($text_namespaces.get(index) ?? NoNamespace) != Uri(Markup.html_namespace)
+		cdata_markup = props.syntax == XmlSyntax or ($text_namespaces.get(index) ?? NoNamespace) != Uri(MarkupCore.html_namespace)
 		content_end = span.end
 		var $pieces = []
 		var $start = span.start
@@ -462,7 +481,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 				$nodes = append_bounded($nodes, slot_node, props.max_nodes)?
 			}
 			$pieces = $pieces.append(slot_index)
-			$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: slot_index }), expected: Language("text") })
+			$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: slot_index }), expected: Language(Text) })
 			$start = hole.offset
 		}
 		if $start < content_end {
@@ -478,7 +497,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 		hole = insertion.hole
 		index = $nodes.len()
 		$nodes = append_bounded($nodes, { kind: Text(""), attributes: [], children: [], origin: Authored({ start: hole.offset, end: hole.offset }) }, props.max_nodes)?
-		$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: index }), expected: Language("text") })
+		$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: index }), expected: Language(Text) })
 		entry = { offset: hole.offset, node: index }
 		match insertion.parent {
 			Ok(parent) => {
@@ -509,23 +528,23 @@ build_plan = |segments, parsed, positions, props, decode| {
 	roots = merge_insertions($nodes, $roots, $at_roots)
 
 	if $nodes.len() > props.max_nodes {
-		return Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: props.max_nodes }), line: 1, column: 1 }))
+		return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Nodes, max: props.max_nodes, observed: AtLeast(props.max_nodes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 	}
 	Ok({ segments, parsed: { ..parsed, tree: { nodes: $nodes, roots } }, slots: $slots.sort_with(|a, b| if (a.index < b.index) Before else if (a.index > b.index) After else Same) })
 }
 
-Interval : { span : Markup.Span, node : U64 }
+Interval : { span : MarkupCore.Span, node : U64 }
 
 empty_interval : Interval
 empty_interval = { span: { start: 0, end: 0 }, node: 0 }
 
-empty_attribute_interval : { span : Markup.Span, node : U64, attribute : U64 }
+empty_attribute_interval : { span : MarkupCore.Span, node : U64, attribute : U64 }
 empty_attribute_interval = { span: { start: 0, end: 0 }, node: 0, attribute: 0 }
 
 order : U64, U64 -> [Before, Same, After]
 order = |a, b| if (a < b) Before else if (a > b) After else Same
 
-merge_insertions : List(Markup.Node), List(U64), List({ offset : U64, node : U64 }) -> List(U64)
+merge_insertions : List(MarkupCore.Node), List(U64), List({ offset : U64, node : U64 }) -> List(U64)
 merge_insertions = |nodes, children, insertions| {
 	var $out = []
 	var $cursor = 0
@@ -572,30 +591,30 @@ tag_name = |bytes| {
 	ascii_lower(Str.from_utf8_lossy(bytes.drop_first(start).take_first($end - start)))
 }
 
-template_error : Markup.Source, U64, U64, Markup.InterpolationProblem -> [InvalidMarkup(Markup.Error)]
+template_error : MarkupCore.Source, U64, U64, MarkupCore.InterpolationProblem -> [InvalidMarkup(MarkupCore.Error)]
 template_error = |source, offset, index, reason| {
-	at = Markup.position(source, offset)
-	InvalidMarkup({ problem: Interpolation({ index, reason }), line: at.line, column: at.column })
+	at = MarkupCore.position(source, offset)
+	InvalidMarkup(Diagnostic.{ problem: Interpolation({ index, reason }), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 }
 
-empty_node : Markup.Node
+empty_node : MarkupCore.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 
-xml_plan : List(Str) -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
-xml_plan = |segments| MarkupTemplate.parse_segments(segments, |text| Markup.parse_xml_fragment(text, Markup.svg_namespace, {}), Markup.decode_xml_text)
+xml_plan : List(Str) -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
+xml_plan = |segments| MarkupTemplate.parse_segments(segments, |text| MarkupCore.parse_xml_fragment(text, MarkupCore.svg_namespace, {}), MarkupCore.decode_xml_text)
 
 expect {
 	plan = xml_plan(["<g a='", "'>a", "b", "c</g>"])?
-	plan.slots.len() == 3 and plan.slots.map(|slot| slot.index) == [0, 1, 2] and plan.slots.first()?.target == AttributeSlot({ node: 0, attribute: 0 }) and MarkupTemplate.bind(plan, [42, 43, 44].iter())?.values == [42, 43, 44]
+	plan.slots.len() == 3 and plan.slots.map(|slot| slot.index) == [0, 1, 2] and plan.slots.first()?.target == AttributeSlot({ node: 0, attribute: 0 }) and MarkupTemplate.bind_values(plan, [42, 43, 44].iter())?.values == [42, 43, 44]
 }
 expect {
 	plan = xml_plan(["<g>a", "b", "c</g>"])?
-	root = plan.parsed.tree.nodes.get(Markup.single_root(plan.parsed.tree)?)?
+	root = plan.parsed.tree.nodes.get(MarkupCore.single_root(plan.parsed.tree)?)?
 	root.children.map(|index| plan.parsed.tree.nodes.get(index).map_ok(|node| node.kind)) == [Ok(Text("a")), Ok(Text("")), Ok(Text("b")), Ok(Text("")), Ok(Text("c"))]
 }
 expect {
 	plan = xml_plan(["<g>", "", "</g>"])?
-	root = plan.parsed.tree.nodes.get(Markup.single_root(plan.parsed.tree)?)?
+	root = plan.parsed.tree.nodes.get(MarkupCore.single_root(plan.parsed.tree)?)?
 	root.children == plan.slots.map(
 		|slot| match slot.target {
 			TextSlot(target) => target.node
@@ -617,15 +636,15 @@ expect xml_plan(["<style>", "</style>"]).is_err()
 expect xml_plan(["<g a='", "", "'/>"]).is_err()
 expect {
 	plan = xml_plan(["<g>__hole_0__&amp;", "&lt;__hole_0__</g>"])?
-	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "__hole_0__&<__hole_0__" and plan.slots.len() == 1
+	MarkupCore.text(plan.parsed.tree, MarkupCore.single_root(plan.parsed.tree)?) == "__hole_0__&<__hole_0__" and plan.slots.len() == 1
 }
 expect {
 	plan = xml_plan(["<g>", "</g>"])?
-	MarkupTemplate.bind(plan, [1, 2].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup({ problem: BindingCount({ expected: 1, actual: 2 }), line: 1, column: 1 }))
+	MarkupTemplate.bind_values(plan, [1, 2].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 2 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 }
 expect {
 	plan = xml_plan(["<g>", "</g>"])?
-	MarkupTemplate.bind(plan, [].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup({ problem: BindingCount({ expected: 1, actual: 0 }), line: 1, column: 1 }))
+	MarkupTemplate.bind_values(plan, [].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 0 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 }
 
 expect {
@@ -640,17 +659,17 @@ expect {
 }
 expect xml_plan(["<script/>", "<g/>"]).is_ok()
 
-expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_slots: 0 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
-expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_source_bytes: 6 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
-expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 1 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
-expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 2 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_ok()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_slots: 0 }, |text| MarkupCore.parse_xml_fragment(text, "", {}), MarkupCore.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_source_bytes: 6 }, |text| MarkupCore.parse_xml_fragment(text, "", {}), MarkupCore.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 1 }, |text| MarkupCore.parse_xml_fragment(text, "", {}), MarkupCore.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 2 }, |text| MarkupCore.parse_xml_fragment(text, "", {}), MarkupCore.decode_xml_text).is_ok()
 
 normalize_lines : Str -> Str
 normalize_lines = |text| Str.join_with(Str.join_with(text.split_on("\r\n"), "\n").split_on("\r"), "\n")
 
 expect {
 	plan = xml_plan(["<g><![CDATA[a&", "b<]]></g>"])?
-	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "a&b<" and plan.slots.len() == 1
+	MarkupCore.text(plan.parsed.tree, MarkupCore.single_root(plan.parsed.tree)?) == "a&b<" and plan.slots.len() == 1
 }
 expect xml_plan(["<s:script xmlns:s='http://www.w3.org/2000/svg'>", "</s:script>"]).is_err()
 expect xml_plan(["<g XMLNS='", "'/>"]).is_ok()
@@ -658,7 +677,7 @@ expect xml_plan(["<g XMLNS='", "'/>"]).is_ok()
 # A coalesced text leaf can span ordinary character data and CDATA. Decode
 # each lexical region independently so holes never need synthetic marker text
 # or partial CDATA delimiters. Binary-search the first overlapping region.
-decode_source_region : Markup.Source, U64, U64, Bool, (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Str, [InvalidMarkup(Markup.Error)])
+decode_source_region : MarkupCore.Source, U64, U64, Bool, (Str -> Try(Str, [InvalidMarkup(MarkupCore.Error)])) -> Try(Str, [InvalidMarkup(MarkupCore.Error)])
 decode_source_region = |source, start, end, cdata_markup, decode| {
 	var $low = 0
 	var $high = source.tokens.len()
@@ -694,7 +713,7 @@ decode_source_region = |source, start, end, cdata_markup, decode| {
 
 expect {
 	plan = xml_plan(["<g>a<![CDATA[b&", "<c]]>d</g>"])?
-	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "ab&<cd" and plan.slots.len() == 1
+	MarkupCore.text(plan.parsed.tree, MarkupCore.single_root(plan.parsed.tree)?) == "ab&<cd" and plan.slots.len() == 1
 }
 
 CheckedTemplate(a) := { bound : MarkupTemplate.Bound(a) }.{
@@ -714,12 +733,12 @@ expect {
 	literal.bound.values == [first, second] and literal.bound.plan.slots.len() == 2
 }
 
-expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_work_per_byte: 0 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_work_per_byte: 0 }, |text| MarkupCore.parse_xml_fragment(text, "", {}), MarkupCore.decode_xml_text).is_err()
 
-append_bounded : List(Markup.Node), Markup.Node, U64 -> Try(List(Markup.Node), [InvalidMarkup(Markup.Error)])
+append_bounded : List(MarkupCore.Node), MarkupCore.Node, U64 -> Try(List(MarkupCore.Node), [InvalidMarkup(MarkupCore.Error)])
 append_bounded = |nodes, node, limit| {
 	if nodes.len() >= limit {
-		Err(InvalidMarkup({ problem: ResourceLimit({ resource: Nodes, max: limit }), line: 1, column: 1 }))
+		Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Nodes, max: limit, observed: AtLeast(limit + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 	} else {
 		Ok(nodes.append(node))
 	}
@@ -727,16 +746,16 @@ append_bounded = |nodes, node, limit| {
 
 # A syntax parser can retain '<' inside raw text as a Text region. Generic
 # XML-shaped source splitting cannot provide this context on its own.
-raw_text_parser : Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+raw_text_parser : Str -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 raw_text_parser = |source| {
 	# Test callback models HTML's token regions for one fixed script and p.
 	# The production callback is HtmlTree's own tokenizer-backed source.
 	bytes = source.to_utf8()
-	closing = source.split_first("</script>").map_err(|_| InvalidMarkup({ problem: Unsupported(MissingScriptEnd), line: 1, column: 1 }))?
+	closing = source.split_first("</script>").map_err(|_| InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingScriptEnd), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
 	end_script_text = closing.before.count_utf8_bytes()
 	p_start = end_script_text + 9
 	p_end = bytes.len()
-	Ok({ source: Markup.Source.from_tokens(bytes, [{ kind: Tag, span: { start: 0, end: 8 } }, { kind: Text, span: { start: 8, end: end_script_text } }, { kind: Tag, span: { start: end_script_text, end: p_start } }, { kind: Tag, span: { start: p_start, end: p_start + 3 } }, { kind: Tag, span: { start: p_start + 3, end: p_end } }]), tree: { nodes: [{ kind: Element({ namespace: Uri(Markup.html_namespace), local: "script", prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: p_start }) }, { kind: Text("if(a<b)x()"), attributes: [], children: [], origin: Authored({ start: 8, end: end_script_text }) }, { kind: Element({ namespace: Uri(Markup.html_namespace), local: "p", prefix: Unprefixed }), attributes: [], children: [], origin: Authored({ start: p_start, end: p_end }) }], roots: [0, 2] }, diagnostics: [] })
+	Ok({ source: MarkupCore.Source.from_tokens(bytes, [{ kind: Tag, span: { start: 0, end: 8 } }, { kind: Text, span: { start: 8, end: end_script_text } }, { kind: Tag, span: { start: end_script_text, end: p_start } }, { kind: Tag, span: { start: p_start, end: p_start + 3 } }, { kind: Tag, span: { start: p_start + 3, end: p_end } }]), tree: { nodes: [{ kind: Element({ namespace: Uri(MarkupCore.html_namespace), local: "script", prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: p_start }) }, { kind: Text("if(a<b)x()"), attributes: [], children: [], origin: Authored({ start: 8, end: end_script_text }) }, { kind: Element({ namespace: Uri(MarkupCore.html_namespace), local: "p", prefix: Unprefixed }), attributes: [], children: [], origin: Authored({ start: p_start, end: p_end }) }], roots: [0, 2] }, diagnostics: [] })
 }
 
 expect MarkupTemplate.parse_segments_with(["<script>if(a<b)x()</script><p>", "</p>"], { syntax: HtmlSyntax }, raw_text_parser, |text| Ok(text)).is_ok()
@@ -748,10 +767,10 @@ slot_node_index = |slot| match slot.target {
 	AttributeSlot(target) => target.node
 }
 
-projection_error : Markup.Problem -> [InvalidMarkup(Markup.Error)]
-projection_error = |problem| InvalidMarkup({ problem, line: 1, column: 1 })
+projection_error : MarkupCore.Problem -> [InvalidMarkup(MarkupCore.Error)]
+projection_error = |problem| InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: 1, column: 1 }), path: [] })
 
-reachable_nodes : Markup.Tree -> Try(Set(U64), [InvalidMarkup(Markup.Error)])
+reachable_nodes : MarkupCore.Tree -> Try(Set(U64), [InvalidMarkup(MarkupCore.Error)])
 reachable_nodes = |tree| {
 	var $seen = Set.empty()
 	var $pending = tree.roots
@@ -774,7 +793,7 @@ reachable_nodes = |tree| {
 
 # Independent test projection copies the already-parsed arena with exact IDs.
 # Coincident zero-width source ranges deliberately cannot identify the holes.
-clone_plan_roots : MarkupTemplate.Plan -> { projected : Markup.Parsed, clones : List({ original : U64, clone : U64 }) }
+clone_plan_roots : MarkupTemplate.Plan -> { projected : MarkupCore.Parsed, clones : List({ original : U64, clone : U64 }) }
 clone_plan_roots = |plan| {
 	count = plan.parsed.tree.nodes.len()
 	copies = plan.parsed.tree.nodes.map(
@@ -800,7 +819,7 @@ expect {
 	plan = xml_plan(["<g>", "", "</g>"])?
 	projection = clone_plan_roots(plan)
 	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, {})?
-	fanned.slots.map(|slot| (slot.index, slot_node_index(slot))) == [(0, 1), (0, 4), (1, 2), (1, 5)] and MarkupTemplate.bind(fanned, [42, 43].iter())?.values == [42, 43]
+	fanned.slots.map(|slot| (slot.index, slot_node_index(slot))) == [(0, 1), (0, 4), (1, 2), (1, 5)] and MarkupTemplate.bind_values(fanned, [42, 43].iter())?.values == [42, 43]
 }
 expect {
 	plan = xml_plan(["<g title='", "'>", "</g>"])?
@@ -812,7 +831,7 @@ expect {
 	plan = xml_plan(["<g>", "</g>"])?
 	projection = clone_plan_roots(plan)
 	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, {})?
-	MarkupTemplate.bind(fanned, [42, 43].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup({ problem: BindingCount({ expected: 1, actual: 2 }), line: 1, column: 1 }))
+	MarkupTemplate.bind_values(fanned, [42, 43].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup(Diagnostic.{ problem: BindingCount({ expected: 1, actual: 2 }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 }
 expect {
 	plan = xml_plan(["<g title='", "'>", "</g>"])?
@@ -823,7 +842,7 @@ expect {
 	plan = xml_plan(["<g/>"])?
 	projection = clone_plan_roots(plan)
 	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, { max_slots: 0 })?
-	fanned.slots.is_empty() and MarkupTemplate.bind(fanned, [].iter()).is_ok()
+	fanned.slots.is_empty() and MarkupTemplate.bind_values(fanned, [].iter()).is_ok()
 }
 expect {
 	plan = xml_plan(["<g>", "</g>"])?
@@ -834,6 +853,6 @@ expect {
 }
 expect {
 	plan : MarkupTemplate.Plan
-	plan = { segments: [], parsed: { source: Markup.Source.from_str(""), tree: { nodes: [], roots: [] }, diagnostics: [] }, slots: [] }
-	MarkupTemplate.bind(plan, [].iter()).is_err() and MarkupTemplate.fanout(plan, plan.parsed, [], { max_slots: 0 }).is_err()
+	plan = { segments: [], parsed: { source: MarkupCore.Source.from_str(""), tree: { nodes: [], roots: [] }, diagnostics: [] }, slots: [] }
+	MarkupTemplate.bind_values(plan, [].iter()).is_err() and MarkupTemplate.fanout(plan, plan.parsed, [], { max_slots: 0 }).is_err()
 }

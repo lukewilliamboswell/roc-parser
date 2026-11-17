@@ -1,7 +1,9 @@
-import Markup
+import Parser
+import Diagnostic
+import SvgPath
+import MarkupCore
 import MarkupValidate
 import MarkupTemplate
-import Literal
 import Html
 import HtmlTemplate
 import HtmlTree
@@ -10,39 +12,41 @@ import HtmlValidate
 ## Strict namespace-aware Svg documents and fragments.
 ## XML syntax is the default; fragments start in the Svg namespace.
 ## Original bytes and source spans remain available beside the decoded tree.
-Svg := { parsed : Markup.Parsed }.{
+Svg := { parsed : MarkupCore.Parsed }.{
+
+	Path : SvgPath
 
 	## Common parsing, validation and resource-limit options.
-	Props : Markup.Props
+	Props : MarkupCore.Props
 
 	## Source, diagnostic name, and explicit parsing/validation options.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Parse a complete namespaced document with strict defaults.
-	parse_str : Str -> Try(Svg, [InvalidMarkup(Markup.Error)])
+	parse_str : Str -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
 	parse_str = |source| parse_with(source, {})
 
 	## Parse a complete document with the requested syntax and checks.
-	parse_with : Str, Props -> Try(Svg, [InvalidMarkup(Markup.Error)])
+	parse_with : Str, Props -> Try(Svg, [InvalidMarkup(MarkupCore.Error)])
 	parse_with = |source, props| {
 		parsed = if props.syntax == HtmlSyntax {
-			HtmlTree.parse(source, True, { namespace: Markup.html_namespace, name: "body", defer_projection: True }, props)?
+			HtmlTree.parse(source, True, { namespace: MarkupCore.html_namespace, name: "body", defer_projection: True }, props)?
 		} else {
-			Markup.parse_xml(source, props)?
+			MarkupCore.parse_xml(source, props)?
 		}
-		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.svg_namespace), local: "svg" }, actual: Fragment }), line: 1, column: 1 }))?
-		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported(MissingRoot), line: 1, column: 1 }))
+		index = MarkupCore.single_root(parsed.tree).map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		match node.kind {
-			Element(name) if name.namespace == Uri(Markup.svg_namespace) and name.local == "svg" => {}
-			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.svg_namespace), local: "svg" }, actual: Element(name) }), line: 1, column: 1 }))
-			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.svg_namespace), local: "svg" }, actual: Text }), line: 1, column: 1 }))
+			Element(name) if name.namespace == Uri(MarkupCore.svg_namespace) and name.local == "svg" => {}
+			Element(name) => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Element(name) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+			_ => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Text }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		validated = validate_tree(parsed, props, [])?
 		Ok(Svg.{ parsed: project_checked(validated, props)? })
 	}
 
 	## Parse any number of fragment roots in the format's default namespace.
-	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
+	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
 	parse_fragment = |source, props| {
 		parsed = fragment_syntax(source, props)?
 		validated = validate_tree(parsed, props, [])?
@@ -50,27 +54,27 @@ Svg := { parsed : Markup.Parsed }.{
 	}
 
 	## Validate fixed markup, skipping unavailable whole attribute holes.
-	validate_tree : Markup.Parsed, Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	validate_tree : MarkupCore.Parsed, Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(Svg, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
 
 	## Convert a checked complete document literal.
 	from_quote : Str -> Try(Svg, [BadQuotedBytes(Str)])
 	from_quote = |source| validate({ source: source })
 
 	## Parse fixed literal segments into an indexed plan without binding values.
-	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
+	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
 	parse_segments = |segments, props| {
 		if props.syntax == HtmlSyntax {
-			return HtmlTemplate.parse_segments(segments, { name: "svg", namespace: Markup.svg_namespace }, props)
+			return HtmlTemplate.parse_segments(segments, { name: "svg", namespace: MarkupCore.svg_namespace }, props)
 		}
-		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), Markup.decode_xml_text)?
+		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), MarkupCore.decode_xml_text)?
 		_ = MarkupValidate.text_slots(plan)?
 		var $holes = []
-		for slot in plan.slots {
+		for slot in plan.metadata().slots {
 			match slot.target {
 				AttributeSlot(target) => {
 					$holes = $holes.append(target)
@@ -78,14 +82,14 @@ Svg := { parsed : Markup.Parsed }.{
 				_ => {}
 			}
 		}
-		parsed = validate_tree(plan.parsed, props, $holes)?
-		slots = plan.slots.map(
+		parsed = validate_tree(plan.metadata().parsed, props, $holes)?
+		slots = plan.metadata().slots.map(
 			|slot| {
 				match slot.target {
 					AttributeSlot(target) => {
 						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 						match (node.kind, node.attributes.get(target.attribute)) {
-							(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language("namespaced attribute") else if (name.namespace == Uri(Markup.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
+							(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language(NamespacedAttribute) else if (name.namespace == Uri(MarkupCore.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(MarkupCore.svg_namespace), name.local, attr.name.local) }
 							_ => slot
 						}
 					}
@@ -93,7 +97,7 @@ Svg := { parsed : Markup.Parsed }.{
 				}
 			},
 		)
-		Ok({ ..plan, parsed, slots })
+		Ok(MarkupTemplate.rebuild({ ..plan.metadata(), parsed, slots }))
 	}
 
 	## A parsed fragment bound to homogeneous downstream values, including signals.
@@ -115,29 +119,29 @@ SvgTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 	## A static fragment can use the same template type.
 	from_quote : Str -> Try(Svg.Template(a), [BadQuotedBytes(Str)])
 	from_quote = |source| {
-		plan = Svg.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))?
+		plan = Svg.parse_segments([source], {}).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("Svg", error))?
 		Ok(Svg.Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
 	}
 
 	## Fallibly bind an explicitly parsed plan, checking the binding count.
-	bind : MarkupTemplate.Plan, Iter(a) -> Try(Svg.Template(a), [InvalidMarkup(Markup.Error)])
-	bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Svg.Template.{ bound })
+	bind : MarkupTemplate.Plan, Iter(a) -> Try(Svg.Template(a), [InvalidMarkup(MarkupCore.Error)])
+	bind = |plan, values| MarkupTemplate.bind_values(plan, values).map_ok(|bound| Svg.Template.{ bound })
 }
 
-SvgFragment := { parsed : Markup.Parsed }.{
+SvgFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Check imported fragment text with explicit options and a diagnostic name.
 	validate : Svg.ValidationProps -> Try(Svg.Fragment, [BadQuotedBytes(Str)])
-	validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+	validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
 
 	## Check a fragment literal with strict defaults.
 	from_quote : Str -> Try(Svg.Fragment, [BadQuotedBytes(Str)])
-	from_quote = |source| Svg.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))
+	from_quote = |source| Svg.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("Svg", error))
 
 	## Require a single element root for downstream row/component templates.
-	single_element : Svg.Fragment -> Try(Markup.Node, [RootCount(U64)])
+	single_element : Svg.Fragment -> Try(MarkupCore.Node, [RootCount(U64)])
 	single_element = |fragment| {
-		index = Markup.single_root(fragment.parsed.tree)?
+		index = MarkupCore.single_root(fragment.parsed.tree)?
 		Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }
@@ -177,13 +181,13 @@ expect {
 	label = "<path/>"
 	value : Svg.Template(Str)
 	value = "<text>${label}</text>"
-	value.bound.values == ["<path/>"] and value.bound.plan.slots.len() == 1
+	value.bound.metadata().values == ["<path/>"] and value.bound.metadata().plan.metadata().slots.len() == 1
 }
 expect {
 	x = 42.U64
 	value : Svg.Template(U64)
 	value = "<circle cx='${x}' r='2'/>"
-	value.bound.values == [42] and value.bound.plan.slots.map(|s| s.expected) == [Length]
+	value.bound.metadata().values == [42] and value.bound.metadata().plan.metadata().slots.map(|s| s.expected) == [Length]
 }
 expect Svg.parse_segments(["<circle r='", "'/>"], {}).is_ok()
 expect Svg.parse_segments(["<path ", "='1'/>"], {}).is_err()
@@ -191,11 +195,11 @@ expect Svg.parse_segments(["<path d='M0 0 ", "'/>"], {}).is_err()
 expect Svg.parse_segments(["<svg xmlns='", "'/>"], {}).is_err()
 expect Svg.parse_segments(["<text>&am", "p;</text>"], {}).is_err()
 
-fragment_syntax : Str, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+fragment_syntax : Str, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
-	HtmlTree.parse(source, True, { namespace: Markup.svg_namespace, name: "svg", defer_projection: True }, props)
+	HtmlTree.parse(source, True, { namespace: MarkupCore.svg_namespace, name: "svg", defer_projection: True }, props)
 } else {
-	Markup.parse_xml_fragment(source, Markup.svg_namespace, props)
+	MarkupCore.parse_xml_fragment(source, MarkupCore.svg_namespace, props)
 }
 expect Svg.parse_fragment("<lineargradient viewbox='0 0 10 10'/>", { syntax: HtmlSyntax }).is_err()
 expect Svg.parse_fragment("<lineargradient id='g'/>", { syntax: HtmlSyntax }).is_ok()
@@ -224,12 +228,12 @@ expect Svg.parse_fragment("<svg xmlns:x='urn:x' xmlns:r='urn:r'><path d='M0 0'/>
 
 expect {
 	p = Svg.parse_segments(["<circle xmlns:x='urn:extension' x:r='", "'></circle>"], { allow_unknown_attributes: True })?
-	p.slots.first()?.expected == Language("namespaced attribute")
+	p.metadata().slots.first()?.expected == Language(NamespacedAttribute)
 }
 
 expect {
 	p = Svg.parse_segments(["<g r='", "'/>"], { allow_unknown_attributes: True })?
-	p.slots.first()?.expected == Language("extension attribute")
+	p.metadata().slots.first()?.expected == Language(ExtensionAttribute)
 }
 
 expect match Svg.parse_with("<svg viewbox='0 0 1 1'></svg>", { syntax: HtmlSyntax, strict_foreign_spelling: True }) {

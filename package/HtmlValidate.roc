@@ -1,14 +1,15 @@
-import Markup
+import Parser
+import Diagnostic
+import MarkupCore
 import MarkupValidate
 import HtmlTokenizer
 import DomName
 import MarkupVocabulary
-import Literal
 
 ## HTML authoring checks, separate from browser tree recovery. Embedded CSS and
 ## JavaScript remain source text rather than claims of validated programs.
 HtmlValidate :: [].{
-	validate : Markup.Parsed, Markup.Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	validate : MarkupCore.Parsed, MarkupCore.Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	validate = |parsed, props, holes| {
 		var $diagnostics = parsed.diagnostics
 		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
@@ -16,9 +17,9 @@ HtmlValidate :: [].{
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, in_datalist: False, selected_context: False }
 			$pending = $pending.drop_last(1)
-			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported(InvalidTreeIndex), line: 1, column: 1 }))
+			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(InvalidTreeIndex), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			match node.kind {
-				Element(name) if name.namespace == Uri(Markup.html_namespace) => {
+				Element(name) if name.namespace == Uri(MarkupCore.html_namespace) => {
 					known_element = elements(name.local)
 					custom = !known_element and custom_element(name.local)
 					if !known_element and !custom {
@@ -30,11 +31,11 @@ HtmlValidate :: [].{
 							Implied(at) => at
 							Cloned(info) => info.source.start
 						}
-						at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
+						at = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
 						if $diagnostics.len() >= props.max_diagnostics {
-							return fail(parsed, node, ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }))
+							return fail(parsed, node, LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }))
 						}
-						$diagnostics = $diagnostics.append({ problem: UnknownElement(name.local), line: at.line, column: at.column })
+						$diagnostics = $diagnostics.append(Diagnostic.{ problem: UnknownElement(name.local), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 					}
 					var $at = 0
 					for attr in node.attributes {
@@ -53,11 +54,11 @@ HtmlValidate :: [].{
 							if !props.allow_unknown_attributes {
 								return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
 							}
-							at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
+							at = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
 							if $diagnostics.len() >= props.max_diagnostics {
-								return attr_fail(parsed, attr, ResourceLimit({ resource: Diagnostics, max: props.max_diagnostics }))
+								return attr_fail(parsed, attr, LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }))
 							}
-							$diagnostics = $diagnostics.append({ problem: UnknownAttribute({ element: name.local, attribute: attr.name.local }), line: at.line, column: at.column })
+							$diagnostics = $diagnostics.append(Diagnostic.{ problem: UnknownAttribute({ element: name.local, attribute: attr.name.local }), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 						}
 						if props.check_values and known and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $at)) {
 							expected = grammar(name.local, attr.name.local)
@@ -113,7 +114,7 @@ HtmlValidate :: [].{
 	AttributeSummary : { href : Bool, tabindex : Bool, hidden_input : Bool, controls : Bool, usemap : Bool, label : Bool, value : Bool, html_encoding : Bool, font_breakout : Bool }
 	empty_attributes : AttributeSummary
 	empty_attributes = { href: False, tabindex: False, hidden_input: False, controls: False, usemap: False, label: False, value: False, html_encoding: False, font_breakout: False }
-	summarize_attributes : List({ name : Markup.Name, value : Str, ..extra }) -> AttributeSummary
+	summarize_attributes : List({ name : MarkupCore.Name, value : Str, ..extra }) -> AttributeSummary
 	summarize_attributes = |attributes| {
 		var $seen_type = False
 		var $seen_encoding = False
@@ -156,7 +157,7 @@ HtmlValidate :: [].{
 		}
 		$summary
 	}
-	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : Markup.ChildGrammar })])
+	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : MarkupCore.ChildGrammar })])
 	context_problem = |context, element, attributes| {
 		if element == "a" and context.anchor {
 			return Err(InvalidChildren({ element: "a", expected: NoNestedAnchor }))
@@ -172,8 +173,8 @@ HtmlValidate :: [].{
 		}
 		Ok({})
 	}
-	descend : ContextState, Markup.Name -> ContextState
-	descend = |context, element| if element.namespace == Uri(Markup.html_namespace) {
+	descend : ContextState, MarkupCore.Name -> ContextState
+	descend = |context, element| if element.namespace == Uri(MarkupCore.html_namespace) {
 		{ parent: element.local, interactive: context.interactive or element.local == "button", anchor: context.anchor or element.local == "a", option_context: context.option_context or ["select", "optgroup", "datalist"].contains(element.local), in_option: context.in_option or element.local == "option", in_datalist: context.in_datalist or element.local == "datalist", selected_context: context.selected_context or (element.local == "button" and context.parent == "select") }
 	} else { ..context, parent: "" }
 	parent_allowed : ContextState, Str -> Bool
@@ -212,15 +213,15 @@ HtmlValidate :: [].{
 			_ => AnyChildren
 		}
 	}
-	child_expected : ChildRule, Markup.Name -> Try({}, [Rejected(Markup.ChildGrammar)])
+	child_expected : ChildRule, MarkupCore.Name -> Try({}, [Rejected(MarkupCore.ChildGrammar)])
 	child_expected = |rule, element| match rule {
 		AnyChildren => Ok({})
 		NoChildren => Err(Rejected(NoChildren))
 		TextOnly => Err(Rejected(TextOnly))
-		ElementNames(names) => if (element.namespace == Uri(Markup.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(NamedElements(names)))
+		ElementNames(names) => if (element.namespace == Uri(MarkupCore.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(NamedElements(names)))
 	}
-	text_expected : ChildRule, Str -> Try({}, [Rejected(Markup.ChildGrammar)])
-	text_expected = |rule, text| if (Markup.whitespace(text)) Ok({}) else match rule {
+	text_expected : ChildRule, Str -> Try({}, [Rejected(MarkupCore.ChildGrammar)])
+	text_expected = |rule, text| if (MarkupCore.whitespace(text)) Ok({}) else match rule {
 		NoChildren | ElementNames(_) => Err(Rejected(ElementsOnly))
 		_ => Ok({})
 	}
@@ -231,7 +232,7 @@ HtmlValidate :: [].{
 	custom_element_name = custom_element
 	boolean_attribute : Str, Str -> Bool
 	boolean_attribute = |element, attr| allowed(element, attr) and (booleans(attr) or (element == "iframe" and attr == "credentialless")) and ((attr != "playsinline" and attr != "disablepictureinpicture") or element == "video")
-	attribute_known : Str, Markup.Name -> Bool
+	attribute_known : Str, MarkupCore.Name -> Bool
 	attribute_known = |element, name| match name.namespace {
 		NoNamespace => allowed(element, name.local)
 		Uri("http://www.w3.org/2000/xmlns/") => True
@@ -276,10 +277,10 @@ HtmlValidate :: [].{
 		}
 	}
 
-	grammar : Str, Str -> Markup.ValueGrammar
+	grammar : Str, Str -> MarkupCore.ValueGrammar
 	grammar = |element, attr| {
 		if !allowed(element, attr) {
-			return Language("extension attribute")
+			return Language(ExtensionAttribute)
 		}
 		if booleans(attr) {
 			return Keyword(["", attr])
@@ -308,7 +309,7 @@ HtmlValidate :: [].{
 			"width" | "height" | "cols" | "rows" | "colspan" | "rowspan" | "size" | "maxlength" | "minlength" | "span" => NonnegativeNumber
 			"tabindex" | "start" => Number
 			"class" | "rel" | "headers" | "sandbox" | "aria-labelledby" | "aria-describedby" => TokenList
-			_ => Language("HTML attribute")
+			_ => Language(HTMLAttribute)
 		}
 	}
 }
@@ -339,13 +340,13 @@ fail = |parsed, node, problem| {
 		Implied(o) => o
 		Cloned(info) => info.source.start
 	}
-	p = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
-	Err(InvalidMarkup({ problem, line: p.line, column: p.column }))
+	p = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
+	Err(InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: p.line, column: p.column }), path: [] }))
 }
 
 attr_fail = |parsed, attr, problem| {
-	p = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
-	Err(InvalidMarkup({ problem, line: p.line, column: p.column }))
+	p = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
+	Err(InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: p.line, column: p.column }), path: [] }))
 }
 
 elements = MarkupVocabulary.html_element_name
@@ -532,7 +533,7 @@ interactive_summary = |attribute_facts, name| ["button", "details", "embed", "if
 
 context_of = |item| { parent: item.parent, interactive: item.interactive, anchor: item.anchor, option_context: item.option_context, in_option: item.in_option, in_datalist: item.in_datalist, selected_context: item.selected_context }
 
-check_children : Markup.Parsed, Markup.Node, Str, Bool -> Try({}, [InvalidMarkup(Markup.Error)])
+check_children : MarkupCore.Parsed, MarkupCore.Node, Str, Bool -> Try({}, [InvalidMarkup(MarkupCore.Error)])
 check_children = |parsed, node, name, in_datalist| check_children_with_attributes(parsed, node, name, in_datalist, if (name == "option") HtmlValidate.summarize_attributes(node.attributes) else HtmlValidate.empty_attributes)
 
 check_children_with_attributes = |parsed, node, name, in_datalist, attribute_facts| {
@@ -587,24 +588,24 @@ expect HtmlValidate.enumerated_values("input", "autocomplete") == Err(NotEnumera
 expect HtmlValidate.enumerated_values("input", "capture") == Ok(["user", "environment"])
 expect HtmlValidate.enumerated_values("dialog", "closedby") == Ok(["any", "closerequest", "none"])
 expect HtmlValidate.enumerated_values("div", "aria-hidden") == Ok(["true", "false", "undefined"])
-expect HtmlValidate.grammar("div", "inputmode") == Language("HTML attribute")
+expect HtmlValidate.grammar("div", "inputmode") == Language(HTMLAttribute)
 expect HtmlValidate.custom_element_name("x-a=b") and HtmlValidate.custom_element_name("x:a-b") and HtmlValidate.custom_element_name("x-<")
 expect HtmlValidate.custom_element_name("x-\u(80)") and HtmlValidate.custom_element_name("x-\u(F0000)")
 expect !HtmlValidate.custom_element_name("x-a>b") and !HtmlValidate.custom_element_name("x-a b") and !HtmlValidate.custom_element_name("x-\u(0)")
 expect !HtmlValidate.custom_element_name("x-Ab") and !HtmlValidate.custom_element_name("font-face") and !HtmlValidate.custom_element_name("nohyphen")
 
 expect HtmlValidate.enumerated_values("td", "scope") == Err(NotEnumerated) and HtmlValidate.enumerated_values("th", "scope") == Ok(["row", "col", "rowgroup", "colgroup"])
-expect HtmlValidate.grammar("iframe", "credentialless") == Language("HTML attribute")
+expect HtmlValidate.grammar("iframe", "credentialless") == Language(HTMLAttribute)
 
 expect {
-	parent : Markup.Node
-	parent = { kind: Element({ local: "p", namespace: Uri(Markup.html_namespace), prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: 8 }) }
-	child : Markup.Node
+	parent : MarkupCore.Node
+	parent = { kind: Element({ local: "p", namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: 8 }) }
+	child : MarkupCore.Node
 	child = { kind: Text("x"), attributes: [], children: [], origin: Authored({ start: 3, end: 4 }) }
-	parsed : Markup.Parsed
-	parsed = { source: Markup.Source.from_bytes("<p>x</p>".to_utf8()), tree: { nodes: [parent, child], roots: [0] }, diagnostics: [] }
+	parsed : MarkupCore.Parsed
+	parsed = { source: MarkupCore.Source.from_bytes("<p>x</p>".to_utf8()), tree: { nodes: [parent, child], roots: [0] }, diagnostics: [] }
 	invalid = { ..parent, children: [1, 2] }
-	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup({ problem: Unsupported(InvalidChildIndex), line: 1, column: 1 }))
+	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(InvalidChildIndex), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 }
 
 context_frame : U64, HtmlValidate.ContextState -> _

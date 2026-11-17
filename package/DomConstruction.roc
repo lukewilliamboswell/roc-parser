@@ -1,4 +1,4 @@
-import Markup
+import MarkupCore
 import HtmlContextRules as Rules
 import MarkupVocabulary
 
@@ -12,13 +12,14 @@ DomConstruction :: [].{
 
 	## Opaque immediate-parent identity and finite inherited scope facts.
 	Context : ConstructionContext
+	Props : ConstructionContext.Props
 
 	## Seed a fresh enclosing boundary; no outer ancestors are assumed.
-	RootProps := { parent : Markup.Name, scripting : Bool ?? True }
+	RootProps := { parent : MarkupCore.Name, scripting : Bool ?? True }
 
 	RepairRule : [CloseParagraph, InsertTableSection, InvalidTableChild, TablePartOutsideTable, NestedAnchor, NestedForm, NestedButton, CloseListItem, CloseDescriptionItem, CloseOption, CloseHeading, ChildOfVoid, ElementInTextContent, FosterTableText]
-	RepairDetail : { rule : RepairRule, parent : Markup.Name, child : [Element(Markup.Name), Text] }
-	Problem : [Repair(RepairDetail), Unsupported({ parent : Markup.Name, child : Markup.Name, reason : [AttributeDependentTableInput] })]
+	RepairDetail : { rule : RepairRule, parent : MarkupCore.Name, child : [Element(MarkupCore.Name), Text] }
+	Problem : [Repair(RepairDetail), Unsupported({ parent : MarkupCore.Name, child : MarkupCore.Name, reason : [AttributeDependentTableInput] })]
 
 	## Total for every explicit name, including unknown and non-HTML names.
 	root : RootProps -> Context
@@ -26,7 +27,7 @@ DomConstruction :: [].{
 
 	## Check one child and return its independent descendant context. Reuse the
 	## original context for siblings; each call does constant work in tree depth.
-	enter : Context, Markup.Name -> Try(Context, Problem)
+	enter : Context, MarkupCore.Name -> Try(Context, Problem)
 	enter = |context, child| {
 		parent_html = html(context.parent)
 		if parent_html and MarkupVocabulary.html_void(context.parent.local) {
@@ -121,9 +122,23 @@ DomConstruction :: [].{
 }
 
 # No ancestor, recursive context, node arena, source or attribute list is kept.
-ConstructionContext :: { parent : Markup.Name, scripting : Bool, scopes : Rules.Scopes, anchor : Bool, form_pointer : Bool, in_template : Bool, table_form : Bool, mode : [Body, Table, Section, Row, Colgroup] }
+ConstructionContext :: { parent : MarkupCore.Name, scripting : Bool, scopes : Rules.Scopes, anchor : Bool, form_pointer : Bool, in_template : Bool, table_form : Bool, mode : [Body, Table, Section, Row, Colgroup] }.{
 
-html = |name| name.namespace == Uri(Markup.html_namespace)
+	## Seed a bounded HTML repair context at an explicit parent.
+	Props := { parent : MarkupCore.Name, scripting : [Enabled, Disabled] ?? Enabled }
+	from_parent : Props -> ConstructionContext
+	from_parent = |props| DomConstruction.root({ parent: props.parent, scripting: props.scripting == Enabled })
+
+	## Check a new child and return its descendant context.
+	child : ConstructionContext, MarkupCore.Name -> Try(ConstructionContext, DomConstruction.Problem)
+	child = |context, name| DomConstruction.enter(context, name)
+
+	## Check decoded text placement.
+	text : ConstructionContext, Str -> Try({}, DomConstruction.Problem)
+	text = |context, value| DomConstruction.text(context, value)
+}
+
+html = |name| name.namespace == Uri(MarkupCore.html_namespace)
 
 repair = |context, child, rule| Err(Repair({ rule, parent: context.parent, child }))
 
@@ -148,7 +163,7 @@ descend = |context, child| {
 	ConstructionContext.{ parent: child, scripting: context.scripting, scopes: Rules.descend(context.scopes, namespace, child.local), anchor: if (is_html and Rules.formatting_marker(child.local)) False else context.anchor or (is_html and child.local == "a"), form_pointer: context.form_pointer or (is_html and child.local == "form" and (!context.in_template or context.mode != Body)), in_template: context.in_template or (is_html and child.local == "template"), table_form: is_html and child.local == "form" and context.mode != Body, mode }
 }
 
-h = |local| { namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local }
+h = |local| { namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed, local }
 
 seed = |local| DomConstruction.root({ parent: h(local) })
 
@@ -223,8 +238,8 @@ expect {
 	DomConstruction.text(child, "anything").is_ok() and rule(seed("math"), "div").is_ok()
 }
 expect {
-	parent = { namespace: Uri(Markup.svg_namespace), prefix: Prefix("svg"), local: "foreignObject" }
-	child = { namespace: Uri(Markup.html_namespace), prefix: Prefix("html"), local: "p" }
+	parent = { namespace: Uri(MarkupCore.svg_namespace), prefix: Prefix("svg"), local: "foreignObject" }
+	child = { namespace: Uri(MarkupCore.html_namespace), prefix: Prefix("html"), local: "p" }
 	context = DomConstruction.enter(DomConstruction.root({ parent: parent }), child)?
 	DomConstruction.enter(context, h("div")).map_ok(|_| {}) == Err(Repair({ rule: CloseParagraph, parent: child, child: Element(h("div")) }))
 }
@@ -239,7 +254,7 @@ expect {
 	child = { namespace: Uri("urn:widgets"), prefix: Prefix("w"), local: "PANEL" }
 	context = DomConstruction.enter(DomConstruction.root({ parent: parent }), child)?
 	# Return the exact supplied identity in subsequent diagnostics.
-	html_child = { namespace: Uri(Markup.html_namespace), prefix: Prefix("h"), local: "br" }
+	html_child = { namespace: Uri(MarkupCore.html_namespace), prefix: Prefix("h"), local: "br" }
 	void = DomConstruction.enter(context, html_child)?
 	DomConstruction.enter(void, parent).map_ok(|_| {}) == Err(Repair({ rule: ChildOfVoid, parent: html_child, child: Element(parent) }))
 }

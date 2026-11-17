@@ -1,4 +1,4 @@
-import Markup
+import MarkupCore
 import MarkupNameTables
 
 # Shared names used by authoring checks and public consumer facts.
@@ -38,7 +38,7 @@ MarkupVocabulary :: [].{
 
 	# Only the token immediately after an emitted HTML start tag is eligible.
 	drops_initial_newline : Str, Str -> Bool
-	drops_initial_newline = |namespace, local| namespace == Markup.html_namespace and (local == "pre" or local == "listing" or local == "textarea")
+	drops_initial_newline = |namespace, local| namespace == MarkupCore.html_namespace and (local == "pre" or local == "listing" or local == "textarea")
 
 	# Finite single-value ARIA states, shared across HTML, SVG and MathML.
 	# Token-list values such as aria-relevant and aria-dropeffect are not enums.
@@ -77,7 +77,7 @@ MarkupVocabulary :: [].{
 	html_event_name = |name| global_event_name(name) or window_event_name(name)
 	svg_event_name : Str -> Bool
 	svg_event_name = |name| global_event_name(name) or legacy_svg_event_name(name)
-	event_attribute : Markup.Name, Markup.Name -> Bool
+	event_attribute : MarkupCore.Name, MarkupCore.Name -> Bool
 	event_attribute = |element, attribute| {
 		if attribute.namespace != NoNamespace {
 			return False

@@ -1,4 +1,4 @@
-import Markup
+import MarkupCore
 import DomName
 import HtmlValidate
 import HtmlContextRules as Rules
@@ -15,21 +15,23 @@ MarkupContext :: [].{
 
 	## Opaque bounded state for one enclosing element, not an ancestor stack.
 	Context : ConstructorContext
+	ContextProps : ConstructorContext.Props
+	ContextChildProps : ConstructorContext.ChildProps
 
 	## Concrete DOM attributes have no authored source span.
-	Attribute : { name : Markup.Name, value : Str }
+	Attribute : { name : MarkupCore.Name, value : Str }
 
 	## HTML checks use standards-mode tree construction and the scripting flag.
-	Options := { syntax : Markup.Syntax ?? HtmlSyntax, scripting : Bool ?? True }
+	Options := { syntax : MarkupCore.Syntax ?? HtmlSyntax, scripting : Bool ?? True }
 
 	## Placement failures contain explicit names and no fabricated source location.
-	Problem : [InvalidChild({ parent : Markup.Name, child : Markup.Name, expected : Markup.ChildGrammar }), InvalidText({ parent : Markup.Name, expected : Markup.ChildGrammar }), WouldRepair(Markup.StructureReason), UnexpectedNamespace({ element : Markup.Name, expected : DomName.Namespace }), UnsupportedContext({ element : Markup.Name, reason : UnsupportedReason })]
+	Problem : [InvalidChild({ parent : MarkupCore.Name, child : MarkupCore.Name, expected : MarkupCore.ChildGrammar }), InvalidText({ parent : MarkupCore.Name, expected : MarkupCore.ChildGrammar }), WouldRepair(MarkupCore.StructureReason), UnexpectedNamespace({ element : MarkupCore.Name, expected : DomName.Namespace }), UnsupportedContext({ element : MarkupCore.Name, reason : UnsupportedReason })]
 
 	UnsupportedReason : [ExplicitNamespaceRequired, FullParserRequired, ChangedElementIdentity, DuplicateAttributeIdentity, ChangedAttributeIdentity, SelectContextRequiresParser]
 
 	## Start at an explicit enclosing boundary. No outer ancestors are assumed.
 	## Propagate child contexts from a common boundary when ancestry matters.
-	seed : Markup.Name, List(Attribute), Options -> Try(Context, Problem)
+	seed : MarkupCore.Name, List(Attribute), Options -> Try(Context, Problem)
 	seed = |element, attributes, options| {
 		check_supported(element, options)?
 		check_identity(element, attributes, options)?
@@ -38,7 +40,7 @@ MarkupContext :: [].{
 
 	## Check one element and return its independent descendant context. The
 	## original parent context remains reusable for other children and updates.
-	child : Context, Markup.Name, List(Attribute) -> Try(Context, Problem)
+	child : Context, MarkupCore.Name, List(Attribute) -> Try(Context, Problem)
 	child = |context, element, attributes| {
 		check_supported(element, context.options)?
 		check_identity(element, attributes, context.options)?
@@ -47,7 +49,7 @@ MarkupContext :: [].{
 			check_html_child(context, element, summary)?
 		}
 		check_child_model(context, element)?
-		if element.namespace == Uri(Markup.html_namespace) {
+		if element.namespace == Uri(MarkupCore.html_namespace) {
 			match HtmlValidate.context_problem(context.authoring, element.local, summary) {
 				Ok(_) => {}
 				Err(InvalidChildren(detail)) => return Err(InvalidChild({ parent: context.parent, child: element, expected: detail.expected }))
@@ -66,7 +68,7 @@ MarkupContext :: [].{
 		if value.is_empty() {
 			return Ok({})
 		}
-		if context.options.syntax == HtmlSyntax and context.parent.namespace == Uri(Markup.html_namespace) {
+		if context.options.syntax == HtmlSyntax and context.parent.namespace == Uri(MarkupCore.html_namespace) {
 			if MarkupVocabulary.html_void(context.parent.local) {
 				return Err(WouldRepair(ReparentedContent))
 			}
@@ -74,7 +76,7 @@ MarkupContext :: [].{
 				return Err(WouldRepair(ReparentedContent))
 			}
 		}
-		if context.parent.namespace == Uri(Markup.html_namespace) {
+		if context.parent.namespace == Uri(MarkupCore.html_namespace) {
 			rule = HtmlValidate.child_rule(context.parent.local, context.attributes, context.authoring.in_datalist)
 			match HtmlValidate.text_expected(rule, value) {
 				Ok(_) => {}
@@ -95,7 +97,22 @@ MarkupContext :: [].{
 # Opaqueness prevents callers from forging the inherited scope flags. Every
 # field has fixed shape. Parent identity and finite attribute facts replace
 # ancestor nodes, source strings and recursive context links.
-ConstructorContext :: { parent : Markup.Name, attributes : HtmlValidate.AttributeSummary, authoring : HtmlValidate.ContextState, scopes : Rules.Scopes, extension : Bool, options : MarkupContext.Options, mode : TableMode }
+ConstructorContext :: { parent : MarkupCore.Name, attributes : HtmlValidate.AttributeSummary, authoring : HtmlValidate.ContextState, scopes : Rules.Scopes, extension : Bool, options : MarkupContext.Options, mode : TableMode }.{
+
+	## Validate a parent identity and seed its authoring context.
+	Props := { parent : MarkupCore.Name, attributes : List(MarkupContext.Attribute) ?? [], syntax : MarkupCore.Syntax ?? HtmlSyntax, scripting : [Enabled, Disabled] ?? Enabled }
+	from_parent : Props -> Try(ConstructorContext, MarkupContext.Problem)
+	from_parent = |props| MarkupContext.seed(props.parent, props.attributes, { syntax: props.syntax, scripting: props.scripting == Enabled })
+
+	## Validate a child without changing the reusable parent context.
+	ChildProps := { name : MarkupCore.Name, attributes : List(MarkupContext.Attribute) ?? [] }
+	child : ConstructorContext, ChildProps -> Try(ConstructorContext, MarkupContext.Problem)
+	child = |context, props| MarkupContext.child(context, props.name, props.attributes)
+
+	## Validate decoded text against the parent's content model.
+	text : ConstructorContext, Str -> Try({}, MarkupContext.Problem)
+	text = |context, value| MarkupContext.text(context, value)
+}
 
 TableMode : [Body, Table, Section, Row, Colgroup]
 
@@ -109,20 +126,20 @@ uri = |element| match element.namespace {
 	NoNamespace => ""
 }
 
-check_supported : Markup.Name, MarkupContext.Options -> Try({}, MarkupContext.Problem)
+check_supported : MarkupCore.Name, MarkupContext.Options -> Try({}, MarkupContext.Problem)
 check_supported = |element, options| {
 	if options.syntax == HtmlSyntax {
 		if element.namespace == NoNamespace {
 			return Err(UnsupportedContext({ element, reason: ExplicitNamespaceRequired }))
 		}
-		if element.namespace == Uri(Markup.html_namespace) and ["html", "head", "template", "frameset", "frame", "plaintext", "selectedcontent", "ruby", "rb", "rp", "rt", "rtc"].contains(element.local) {
+		if element.namespace == Uri(MarkupCore.html_namespace) and ["html", "head", "template", "frameset", "frame", "plaintext", "selectedcontent", "ruby", "rb", "rp", "rt", "rtc"].contains(element.local) {
 			return Err(UnsupportedContext({ element, reason: FullParserRequired }))
 		}
 	}
 	Ok({})
 }
 
-check_identity : Markup.Name, List(MarkupContext.Attribute), MarkupContext.Options -> Try({}, MarkupContext.Problem)
+check_identity : MarkupCore.Name, List(MarkupContext.Attribute), MarkupContext.Options -> Try({}, MarkupContext.Problem)
 check_identity = |element, attributes, options| {
 	if options.syntax != HtmlSyntax {
 		return Ok({})
@@ -145,7 +162,7 @@ check_identity = |element, attributes, options| {
 }
 
 child_mode = |previous, element| {
-	if element.namespace != Uri(Markup.html_namespace) {
+	if element.namespace != Uri(MarkupCore.html_namespace) {
 		return previous
 	}
 	match Rules.table_mode(element.local) {
@@ -158,11 +175,11 @@ child_mode = |previous, element| {
 	}
 }
 
-extension_boundary = |element| (element.namespace == Uri(Markup.svg_namespace) and element.local == "metadata") or (element.namespace == Uri(Markup.mathml_namespace) and element.local == "annotation-xml")
+extension_boundary = |element| (element.namespace == Uri(MarkupCore.svg_namespace) and element.local == "metadata") or (element.namespace == Uri(MarkupCore.mathml_namespace) and element.local == "annotation-xml")
 
-check_child_model : MarkupContext.Context, Markup.Name -> Try({}, MarkupContext.Problem)
+check_child_model : MarkupContext.Context, MarkupCore.Name -> Try({}, MarkupContext.Problem)
 check_child_model = |context, element| {
-	if context.parent.namespace == Uri(Markup.html_namespace) {
+	if context.parent.namespace == Uri(MarkupCore.html_namespace) {
 		rule = HtmlValidate.child_rule(context.parent.local, context.attributes, context.authoring.in_datalist)
 		match HtmlValidate.child_expected(rule, element) {
 			Ok(_) => {}
@@ -177,7 +194,7 @@ check_child_model = |context, element| {
 	Ok({})
 }
 
-check_html_child : MarkupContext.Context, Markup.Name, HtmlValidate.AttributeSummary -> Try({}, MarkupContext.Problem)
+check_html_child : MarkupContext.Context, MarkupCore.Name, HtmlValidate.AttributeSummary -> Try({}, MarkupContext.Problem)
 check_html_child = |context, element, attributes| {
 	parent_class = classification(context.parent)
 	namespace = element.namespace
@@ -194,7 +211,7 @@ check_html_child = |context, element, attributes| {
 		return Err(WouldRepair(ReparentedContent))
 	}
 	expected = if in_html {
-		if (name == "svg") Uri(Markup.svg_namespace) else if (name == "math") Uri(Markup.mathml_namespace) else Uri(Markup.html_namespace)
+		if (name == "svg") Uri(MarkupCore.svg_namespace) else if (name == "math") Uri(MarkupCore.mathml_namespace) else Uri(MarkupCore.html_namespace)
 	} else context.parent.namespace
 	if namespace != expected {
 		return Err(UnexpectedNamespace({ element, expected }))
@@ -202,13 +219,13 @@ check_html_child = |context, element, attributes| {
 	if !in_html {
 		return Ok({})
 	}
-	if namespace != Uri(Markup.html_namespace) {
+	if namespace != Uri(MarkupCore.html_namespace) {
 		return Ok({})
 	}
 	if context.scopes.p and Rules.closes_p(name) {
 		return Err(WouldRepair(MissingEndTag("p")))
 	}
-	if Rules.heading(name) and context.parent.namespace == Uri(Markup.html_namespace) and Rules.heading(context.parent.local) {
+	if Rules.heading(name) and context.parent.namespace == Uri(MarkupCore.html_namespace) and Rules.heading(context.parent.local) {
 		return Err(WouldRepair(MissingEndTag(context.parent.local)))
 	}
 	if name == "form" and context.scopes.form {
@@ -232,10 +249,10 @@ check_html_child = |context, element, attributes| {
 	if name == "input" and context.scopes.select {
 		return Err(WouldRepair(ReparentedContent))
 	}
-	if ["option", "optgroup", "hr"].contains(name) and context.scopes.select and context.parent.namespace == Uri(Markup.html_namespace) and Rules.implied_end_element(context.parent.local) and !(name == "option" and context.parent.local == "optgroup") {
+	if ["option", "optgroup", "hr"].contains(name) and context.scopes.select and context.parent.namespace == Uri(MarkupCore.html_namespace) and Rules.implied_end_element(context.parent.local) and !(name == "option" and context.parent.local == "optgroup") {
 		return Err(WouldRepair(MissingEndTag(context.parent.local)))
 	}
-	if ["option", "optgroup"].contains(name) and context.parent.namespace == Uri(Markup.html_namespace) and context.parent.local == "option" {
+	if ["option", "optgroup"].contains(name) and context.parent.namespace == Uri(MarkupCore.html_namespace) and context.parent.local == "option" {
 		return Err(WouldRepair(MissingEndTag("option")))
 	}
 	if ["option", "optgroup", "hr"].contains(name) and context.scopes.select and (context.scopes.option or (name != "option" and context.scopes.optgroup)) {
@@ -271,11 +288,11 @@ check_html_child = |context, element, attributes| {
 	Ok({})
 }
 
-html_name = |local| { namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local }
+html_name = |local| { namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed, local }
 
-svg_name = |local| { namespace: Uri(Markup.svg_namespace), prefix: Unprefixed, local }
+svg_name = |local| { namespace: Uri(MarkupCore.svg_namespace), prefix: Unprefixed, local }
 
-math_name = |local| { namespace: Uri(Markup.mathml_namespace), prefix: Unprefixed, local }
+math_name = |local| { namespace: Uri(MarkupCore.mathml_namespace), prefix: Unprefixed, local }
 
 plain_attribute = |local, value| { name: { namespace: NoNamespace, prefix: Unprefixed, local }, value }
 
@@ -386,7 +403,7 @@ expect {
 }
 expect {
 	body = MarkupContext.seed(html_name("body"), [], {})?
-	MarkupContext.child(body, { namespace: NoNamespace, prefix: Unprefixed, local: "div" }, []).is_err() and MarkupContext.seed(svg_name("lineargradient"), [], {}).is_err() and MarkupContext.seed({ namespace: Uri(Markup.html_namespace), prefix: Prefix("h"), local: "div" }, [], {}).is_err()
+	MarkupContext.child(body, { namespace: NoNamespace, prefix: Unprefixed, local: "div" }, []).is_err() and MarkupContext.seed(svg_name("lineargradient"), [], {}).is_err() and MarkupContext.seed({ namespace: Uri(MarkupCore.html_namespace), prefix: Prefix("h"), local: "div" }, [], {}).is_err()
 }
 expect ["template", "frameset", "plaintext", "selectedcontent", "html"].all(|local| MarkupContext.seed(html_name(local), [], {}).is_err())
 

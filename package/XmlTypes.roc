@@ -1,5 +1,5 @@
 # TODO(https://github.com/roc-lang/roc/issues/13077): move Node and its methods
-# back under Xml once nested derived methods stop producing duplicate warnings.
+# back under XmlCore once nested derived methods stop producing duplicate warnings.
 # Keep these backing types in a separate module until public aliases also work
 # with exposed-field validation (https://github.com/roc-lang/roc/issues/13023).
 XmlTypes :: [].{
@@ -19,7 +19,7 @@ XmlTypes :: [].{
 		## The name of an element, or `Err(NotAnElement)` for a text node.
 		##
 		## ```roc
-		## expect Xml.parse_str("<svg:rect/>").map_ok(|xml| xml.root.name()) == Ok(Ok("svg:rect"))
+		## expect XmlCore.parse_str("<svg:rect/>").map_ok(|xml| xml.root.name()) == Ok(Ok("svg:rect"))
 		## ```
 		name : Node -> Try(Str, [NotAnElement])
 		name = |node| {
@@ -34,7 +34,7 @@ XmlTypes :: [].{
 		##
 		## ```roc
 		## expect {
-		##     root = Xml.parse_str("<a href='/x'/>")?.root
+		##     root = XmlCore.parse_str("<a href='/x'/>")?.root
 		##     root.attribute("href") == Ok("/x") and root.attribute("title") == Err(Missing)
 		## }
 		## ```
@@ -56,7 +56,7 @@ XmlTypes :: [].{
 		##
 		## ```roc
 		## expect {
-		##     root = Xml.parse_str("<list><item>1</item><other/><item>2</item></list>")?.root
+		##     root = XmlCore.parse_str("<list><item>1</item><other/><item>2</item></list>")?.root
 		##     root.children_named("item").map(|item| item.text()) == ["1", "2"]
 		## }
 		## ```
@@ -81,7 +81,7 @@ XmlTypes :: [].{
 		## document order (like the DOM's `textContent`).
 		##
 		## ```roc
-		## expect Xml.parse_str("<p>Hello, <b>world</b>!</p>").map_ok(|xml| xml.root.text()) == Ok("Hello, world!")
+		## expect XmlCore.parse_str("<p>Hello, <b>world</b>!</p>").map_ok(|xml| xml.root.text()) == Ok("Hello, world!")
 		## ```
 		text : Node -> Str
 		text = |node| {

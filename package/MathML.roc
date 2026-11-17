@@ -1,7 +1,8 @@
-import Markup
+import Parser
+import Diagnostic
+import MarkupCore
 import MarkupValidate
 import MarkupTemplate
-import Literal
 import Html
 import HtmlTemplate
 import HtmlTree
@@ -10,39 +11,39 @@ import HtmlValidate
 ## Strict namespace-aware MathML documents and fragments.
 ## XML syntax is the default; fragments start in the MathML namespace.
 ## Original bytes and source spans remain available beside the decoded tree.
-MathML := { parsed : Markup.Parsed }.{
+MathML := { parsed : MarkupCore.Parsed }.{
 
 	## Common parsing, validation and resource-limit options.
-	Props : Markup.Props
+	Props : MarkupCore.Props
 
 	## Source, diagnostic name, and explicit parsing/validation options.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Parse a complete namespaced document with strict defaults.
-	parse_str : Str -> Try(MathML, [InvalidMarkup(Markup.Error)])
+	parse_str : Str -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
 	parse_str = |source| parse_with(source, {})
 
 	## Parse a complete document with the requested syntax and checks.
-	parse_with : Str, Props -> Try(MathML, [InvalidMarkup(Markup.Error)])
+	parse_with : Str, Props -> Try(MathML, [InvalidMarkup(MarkupCore.Error)])
 	parse_with = |source, props| {
 		parsed = if props.syntax == HtmlSyntax {
-			HtmlTree.parse(source, True, { namespace: Markup.html_namespace, name: "body", defer_projection: True }, props)?
+			HtmlTree.parse(source, True, { namespace: MarkupCore.html_namespace, name: "body", defer_projection: True }, props)?
 		} else {
-			Markup.parse_xml(source, props)?
+			MarkupCore.parse_xml(source, props)?
 		}
-		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.mathml_namespace), local: "math" }, actual: Fragment }), line: 1, column: 1 }))?
-		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported(MissingRoot), line: 1, column: 1 }))
+		index = MarkupCore.single_root(parsed.tree).map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		match node.kind {
-			Element(name) if name.namespace == Uri(Markup.mathml_namespace) and name.local == "math" => {}
-			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.mathml_namespace), local: "math" }, actual: Element(name) }), line: 1, column: 1 }))
-			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: { namespace: Uri(Markup.mathml_namespace), local: "math" }, actual: Text }), line: 1, column: 1 }))
+			Element(name) if name.namespace == Uri(MarkupCore.mathml_namespace) and name.local == "math" => {}
+			Element(name) => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Element(name) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+			_ => return Err(InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.mathml_namespace), local: "math" }, actual: Text }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		validated = validate_tree(parsed, props, [])?
 		Ok(MathML.{ parsed: project_checked(validated, props)? })
 	}
 
 	## Parse any number of fragment roots in the format's default namespace.
-	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
+	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
 	parse_fragment = |source, props| {
 		parsed = fragment_syntax(source, props)?
 		validated = validate_tree(parsed, props, [])?
@@ -50,27 +51,27 @@ MathML := { parsed : Markup.Parsed }.{
 	}
 
 	## Validate fixed markup, skipping unavailable whole attribute holes.
-	validate_tree : Markup.Parsed, Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	validate_tree : MarkupCore.Parsed, Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(MathML, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
 
 	## Convert a checked complete document literal.
 	from_quote : Str -> Try(MathML, [BadQuotedBytes(Str)])
 	from_quote = |source| validate({ source: source })
 
 	## Parse fixed literal segments into an indexed plan without binding values.
-	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
+	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
 	parse_segments = |segments, props| {
 		if props.syntax == HtmlSyntax {
-			return HtmlTemplate.parse_segments(segments, { name: "math", namespace: Markup.mathml_namespace }, props)
+			return HtmlTemplate.parse_segments(segments, { name: "math", namespace: MarkupCore.mathml_namespace }, props)
 		}
-		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), Markup.decode_xml_text)?
+		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), MarkupCore.decode_xml_text)?
 		_ = MarkupValidate.text_slots(plan)?
 		var $holes = []
-		for slot in plan.slots {
+		for slot in plan.metadata().slots {
 			match slot.target {
 				AttributeSlot(target) => {
 					$holes = $holes.append(target)
@@ -78,14 +79,14 @@ MathML := { parsed : Markup.Parsed }.{
 				_ => {}
 			}
 		}
-		parsed = validate_tree(plan.parsed, props, $holes)?
-		slots = plan.slots.map(
+		parsed = validate_tree(plan.metadata().parsed, props, $holes)?
+		slots = plan.metadata().slots.map(
 			|slot| {
 				match slot.target {
 					AttributeSlot(target) => {
 						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 						match (node.kind, node.attributes.get(target.attribute)) {
-							(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language("namespaced attribute") else if (name.namespace == Uri(Markup.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
+							(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language(NamespacedAttribute) else if (name.namespace == Uri(MarkupCore.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(MarkupCore.svg_namespace), name.local, attr.name.local) }
 							_ => slot
 						}
 					}
@@ -93,7 +94,7 @@ MathML := { parsed : Markup.Parsed }.{
 				}
 			},
 		)
-		Ok({ ..plan, parsed, slots })
+		Ok(MarkupTemplate.rebuild({ ..plan.metadata(), parsed, slots }))
 	}
 
 	## A parsed fragment bound to homogeneous downstream values, including signals.
@@ -115,29 +116,29 @@ MathmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 	## A static fragment can use the same template type.
 	from_quote : Str -> Try(MathML.Template(a), [BadQuotedBytes(Str)])
 	from_quote = |source| {
-		plan = MathML.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))?
+		plan = MathML.parse_segments([source], {}).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("MathML", error))?
 		Ok(MathML.Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
 	}
 
 	## Fallibly bind an explicitly parsed plan, checking the binding count.
-	bind : MarkupTemplate.Plan, Iter(a) -> Try(MathML.Template(a), [InvalidMarkup(Markup.Error)])
-	bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| MathML.Template.{ bound })
+	bind : MarkupTemplate.Plan, Iter(a) -> Try(MathML.Template(a), [InvalidMarkup(MarkupCore.Error)])
+	bind = |plan, values| MarkupTemplate.bind_values(plan, values).map_ok(|bound| MathML.Template.{ bound })
 }
 
-MathmlFragment := { parsed : Markup.Parsed }.{
+MathmlFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Check imported fragment text with explicit options and a diagnostic name.
 	validate : MathML.ValidationProps -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
-	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Parser.Quotation.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line, column: (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column }))
 
 	## Check a fragment literal with strict defaults.
 	from_quote : Str -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
-	from_quote = |source| MathML.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))
+	from_quote = |source| MathML.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("MathML", error))
 
 	## Require a single element root for downstream row/component templates.
-	single_element : MathML.Fragment -> Try(Markup.Node, [RootCount(U64)])
+	single_element : MathML.Fragment -> Try(MarkupCore.Node, [RootCount(U64)])
 	single_element = |fragment| {
-		index = Markup.single_root(fragment.parsed.tree)?
+		index = MarkupCore.single_root(fragment.parsed.tree)?
 		Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }
@@ -167,15 +168,15 @@ expect {
 	x = "<mi>markup stays text</mi>"
 	value : MathML.Template(Str)
 	value = "<mrow><mi>${x}</mi><mo>+</mo><mn>1</mn></mrow>"
-	value.bound.values == [x] and value.bound.plan.slots.len() == 1
+	value.bound.metadata().values == [x] and value.bound.metadata().plan.metadata().slots.len() == 1
 }
 expect MathML.parse_segments(["<mo stretchy='", "'>+</mo>"], {}).is_ok()
 
-fragment_syntax : Str, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+fragment_syntax : Str, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
-	HtmlTree.parse(source, True, { namespace: Markup.mathml_namespace, name: "math", defer_projection: True }, props)
+	HtmlTree.parse(source, True, { namespace: MarkupCore.mathml_namespace, name: "math", defer_projection: True }, props)
 } else {
-	Markup.parse_xml_fragment(source, Markup.mathml_namespace, props)
+	MarkupCore.parse_xml_fragment(source, MarkupCore.mathml_namespace, props)
 }
 expect MathML.parse_with("<math><mfrac><mn>1</mn><mn>2</mn></mfrac></math>", { syntax: HtmlSyntax }).is_ok()
 expect MathML.parse_fragment("<mtext><span>HTML</span></mtext>", { syntax: HtmlSyntax }).is_ok()
@@ -199,7 +200,7 @@ expect MathML.parse_fragment("<math xmlns:display='urn:metadata'><mi>x</mi></mat
 
 expect {
 	p = MathML.parse_segments(["<mi xmlns:x='urn:extension' x:r='", "'>x</mi>"], { allow_unknown_attributes: True })?
-	p.slots.first()?.expected == Language("namespaced attribute")
+	p.metadata().slots.first()?.expected == Language(NamespacedAttribute)
 }
 
 expect match MathML.parse_fragment("<annotation definitionurl='x'>x</annotation>", { syntax: HtmlSyntax, strict_foreign_spelling: True }) {

@@ -1,5 +1,5 @@
+import Parser
 import MarkupValues
-import Literal
 
 ## Parsed SVG path data. Every command is explicit, including repeated groups
 ## and implicit line-to groups following a move. Relative case is preserved.
@@ -30,8 +30,8 @@ SvgPath := { commands : List(SvgPath.Command) }.{
 	from_quote : Str -> Try(SvgPath, [BadQuotedBytes(Str)])
 	from_quote = |source| parse_str(source).map_err(
 		|InvalidPath(error)| {
-			at = Literal.position(source, error.offset)
-			Literal.error({ format: "SVG path", message: Str.inspect(error.problem), line: at.line, column: at.column })
+			at = Parser.Quotation.position(source, error.offset)
+			Parser.Quotation.error({ format: "SVG path", message: Str.inspect(error.problem), line: at.line, column: at.column })
 		},
 	)
 }

@@ -1,8 +1,8 @@
-import XmlNs
+import XmlNsCore
 
 ## Validate computed DOM names using the [DOM Standard](https://dom.spec.whatwg.org/#validate).
 ## Names retain namespace, prefix and local spelling independently, using the
-## same representation as [XmlNs.Name] and [Markup.Name]. These rules do not
+## same representation as [XmlNsCore.Name] and [MarkupCore.Name]. These rules do not
 ## restrict names to a known HTML, SVG or MathML vocabulary.
 ##
 ## DOM construction accepts names that XML source cannot represent, such as
@@ -11,11 +11,11 @@ DomName :: [].{
 
 	## An explicit resolved identity. A colon in an unprefixed local name
 	## remains part of that local name.
-	Name : XmlNs.Name
+	Name : XmlNsCore.Name
 
 	## An absent namespace or its URI. Namespace-aware construction normalizes
 	## `Uri("")` to `NoNamespace`.
-	Namespace : XmlNs.Namespace
+	Namespace : XmlNsCore.Namespace
 
 	## The DOM operation's local-name validation context.
 	Context : [Element, Attribute]
@@ -52,14 +52,14 @@ DomName :: [].{
 		if parts.prefix != Unprefixed and ns == NoNamespace {
 			return Err(NamespaceError)
 		}
-		if parts.prefix == Prefix("xml") and ns != Uri(XmlNs.xml_namespace) {
+		if parts.prefix == Prefix("xml") and ns != Uri(XmlNsCore.xml_namespace) {
 			return Err(NamespaceError)
 		}
 		xmlns = qualified_name == "xmlns" or parts.prefix == Prefix("xmlns")
-		if xmlns and ns != Uri(XmlNs.xmlns_namespace) {
+		if xmlns and ns != Uri(XmlNsCore.xmlns_namespace) {
 			return Err(NamespaceError)
 		}
-		if ns == Uri(XmlNs.xmlns_namespace) and !xmlns {
+		if ns == Uri(XmlNsCore.xmlns_namespace) and !xmlns {
 			return Err(NamespaceError)
 		}
 		Ok({ namespace: ns, prefix: parts.prefix, local: parts.local })
@@ -169,13 +169,13 @@ expect DomName.validate_and_extract(Uri("urn:x"), ":a", Element) == Err(InvalidC
 expect DomName.validate_and_extract(Uri("urn:x"), "p:", Attribute) == Err(InvalidCharacterError)
 expect DomName.validate_and_extract(Uri("urn:x"), "=p:a=b", Element) == Ok({ namespace: Uri("urn:x"), prefix: Prefix("=p"), local: "a=b" })
 expect DomName.validate_and_extract(Uri("urn:x"), "xml:a", Element) == Err(NamespaceError)
-expect DomName.validate_and_extract(Uri(XmlNs.xml_namespace), "xml:a", Element) == Ok({ namespace: Uri(XmlNs.xml_namespace), prefix: Prefix("xml"), local: "a" })
-expect DomName.validate_and_extract(Uri(XmlNs.xml_namespace), "other:a", Element) == Ok({ namespace: Uri(XmlNs.xml_namespace), prefix: Prefix("other"), local: "a" })
+expect DomName.validate_and_extract(Uri(XmlNsCore.xml_namespace), "xml:a", Element) == Ok({ namespace: Uri(XmlNsCore.xml_namespace), prefix: Prefix("xml"), local: "a" })
+expect DomName.validate_and_extract(Uri(XmlNsCore.xml_namespace), "other:a", Element) == Ok({ namespace: Uri(XmlNsCore.xml_namespace), prefix: Prefix("other"), local: "a" })
 expect DomName.validate_and_extract(NoNamespace, "xmlns", Attribute) == Err(NamespaceError)
 expect DomName.unqualified_attribute("xmlns") == Ok({ namespace: NoNamespace, prefix: Unprefixed, local: "xmlns" })
-expect DomName.validate_and_extract(Uri(XmlNs.xmlns_namespace), "xmlns", Attribute) == Ok({ namespace: Uri(XmlNs.xmlns_namespace), prefix: Unprefixed, local: "xmlns" })
-expect DomName.validate_and_extract(Uri(XmlNs.xmlns_namespace), "xmlns:p", Attribute) == Ok({ namespace: Uri(XmlNs.xmlns_namespace), prefix: Prefix("xmlns"), local: "p" })
-expect DomName.validate_and_extract(Uri(XmlNs.xmlns_namespace), "p:a", Element) == Err(NamespaceError)
+expect DomName.validate_and_extract(Uri(XmlNsCore.xmlns_namespace), "xmlns", Attribute) == Ok({ namespace: Uri(XmlNsCore.xmlns_namespace), prefix: Unprefixed, local: "xmlns" })
+expect DomName.validate_and_extract(Uri(XmlNsCore.xmlns_namespace), "xmlns:p", Attribute) == Ok({ namespace: Uri(XmlNsCore.xmlns_namespace), prefix: Prefix("xmlns"), local: "p" })
+expect DomName.validate_and_extract(Uri(XmlNsCore.xmlns_namespace), "p:a", Element) == Err(NamespaceError)
 expect DomName.validate_and_extract(Uri("urn:x"), "XML:a", Element) == Ok({ namespace: Uri("urn:x"), prefix: Prefix("XML"), local: "a" })
 expect DomName.valid_element_local_name("a=b") and !DomName.valid_attribute_local_name("a=b")
 expect DomName.valid_element_local_name("a<\"'`=b") and DomName.valid_attribute_local_name("1<\"'`:b")
@@ -187,7 +187,7 @@ expect DomName.valid_namespace_prefix("=:'\"<\u(007f)") and DomName.valid_attrib
 expect DomName.validate_and_extract(Uri("urn:x"), "xml:a/b", Element) == Err(InvalidCharacterError)
 expect DomName.html_element("É:DIV").map_ok(|name| name.local) == Ok("É:div")
 expect {
-	DomName.validate_and_extract(Uri("http://www.w3.org/2000/svg"), "a=b", Element).is_ok() and XmlNs.parse_str("<a=b/>").is_err() and XmlNs.parse_str("<p:a:b xmlns:p='urn:x'/>").is_err()
+	DomName.validate_and_extract(Uri("http://www.w3.org/2000/svg"), "a=b", Element).is_ok() and XmlNsCore.parse_str("<a=b/>").is_err() and XmlNsCore.parse_str("<p:a:b xmlns:p='urn:x'/>").is_err()
 }
 
 expect DomName.valid_element_local_name("\u(80)\u(FFFE)\u(10FFFF)") and DomName.valid_attribute_local_name("\u(FFFE)")

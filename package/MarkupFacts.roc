@@ -1,8 +1,8 @@
-import Markup
+import MarkupCore
 import MarkupVocabulary
 import HtmlValidate
 import MarkupValidate
-import XmlNs
+import XmlNsCore
 
 ## Namespace-aware vocabulary and HTML syntax facts for tree consumers.
 ## Names use their explicit expanded identity; a colon never supplies a namespace.
@@ -13,7 +13,7 @@ MarkupFacts :: [].{
 
 	## An explicit namespace identity. Empty and unknown namespaces have no
 	## built-in vocabulary; a prefix does not supply a namespace.
-	Namespace : XmlNs.Namespace
+	Namespace : XmlNsCore.Namespace
 
 	## Canonical spellings accepted by the current namespace's built-in
 	## authoring vocabulary, unique and sorted by ASCII spelling. This includes
@@ -33,7 +33,7 @@ MarkupFacts :: [].{
 
 	## Test the built-in element vocabulary used by the current authoring checks.
 	## Valid custom HTML names can be queried separately with is_custom_element_name.
-	is_known_element : Markup.Name -> Bool
+	is_known_element : MarkupCore.Name -> Bool
 	is_known_element = |element| match element.namespace {
 		Uri("http://www.w3.org/1999/xhtml") => HtmlValidate.element_known(element.local)
 		Uri("http://www.w3.org/2000/svg") => MarkupValidate.element_known(True, element.local)
@@ -47,7 +47,7 @@ MarkupFacts :: [].{
 
 	## Test an expanded attribute name against the element's current vocabulary.
 	## Extension attributes on custom/unknown elements remain available through parser options.
-	is_known_attribute : Markup.Name, Markup.Name -> Bool
+	is_known_attribute : MarkupCore.Name, MarkupCore.Name -> Bool
 	is_known_attribute = |element, attribute| match element.namespace {
 		Uri("http://www.w3.org/1999/xhtml") => HtmlValidate.attribute_known(element.local, attribute)
 		Uri("http://www.w3.org/2000/svg") => MarkupValidate.attribute_known(True, element.local, attribute)
@@ -56,32 +56,32 @@ MarkupFacts :: [].{
 	}
 
 	## Recognize a known unnamespaced ARIA attribute, including retained deprecated names.
-	is_aria_attribute : Markup.Name -> Bool
+	is_aria_attribute : MarkupCore.Name -> Bool
 	is_aria_attribute = |attribute| attribute.namespace == NoNamespace and MarkupVocabulary.aria_name(attribute.local)
 
 	## Presence/absence booleans apply only to the relevant unnamespaced HTML attributes.
 	## SVG, MathML and ARIA true/false values are string-valued enumerations.
-	is_boolean_attribute : Markup.Name, Markup.Name -> Bool
-	is_boolean_attribute = |element, attribute| element.namespace == Uri(Markup.html_namespace) and attribute.namespace == NoNamespace and HtmlValidate.boolean_attribute(element.local, attribute.local)
+	is_boolean_attribute : MarkupCore.Name, MarkupCore.Name -> Bool
+	is_boolean_attribute = |element, attribute| element.namespace == Uri(MarkupCore.html_namespace) and attribute.namespace == NoNamespace and HtmlValidate.boolean_attribute(element.local, attribute.local)
 
 	## Return the value grammar already used by the current format validators.
-	attribute_grammar : Markup.Name, Markup.Name -> Markup.ValueGrammar
+	attribute_grammar : MarkupCore.Name, MarkupCore.Name -> MarkupCore.ValueGrammar
 	attribute_grammar = |element, attribute| {
 		if attribute.namespace != NoNamespace {
-			return Language("namespaced attribute")
+			return Language(NamespacedAttribute)
 		}
 		match element.namespace {
 			Uri("http://www.w3.org/1999/xhtml") => HtmlValidate.grammar(element.local, attribute.local)
 			Uri("http://www.w3.org/2000/svg") => MarkupValidate.grammar(True, element.local, attribute.local)
 			Uri("http://www.w3.org/1998/Math/MathML") => MarkupValidate.grammar(False, element.local, attribute.local)
-			_ => Language("extension attribute")
+			_ => Language(ExtensionAttribute)
 		}
 	}
 
 	## Known non-boolean, single-value keywords for this attribute.
 	## NotEnumerated means no keyword fact is provided, including for token lists.
 	## This does not supply the browser's missing/invalid-value defaults.
-	enumerated_values : Markup.Name, Markup.Name -> Try(List(Str), [NotEnumerated])
+	enumerated_values : MarkupCore.Name, MarkupCore.Name -> Try(List(Str), [NotEnumerated])
 	enumerated_values = |element, attribute| {
 		if attribute.namespace != NoNamespace or is_boolean_attribute(element, attribute) {
 			return Err(NotEnumerated)
@@ -97,7 +97,7 @@ MarkupFacts :: [].{
 			Ok(values) => return Ok(values)
 			Err(_) => {}
 		}
-		if element.namespace == Uri(Markup.html_namespace) {
+		if element.namespace == Uri(MarkupCore.html_namespace) {
 			return HtmlValidate.enumerated_values(element.local, attribute.local)
 		}
 		match attribute_grammar(element, attribute) {
@@ -108,20 +108,20 @@ MarkupFacts :: [].{
 
 	## HTML void behavior is determined by the namespace and local name.
 	## Foreign elements with the same spelling are not HTML void elements.
-	is_void_element : Markup.Name -> Bool
-	is_void_element = |element| element.namespace == Uri(Markup.html_namespace) and MarkupVocabulary.html_void(element.local)
+	is_void_element : MarkupCore.Name -> Bool
+	is_void_element = |element| element.namespace == Uri(MarkupCore.html_namespace) and MarkupVocabulary.html_void(element.local)
 
 	## HTML text parsing behavior for this element and scripting setting.
 	## Foreign-content elements use Data; XML source retains its XML grammar.
-	text_behavior : Markup.Name, Bool -> TextBehavior
-	text_behavior = |element, scripting| if element.namespace == Uri(Markup.html_namespace) {
+	text_behavior : MarkupCore.Name, Bool -> TextBehavior
+	text_behavior = |element, scripting| if element.namespace == Uri(MarkupCore.html_namespace) {
 		MarkupVocabulary.text_behavior(element.local, scripting)
 	} else Data
 
 	## Whether HTML parsing ignores one LF character token immediately after
 	## this element's emitted start tag. This is not an XML or DOM mutation rule,
 	## and does not activate merely by seeding an HTML fragment context.
-	drops_initial_newline : Markup.Name -> Bool
+	drops_initial_newline : MarkupCore.Name -> Bool
 	drops_initial_newline = |element| match element.namespace {
 		Uri(namespace) => MarkupVocabulary.drops_initial_newline(namespace, element.local)
 		NoNamespace => False
@@ -137,7 +137,7 @@ MarkupFacts :: [].{
 	InitialNewlineToken : [Characters(Str), Comment, Other]
 
 	## Seed the next-token rule after emitting this element's HTML start tag.
-	initial_newline : Markup.Name -> InitialNewlineState
+	initial_newline : MarkupCore.Name -> InitialNewlineState
 	initial_newline = |element| if (drops_initial_newline(element)) Pending else Preserve
 
 	## Model the first-token LF rule. Comments and other emitted tokens consume
@@ -151,15 +151,15 @@ MarkupFacts :: [].{
 
 	## Recognize known handler content attributes by element namespace and expanded name.
 	## Consumers may forbid these in literals; ordinary parsers continue accepting them.
-	is_event_handler : Markup.Name, Markup.Name -> Bool
+	is_event_handler : MarkupCore.Name, MarkupCore.Name -> Bool
 	is_event_handler = MarkupVocabulary.event_attribute
 }
 
-html_name = |local| { namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local }
+html_name = |local| { namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed, local }
 
-svg_name = |local| { namespace: Uri(Markup.svg_namespace), prefix: Unprefixed, local }
+svg_name = |local| { namespace: Uri(MarkupCore.svg_namespace), prefix: Unprefixed, local }
 
-math_name = |local| { namespace: Uri(Markup.mathml_namespace), prefix: Unprefixed, local }
+math_name = |local| { namespace: Uri(MarkupCore.mathml_namespace), prefix: Unprefixed, local }
 
 plain_attribute = |local| { namespace: NoNamespace, prefix: Unprefixed, local }
 
@@ -209,7 +209,7 @@ expect MarkupFacts.text_behavior(html_name("noscript"), False) == Data
 expect MarkupFacts.text_behavior(svg_name("script"), True) == Data
 expect MarkupFacts.text_behavior(math_name("mtext"), True) == Data
 expect MarkupFacts.is_event_handler(html_name("button"), plain_attribute("onclick"))
-expect MarkupFacts.is_event_handler({ namespace: Uri(Markup.html_namespace), prefix: Prefix("h"), local: "div" }, plain_attribute("onclick"))
+expect MarkupFacts.is_event_handler({ namespace: Uri(MarkupCore.html_namespace), prefix: Prefix("h"), local: "div" }, plain_attribute("onclick"))
 expect MarkupFacts.is_event_handler(svg_name("g"), plain_attribute("oninput"))
 expect MarkupFacts.is_event_handler(math_name("mrow"), plain_attribute("onclick"))
 expect !MarkupFacts.is_event_handler({ namespace: NoNamespace, prefix: Unprefixed, local: "div" }, plain_attribute("onclick"))
@@ -242,15 +242,15 @@ expect MarkupFacts.is_event_handler(html_name("input"), plain_attribute("onsearc
 expect !MarkupFacts.is_event_handler(html_name("div"), plain_attribute("onsearch"))
 expect !MarkupFacts.is_event_handler(svg_name("input"), plain_attribute("onsearch"))
 
-expect [Markup.html_namespace, Markup.svg_namespace, Markup.mathml_namespace].all(
+expect [MarkupCore.html_namespace, MarkupCore.svg_namespace, MarkupCore.mathml_namespace].all(
 	|namespace| {
 		names = MarkupFacts.element_names(Uri(namespace))
 		!names.is_empty() and names.all(|local| MarkupFacts.is_known_element({ namespace: Uri(namespace), prefix: Unprefixed, local })) and names.map_with_index(|name, index| !names.take_first(index).contains(name)).all(|unique| unique)
 	},
 )
-expect MarkupFacts.element_names(Uri(Markup.html_namespace)).contains("selectedcontent")
-expect MarkupFacts.element_names(Uri(Markup.svg_namespace)).contains("linearGradient") and !MarkupFacts.element_names(Uri(Markup.svg_namespace)).contains("lineargradient")
-expect MarkupFacts.element_names(Uri(Markup.mathml_namespace)).contains("annotation-xml")
+expect MarkupFacts.element_names(Uri(MarkupCore.html_namespace)).contains("selectedcontent")
+expect MarkupFacts.element_names(Uri(MarkupCore.svg_namespace)).contains("linearGradient") and !MarkupFacts.element_names(Uri(MarkupCore.svg_namespace)).contains("lineargradient")
+expect MarkupFacts.element_names(Uri(MarkupCore.mathml_namespace)).contains("annotation-xml")
 expect MarkupFacts.element_names(NoNamespace) == [] and MarkupFacts.element_names(Uri("")) == [] and MarkupFacts.element_names(Uri("urn:extension")) == []
 expect MarkupFacts.aria_attribute_names.all(|local| MarkupFacts.is_aria_attribute(plain_attribute(local)))
 expect MarkupFacts.aria_attribute_names.contains("aria-grabbed") and !MarkupFacts.aria_attribute_names.contains("aria-invented")

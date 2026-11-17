@@ -141,7 +141,7 @@ model_html = |bytes, start| {
 	{ end: $end, normalize: $normalize }
 }
 
-model_end : List(U8), U64, [Ascii, Xml, Cdata] -> U64
+model_end : List(U8), U64, [Ascii, XmlCore, Cdata] -> U64
 model_end = |bytes, start, mode| {
 	var $end = start
 	while $end < bytes.len() {
@@ -152,7 +152,7 @@ model_end = |bytes, start, mode| {
 		if mode != Ascii and byte == ']' {
 			break
 		}
-		if mode == Xml and (byte == '<' or byte == '&') {
+		if mode == XmlCore and (byte == '<' or byte == '&') {
 			break
 		}
 		$end = $end + 1
@@ -176,7 +176,7 @@ model_candidate = |bytes, start| {
 models_agree = |bytes, start| {
 	MarkupScan.html_data(bytes, start) == model_html(bytes, start)
 		and MarkupScan.printable_ascii(bytes, start) == model_end(bytes, start, Ascii)
-		and MarkupScan.xml_text(bytes, start) == model_end(bytes, start, Xml)
+		and MarkupScan.xml_text(bytes, start) == model_end(bytes, start, XmlCore)
 		and MarkupScan.cdata_text(bytes, start) == model_end(bytes, start, Cdata)
 		and MarkupScan.valid_utf8_diagnostic_candidate(bytes, start) == model_candidate(bytes, start)
 }
