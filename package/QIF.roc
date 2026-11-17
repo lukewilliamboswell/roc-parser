@@ -105,16 +105,51 @@ QIF := { events : List(QIF.Event) }.{
 			var $s = initial
 			var $pos = 0
 			while $pos < bytes.len() {
-				byte = bytes.get($pos) ?? 0
-				$pos = $pos + 1
-				additional = if (($s.skip_lf and byte == '\n' and $s.record_bytes == 0) or ((byte == '\r' or byte == '\n') and $s.line_bytes == ['^'])) 0 else 1
-				$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
-				if $s.record_bytes > $s.props.max_record_bytes {
-					return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
-				}
-				if $s.skip_lf and byte == '\n' {
-					$s = { ..$s, skip_lf: False, line_start: $s.offset }
-				} else if byte == '\r' or byte == '\n' {
+				if $s.skip_lf and bytes.get($pos) == Ok('\n') {
+					additional = if ($s.record_bytes == 0) 0 else 1
+					$pos = $pos + 1
+					$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional, skip_lf: False, line_start: $s.offset + 1 }
+					if $s.record_bytes > $s.props.max_record_bytes {
+						return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+					}
+				} else {
+					# Scan a contiguous line span before updating the persistent state.
+					# Only a line crossing a source chunk needs an accumulation buffer.
+					stop = Utf8.find_any(bytes, $pos, line_endings)
+					len = stop - $pos
+					record_room = $s.props.max_record_bytes - $s.record_bytes
+					line_room = $s.props.max_line_bytes - $s.line_bytes.len()
+					if len > record_room or len > line_room {
+						record_first = record_room <= line_room
+						accepted = if (record_first) record_room else line_room
+						consumed = accepted + 1
+						$s = { ..$s, offset: $s.offset + consumed, record_bytes: $s.record_bytes + consumed, column: $s.column + accepted + (if (record_first) 0 else 1) }
+						return { state: terminal($s), consumed: $pos + consumed, outcome: Failed(problem($s, if (record_first) "QIF record byte limit exceeded" else "QIF byte limit exceeded")) }
+					}
+					span = bytes.sublist({ start: $pos, len })
+					accumulated = if ($s.line_bytes.is_empty()) {
+						if stop == bytes.len() and end == More {
+							# Copy a partial slice before retaining it across calls: its
+							# backing source allocation may be much larger than the line.
+							var $pending = List.with_capacity(len)
+							for byte in span {
+								$pending = $pending.append(byte)
+							}
+							$pending
+						} else span
+					} else $s.line_bytes.concat(span)
+					$s = { ..$s, offset: $s.offset + len, record_bytes: $s.record_bytes + len, column: $s.column + len, line_bytes: accumulated, skip_lf: False }
+					$pos = stop
+					if $pos == bytes.len() {
+						break
+					}
+					byte = bytes.get($pos) ?? 0
+					$pos = $pos + 1
+					additional = if ($s.line_bytes == ['^']) 0 else 1
+					$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
+					if $s.record_bytes > $s.props.max_record_bytes {
+						return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+					}
 					line = $s.line_bytes
 					$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
 					processed = process_line($s, line)
@@ -123,11 +158,6 @@ QIF := { events : List(QIF.Event) }.{
 						Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
 						Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
 						Continue => {}
-					}
-				} else {
-					$s = { ..$s, skip_lf: False, line_bytes: $s.line_bytes.append(byte), column: $s.column + 1 }
-					if $s.line_bytes.len() > $s.props.max_line_bytes {
-						return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF byte limit exceeded")) }
 					}
 				}
 			}
@@ -241,12 +271,39 @@ QIF := { events : List(QIF.Event) }.{
 		if record.section != "Bank" and record.section != "Cash" and record.section != "CCard" {
 			return Err(bad("unsupported typed QIF section"))
 		}
-		if record.fields.keep_if(|f| f.code == 'D').len() > 1 or record.fields.keep_if(|f| f.code == 'T').len() > 1 {
+		# Project first values in one pass, while retaining the original ordered list.
+		var $date_text = Err(Missing)
+		var $amount_text = Err(Missing)
+		var $payee = Err(Missing)
+		var $memo = Err(Missing)
+		var $number = Err(Missing)
+		var $category = Err(Missing)
+		var $cleared = Err(Missing)
+		var $duplicate = False
+		for f in record.fields {
+			match f.code {
+				'D' => {
+					$duplicate = $duplicate or $date_text.is_ok()
+					$date_text = Ok(f.value)
+				}
+				'T' => {
+					$duplicate = $duplicate or $amount_text.is_ok()
+					$amount_text = Ok(f.value)
+				}
+				'P' if $payee.is_err() => { $payee = Ok(f.value) }
+				'M' if $memo.is_err() => { $memo = Ok(f.value) }
+				'N' if $number.is_err() => { $number = Ok(f.value) }
+				'L' if $category.is_err() => { $category = Ok(f.value) }
+				'C' if $cleared.is_err() => { $cleared = Ok(f.value) }
+				_ => {}
+			}
+		}
+		if $duplicate {
 			return Err(bad("duplicate date or amount field"))
 		}
-		date_text = field(record, 'D').map_err(|_| bad("missing D date field"))?
+		date_text = $date_text.map_err(|_| bad("missing D date field"))?
 		date = parse_date(date_text, props.date_order).map_err(|_| bad("invalid or ambiguous date; configure date_order"))?
-		amount = field(record, 'T').map_err(|_| bad("missing T amount field"))?
+		amount = $amount_text.map_err(|_| bad("missing T amount field"))?
 		if !valid_amount(amount) {
 			return Err(bad("invalid decimal amount"))
 		}
@@ -276,7 +333,7 @@ QIF := { events : List(QIF.Event) }.{
 			}
 			$splits = $splits.append($split)
 		}
-		Ok({ raw: record, date, amount, payee: field(record, 'P') ?? "", memo: field(record, 'M') ?? "", number: field(record, 'N') ?? "", category: field(record, 'L') ?? "", cleared: field(record, 'C') ?? "", splits: $splits })
+		Ok({ raw: record, date, amount, payee: $payee ?? "", memo: $memo ?? "", number: $number ?? "", category: $category ?? "", cleared: $cleared ?? "", splits: $splits })
 	}
 
 	## First matching field. Raw fields retain all duplicate occurrences.
@@ -408,6 +465,9 @@ terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done
 problem : QIF.Decoder, Str -> QIF.Error
 problem = |s, message| { offset: s.offset, line: s.line_number, column: s.column, message }
 
+line_endings : Utf8.ByteClass
+line_endings = Utf8.ByteClass.from_bytes(['\r', '\n'])
+
 process_line : QIF.Decoder, List(U8) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
 process_line = |s, bytes| {
 	bom = s.line_start == 0 and s.props.encoding == Utf8 and bytes.take_first(3) == [0xef, 0xbb, 0xbf]
@@ -459,7 +519,8 @@ process_line = |s, bytes| {
 	if code < 33 or code > 126 or code == '^' {
 		return bad("field indicator must be printable ASCII")
 	}
-	value = decode_text(content.drop_first(1), s.props.encoding) ?? ""
+	# The complete line was validated and decoded above; the indicator is ASCII.
+	value = Str.from_utf8_lossy(text.to_utf8().drop_first(1))
 	{ state: { ..s, fields: s.fields.append({ code, value }), record_at: if (s.fields.is_empty()) at else s.record_at }, result: Continue }
 }
 
@@ -688,3 +749,37 @@ expect {
 	semantic_events(found) == semantic_events(expected.events)
 }
 expect QIF.parse_bytes([0xef, 0xbb, 0xbf], {}).is_ok()
+
+# Span scanning keeps the original diagnostics at both kinds of byte limit,
+# including ties, CRLF boundaries, empty lines and a final unterminated line.
+expect {
+	var $same = True
+	limits : List(QIF.Props)
+	limits = [{ max_line_bytes: 10 }, { max_record_bytes: 11 }, { max_line_bytes: 11, max_record_bytes: 11 }, { max_line_bytes: 12, max_record_bytes: 12 }]
+	for text in ["!Type:Bank\nP1234567890\n^\n", "!Type:Bank\r\nP1234567890\r\n^\r\n", "!Type:Bank\rP1234567890\r^", "!Type:Bank\n\nP1234567890"] {
+		bytes = text.to_utf8()
+		for props in limits {
+			expected = List.from_iter(QIF.parse_iter([bytes].iter(), props))
+			for split in (0.U64).to(bytes.len() + 1) {
+				found = List.from_iter(QIF.parse_iter([bytes.take_first(split), [], bytes.drop_first(split)].iter(), props))
+				$same = $same and found == expected
+			}
+		}
+	}
+	$same
+}
+expect QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_line_bytes: 10 }) == Err(InvalidQif({ offset: 22, line: 2, column: 12, message: "QIF byte limit exceeded" }))
+expect QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_record_bytes: 11 }) == Err(InvalidQif({ offset: 23, line: 2, column: 12, message: "QIF record byte limit exceeded" }))
+
+expect {
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT-12.3400000000000000000001\nPfirst\nPsecond\nM\nMsecond\nNfirst\nNsecond\nLfirst\nLsecond\nCfirst\nCsecond\nXone\nXtwo\n^\n")?
+	row = doc.transactions({})?.first()?
+	row.payee == "first" and row.memo == "" and row.number == "first" and row.category == "first" and row.cleared == "first" and row.amount == "-12.3400000000000000000001" and row.raw.fields.len() == 14
+}
+expect {
+	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nD27/08/2024\n^\n")?
+	match doc.transactions({}) {
+		Err(InvalidQif(error)) => error.message == "duplicate date or amount field"
+		_ => False
+	}
+}
