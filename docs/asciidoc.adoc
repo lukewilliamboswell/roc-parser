@@ -20,23 +20,23 @@ whitespace wherever they land, and directives in them, such as `ifdef::` or
 
 == Parsing and rendering
 
-`parse_str` uses the default attributes and leaves includes as links.
-`parse_with` accepts initial attributes and an explicit map of virtual include
-sources as a list of `{path, source}` records. Set `expand_includes: True`
-explicitly; the default is `False`. Includes never read files or the network.
-The parser supports nested includes, line and tag selectors, conditionals, attribute definitions and
-include level offsets. `render` converts a parsed document to embedded HTML;
-`render_inline` applies inline substitutions to a string and attributes.
+`AsciiDoc.parse_str(source, props)` returns the parsed document. Props fields
+have defaults: includes remain links unless `expand_includes: True`, and
+`includes` supplies virtual sources as `{ path, source }` records. Includes
+never read files or the network. The parser supports nested includes, line
+and tag selectors, conditionals, attribute definitions and include level offsets.
+Call `document.render_html()` to render embedded HTML, or
+`AsciiDoc.render_inline(source, attributes)` for independent inline text.
 
-For example, supply a virtual chapter using these options:
+For example, supply a virtual chapter in the constructor props:
 
 [source,roc]
 ----
-options = {
-    ..AsciiDoc.default_options,
+document = AsciiDoc.parse_str("include::chapter.adoc[]", {
     includes: [{ path: "chapter.adoc", source: "Chapter text" }],
     expand_includes: True,
-}
+})?
+html = document.render_html()
 ----
 
 Listing, source, literal and verse blocks and paragraphs honour `tabsize` as
@@ -73,9 +73,11 @@ with `AsciiDoc.attributes`; the original snapshot remains unchanged.
 
 Input is bounded to 256 KiB, expanded input to 1 MiB and structural nesting to
 64 levels. Virtual includes default to a maximum depth of 16. Invalid input or
-resource-limit failures return an `AsciiDoc.Problem` tag, one-based line and
-zero-based UTF-8 byte offset. Include failures retain their source paths; limit
-failures retain the configured maximum. An initial UTF-8 byte order mark is ignored.
+resource-limit failures return `Unsupported` or `InvalidAsciiDoc` with a
+structured `{ problem, location, path }` diagnostic. Source positions use
+`Text({ offset, line, column })`, with a zero-based UTF-8 byte offset and
+one-based line and column. Include paths are represented by `Source(path)`;
+limits retain their typed resource, maximum and observed count. An initial UTF-8 byte order mark is ignored.
 
 [source,roc]
 ----

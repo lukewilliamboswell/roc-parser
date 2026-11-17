@@ -549,8 +549,8 @@ matches_file = |parsed, file| {
 test : Case -> Fuzz.Outcome
 test = |input| {
 	parsed = match input.expected {
-		Expression(_) => RocSyntax.parse_expr_str(input.source)
-		CompleteFile(_) => RocSyntax.parse_str(input.source)
+		Expression(_) => RocSyntax.parse_str(input.source, { mode: Expression })
+		CompleteFile(_) => RocSyntax.parse_str(input.source, {})
 	}
 	agrees = match input.expected {
 		Expression(expr) => matches(parsed, parsed.root, expr)
@@ -561,7 +561,7 @@ test = |input| {
 	}
 	match input.expected {
 		Expression(expr) => {
-			precedence = RocSyntax.parse_expr_str("(${input.source}) + 2 * 3")
+			precedence = RocSyntax.parse_str("(${input.source}) + 2 * 3", { mode: Expression })
 			if !matches(precedence, precedence.root, Add(expr, Mul(Number("2"), Number("3")))) {
 				crash "wrong multiplication precedence"
 			}

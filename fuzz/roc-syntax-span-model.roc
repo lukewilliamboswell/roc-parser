@@ -654,7 +654,7 @@ first_difference = |left, right| {
 
 test : Case -> Fuzz.Outcome
 test = |input| {
-	parsed = RocSyntax.parse_str(input.source)
+	parsed = RocSyntax.parse_str(input.source, {})
 	if parsed.status != Complete {
 		crash "generated source did not parse: ${input.source}\n${Str.inspect(parsed.diagnostics)}"
 	}

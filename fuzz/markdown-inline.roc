@@ -6,7 +6,6 @@ app [target] {
 import fuzz.Fuzz
 import parser.Markdown
 import parser.Parser
-import parser.Utf8
 
 ## Arbitrary bytes through Markdown.inline_parser. Parsing never fails or crashes
 ## (also on invalid UTF-8), and for valid UTF-8:
@@ -26,7 +25,7 @@ Tree : List(Markdown.Inline)
 
 parse : List(U8) -> Tree
 parse = |bytes| {
-	match Utf8.parse_bytes(Markdown.inline_parser, bytes) {
+	match (Markdown.inline_parser).parse(bytes) {
 		Ok(nodes) => nodes
 		Err(_) => crash "Markdown.inline_parser must accept every input: ${Str.inspect(Str.from_utf8_lossy(bytes))}"
 	}

@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
-import parser.Utf8
+import parser.Parser
 
 ## Link reference definition property (CommonMark 4.7). Fuzzer bytes choose a
 ## few definitions and how each is written: label case and inner whitespace,
@@ -344,9 +344,9 @@ block_matches = |expected, actual| {
 test : Input -> Fuzz.Outcome
 test = |input| {
 	actual =
-		match Utf8.parse_str(Markdown.parser, input.markdown) {
+		match (Markdown.parser({})).parse_str(input.markdown) {
 			Ok(blocks) => normalize(blocks)
-			Err(_) => crash "Markdown.parser failed"
+			Err(_) => crash "Markdown.parser({}) failed"
 		}
 	if !matches(input.expected, actual) {
 		crash "reference definition mismatch\n--- markdown ---\n${input.markdown}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${show(actual)}"

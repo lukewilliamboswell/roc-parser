@@ -31,14 +31,15 @@ nodes and unsafe URLs. See <<markdown-render>>.
 
 == Parse a document into blocks
 
-Parse a whole document with `Markdown.parse_str`. It returns a
+Parse a whole document with `Markdown.parse_str(source, props)`. It returns a
 `List(Markdown)`: one value per top-level block, in document order.
 
 Markdown has no syntax errors. Every input is a valid document, so
 `Markdown.parse_str` returns the blocks directly rather than a `Try`; text that
 looks like broken syntax becomes ordinary paragraph text. To use the document
-parser inside your own combinators, `Markdown.parser` is the same parser as a
-`Parser(Utf8.Bytes, List(Markdown), [])`.
+parser inside your own combinators, use `Markdown.parser(props)`, a
+`Parser(Parser.Utf8.Bytes, List(Markdown), [])`. Its receiver runners share
+the common parser diagnostic envelope.
 
 The following app parses a document that uses each kind of block and prints
 each block with `Str.inspect`, which shows what the parser produced.

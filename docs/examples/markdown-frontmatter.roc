@@ -20,11 +20,11 @@ post =
 main! = |_args| show!(post)
 
 show! = |text| {
-	blocks = Markdown.parse_str(text)
+	blocks = Markdown.parse_str(text, {})
 	match Markdown.frontmatter(blocks) {
 		Ok(raw) => {
 			Stdout.line!("raw: ${Str.inspect(raw)}")?
-			meta = Yaml.parse_str(raw)?
+			meta = Yaml.parse_str(raw, {})?
 			Stdout.line!("meta: ${meta.to_inspect()}")?
 			# The frontmatter is the first block.
 			Stdout.line!("body blocks: ${(blocks.len() - 1).to_str()}")?

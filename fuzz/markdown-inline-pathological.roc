@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
-import parser.Utf8
+import parser.Parser
 
 ## Performance property: inline inputs built by repeating pathological
 ## patterns (those of cmark's test/pathological_tests.py plus GFM autolink,
@@ -87,7 +87,7 @@ generate = |bytes| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	match Utf8.parse_str(Markdown.inline_parser, input.text) {
+	match (Markdown.inline_parser).parse_str(input.text) {
 		Ok(nodes) => {
 			# Walk the whole tree (linearly) so no work is skipped.
 			if count_nodes(nodes) == 0 and !Str.is_empty(Str.trim(input.text)) {

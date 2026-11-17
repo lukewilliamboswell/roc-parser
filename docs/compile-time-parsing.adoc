@@ -42,7 +42,7 @@ bytes, including the header. Raw CSV does not assume its first row is a header.
 |`JsonValue` |The JSON value itself
 |`Markdown.Document` |`.blocks`, a list of Markdown blocks
 |`AsciiDoc` |`.title` and `.blocks`
-|`HTTP.RequestLiteral`, `HTTP.ResponseLiteral` |`.value`, the request or response
+|`HTTP.Request`, `HTTP.Response` |The request or response itself
 |`RocSyntax` |`.source`, `.tokens`, `.nodes`, and the other parsed fields
 |===
 
@@ -69,8 +69,8 @@ compiled program needs neither the file nor a runtime parser call for that
 constant. Roc file imports accept `Str` or `List(U8)`; they do not invoke a custom
 type's `from_quote` method directly.
 
-`Literal.require` unwraps a successful checked conversion and fails with its
-message otherwise. Use it for demanded top-level constants. With dynamic input,
+`Parser.Quotation.require` unwraps a successful checked conversion and renders
+its structured failure if the conversion fails. Use it for demanded top-level constants. With dynamic input,
 keep the validator's `Try` result and handle its error: a failing `require` call
 that executes at runtime crashes at runtime. Uninstantiated generic code is not
 a promise that its dependent quotations have been checked.
@@ -86,13 +86,15 @@ include::examples/compile-time-parsing.roc[tag=configured,indent=0]
 ----
 
 This accepts the YAML string `yes` deliberately. Without the override, the
-legacy-boolean check suggests quoting it or using `true` or `false`.
+legacy-boolean check rejects it. Quote `yes` to retain text, or use `true` or
+`false` for a Boolean.
 
 Each format has `validate`; YAML and CSV also have `validate_as` for type-directed
 decoding. JSON has `validate` but no `validate_as`; decode JSON into records with
-Roc's builtin `Json`. HTTP uses `validate_request` and `validate_response`. These
-functions return the natural parsed value in `Try(_, [BadQuotedBytes(Str)])`, so
-they can also be called from a custom type's `from_quote` method.
+Roc's builtin `Json`. HTTP provides `HTTP.Request.validate` and
+`HTTP.Response.validate`. Runtime validators return the natural parsed value
+and format-tagged structured diagnostics. Only `from_quote` and explicit
+quotation adapters render those failures as `BadQuotedBytes(Str)`.
 
 The initial extra checks are enabled by default. Set an individual Boolean to
 `False` to accept that construct. Invalid syntax, type mismatches, unsupported
@@ -111,7 +113,7 @@ features, and resource limits remain errors regardless of lint settings.
 |===
 
 JSON has no lint fields. Its props take `options`, the same
-`JsonValue.Options` record that `JsonValue.parse_with` takes, so JSONC, a byte
+`JsonValue.Props` record that `JsonValue.parse_str(source, props)` takes, so JSONC, a byte
 order mark, a duplicate-key policy such as `CollapseIdentical`, size limits and
 I-JSON numbers are chosen the same way at compile time as at run time (see
 <<json-options>>).
@@ -132,12 +134,14 @@ include files itself.
 
 == Simple, useful errors
 
-An error names the source and format, gives an available line and byte column,
-and explains the first problem. For example:
+Runtime diagnostics carry `problem`, `location`, and `path`; unavailable
+positions are explicit. Source names and logical field or record positions
+remain structured. Compiler quotations render the source and format, any
+available line and byte column, and the first problem. For example:
 
 [source,text]
 ----
-settings.yaml:2:7: YAML: unterminated flow collection
+settings.yaml:2:7: YAML: UnclosedFlowCollection
 ----
 
 CSV errors also identify the record and field. Missing required fields are named
@@ -148,17 +152,18 @@ how callers select validation policy.
 
 == Your own quotation type
 
-`Utf8.parse_quote` adapts a combinator parser, requiring complete consumption and
-retaining its furthest-error location:
+`Parser.Quotation.check({ parser, source })` adapts a combinator parser,
+requiring complete consumption and retaining its furthest-error location:
 
 [source,roc]
 ----
 include::examples/compile-time-parsing.roc[tag=custom,indent=0]
 ----
 
-For a format-specific application type, return a configured `validate_as` result
-from `from_quote`. This is also the place to add pure domain checks, returning a
-useful `BadQuotedBytes` explanation when they fail.
+For a format-specific application type, call a configured `validate_as` from
+`from_quote`, add any pure domain checks, and render failures with
+`Parser.Quotation.error` at that compiler boundary. Keep native typed problems
+and their available locations in runtime APIs.
 
 The complete {src}/docs/examples/compile-time-parsing.roc[example] is checked,
 tested, and run in CI. Each format's quotation and imported-file rejection

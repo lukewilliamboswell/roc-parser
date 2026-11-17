@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
-import parser.Utf8
+import parser.Parser
 
 ## Typed inline property: bytes choose an inline syntax tree and how to write
 ## it (delimiter characters, link destination and title forms, reference
@@ -27,7 +27,7 @@ import parser.Utf8
 ## * code fences are longer than any backtick run in the content, padded when
 ##   the content starts or ends with a backtick or is wrapped in spaces.
 ##
-## In document mode the text is parsed with Markdown.parser and links may be
+## In document mode the text is parsed with Markdown.parser({}) and links may be
 ## written as full, collapsed or shortcut references with definitions after
 ## the paragraph.
 
@@ -449,13 +449,13 @@ generate = |bytes| {
 test : Input -> Fuzz.Outcome
 test = |input| {
 	if input.doc {
-		match Utf8.parse_str(Markdown.parser, input.md) {
+		match (Markdown.parser({})).parse_str(input.md) {
 			Ok([Paragraph(actual)]) if actual == input.expected => Fuzz.keep
 			Ok(blocks) => crash "document mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${Str.join_with(blocks.map(Str.inspect), "\n")}"
 			Err(_) => crash "document failed to parse\n${input.md}"
 		}
 	} else {
-		match Utf8.parse_str(Markdown.inline_parser, input.md) {
+		match (Markdown.inline_parser).parse_str(input.md) {
 			Ok(actual) if actual == input.expected => Fuzz.keep
 			Ok(actual) => crash "inline mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${show(actual)}"
 			Err(_) => crash "inline failed to parse\n${input.md}"

@@ -7,6 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.AsciiDoc
+import parser.Parser
 
 ## Read one complete UTF-8 AsciiDoc source from stdin, returning one JSON line.
 main! : List(OsStr) => Try({}, _)
@@ -16,8 +17,8 @@ main! = |args| {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(source) => {
 			request = if (args.any(|arg| OsStr.display(arg) == "--request")) decode_request(source.to_utf8()) else { source, includes: [], expand: False }
-			match AsciiDoc.parse_with(request.source, { includes: request.includes, attributes: [], max_depth: 16, expand_includes: request.expand }) {
-				Ok(document) => Stdout.line!("{\"status\":\"ok\",\"projection\":{\"title\":${json_string(document.title)},\"blocks\":${encode_blocks(document.blocks)}},\"html\":${json_string(AsciiDoc.render(document))}}")?
+			match AsciiDoc.parse_str(request.source, { includes: request.includes, attributes: [], max_depth: 16, expand_includes: request.expand }) {
+				Ok(document) => Stdout.line!("{\"status\":\"ok\",\"projection\":{\"title\":${json_string(document.title)},\"blocks\":${encode_blocks(document.blocks)}},\"html\":${json_string(document.render_html())}}")?
 				Err(Unsupported(error)) => Stdout.line!(encode_error("unsupported", error))?
 				Err(InvalidAsciiDoc(error)) => Stdout.line!(encode_error("error", error))?
 			}
@@ -27,7 +28,7 @@ main! = |args| {
 }
 
 encode_error : Str, AsciiDoc.Error -> Str
-encode_error = |status, error| "{\"status\":${json_string(status)},\"reason\":${json_string(Str.inspect(error.problem))},\"message\":${json_string(Str.inspect(error.problem))},\"offset\":${error.offset.to_str()},\"line\":${error.line.to_str()}}"
+encode_error = |status, error| "{\"status\":${json_string(status)},\"reason\":${json_string(Str.inspect(error.problem))},\"message\":${json_string(Str.inspect(error.problem))},\"offset\":${source_position(error.location).offset.to_str()},\"line\":${source_position(error.location).line.to_str()}}"
 
 encode_blocks : List(AsciiDoc.Block) -> Str
 encode_blocks = |blocks| "[${
@@ -130,4 +131,10 @@ has_definition : AsciiDoc.Block -> Bool
 has_definition = |block| match block {
 	Rich(n) => n.source != "" or !n.blocks.is_empty()
 	_ => False
+}
+
+source_position : Parser.Location -> { offset : U64, line : U64, column : U64 }
+source_position = |location| match location {
+	Text(position) => position
+	_ => crash "expected retained AsciiDoc source byte and line coordinates"
 }

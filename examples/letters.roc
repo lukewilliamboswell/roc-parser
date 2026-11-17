@@ -7,13 +7,11 @@ import cli.OsStr
 import cli.Stderr
 import cli.Stdout
 import parser.Parser
-import parser.Utf8
-
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "AAAiBByAABBwBtCCCiAyArBBx"
-	result : Try(List(Letter), [ParseError({ problem : Parser.Problem(_), offset : U64 })])
-	result = Utf8.parse_str(letter_parser.many(), input)
+	result : Try(List(Letter), [ParseError(Parser.Diagnostic(Parser.Problem(_)))])
+	result = (letter_parser.many()).parse_str(input)
 
 	match result.map_ok(count_letter_as) {
 		Ok(count) => Stdout.line!("I counted ${count.to_str()} letter A's!")?
@@ -40,10 +38,10 @@ count_letter_as = |letters|
 letter_parser : Parser(List(U8), Letter, _)
 letter_parser = Parser.custom(
 	|input| {
-		val_result : Try(Letter, [ParseError({ problem : Parser.Problem(_), offset : U64 })])
+		val_result : Try(Letter, [ParseError(Parser.Diagnostic(Parser.Problem(_)))])
 		val_result =
 			match input {
-				[] => Err(ParseError({ problem: UnexpectedEnd, offset: 0 }))
+				[] => Err(ParseError(Parser.Diagnostic.{ problem: UnexpectedEnd, location: InputOffset(0), path: [] }))
 				['A', ..] => Ok(A)
 				['B', ..] => Ok(B)
 				['C', ..] => Ok(C)
@@ -60,7 +58,7 @@ letter_parser = Parser.custom(
 expect {
 	input = "B"
 	parser = letter_parser
-	result = parser |> Utf8.parse_str(input)?
+	result = parser.parse_str(input)?
 	result == B
 }
 
@@ -69,6 +67,6 @@ expect {
 expect {
 	input = "BCXA"
 	parser = letter_parser.many()
-	result = parser |> Utf8.parse_str(input)?
+	result = parser.parse_str(input)?
 	result == [B, C, Other, A]
 }

@@ -23,7 +23,7 @@ main! = |_| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(input) => {
-			Stdout.line!("{\"status\":\"ok\",\"value\":${encode_blocks(Markdown.parse_str(input))}}")?
+			Stdout.line!("{\"status\":\"ok\",\"value\":${encode_blocks(Markdown.parse_str(input, {}))}}")?
 		}
 	}
 	Ok({})

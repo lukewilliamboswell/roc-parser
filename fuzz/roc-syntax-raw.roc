@@ -10,7 +10,7 @@ import parser.RocSyntax
 ## Invalid bytes and incomplete edits are useful input, never rejected.
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
-	parsed = RocSyntax.parse_bytes(bytes)
+	parsed = RocSyntax.parse_bytes(bytes, {})
 	if parsed.source != bytes {
 		crash "source bytes changed"
 	}
@@ -62,11 +62,11 @@ test = |bytes| {
 		crash "expected exactly one EOF"
 	}
 	for diagnostic in parsed.diagnostics {
-		if diagnostic.start > diagnostic.end or diagnostic.end > bytes.len() {
+		if diagnostic.problem.span.start > diagnostic.problem.span.end or diagnostic.problem.span.end > bytes.len() {
 			crash "invalid diagnostic span"
 		}
 	}
-	if RocSyntax.parse_bytes(bytes) != parsed {
+	if RocSyntax.parse_bytes(bytes, {}) != parsed {
 		crash "parse not deterministic"
 	}
 	Fuzz.keep

@@ -12,7 +12,7 @@ test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	{ after, .. } = bytes.split_first('\n') ?? { before: [], after: [] }
 	input = Str.from_utf8(after) ?? ""
-	_measured = Fuzz.measure!("parse", || RocSyntax.parse_str(input))
+	_measured = Fuzz.measure!("parse", || RocSyntax.parse_str(input, {}))
 	Fuzz.keep
 }
 

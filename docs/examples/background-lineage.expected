@@ -1,4 +1,4 @@
 Ok({ x: 3, y: 4 })
 Ok("abc")
 Ok(PlusPlus)
-Err(ParseError({ offset: 8, problem: ExpectedDigit }))
+Err(ParseError({ location: Text({ column: 9, line: 1, offset: 8 }), path: [], problem: ExpectedDigit }))

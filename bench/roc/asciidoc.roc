@@ -12,4 +12,4 @@ main! : List(OsStr) => Try({}, _)
 main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
-parse = |source| AsciiDoc.parse_str(source).map_ok(|document| document.blocks.len() + document.title.count_utf8_bytes() + 1).map_err(|_| 1)
+parse = |source| AsciiDoc.parse_str(source, {}).map_ok(|document| document.blocks.len() + document.title.count_utf8_bytes() + 1).map_err(|_| 1)

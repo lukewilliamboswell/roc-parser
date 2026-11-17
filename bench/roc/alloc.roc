@@ -10,7 +10,6 @@ import parser.JsonValue
 import parser.Markdown
 import parser.RocSyntax
 import parser.Parser
-import parser.Utf8
 import parser.Xml
 import parser.Yaml
 
@@ -29,17 +28,17 @@ test! = |bytes| {
 parse : Str, Str -> Str
 parse = |format, input| {
 	accepted = match format {
-		"roc-syntax" => RocSyntax.parse_str(input).status == Complete
-		"csv" => CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), input).is_ok()
-		"yaml" => Yaml.parse_str(input).is_ok()
-		"xml" => Xml.parse_str(input).is_ok()
-		"json" => JsonValue.parse_str(input).is_ok()
-		"markdown" => Markdown.parse_str(input).len() + 1 > 0
+		"roc-syntax" => RocSyntax.parse_str(input, {}).status == Complete
+		"csv" => CSV.rows_parser({ row: Parser.many(CSV.field(CSV.string({}))) }).parse_str(input).is_ok()
+		"yaml" => Yaml.parse_str(input, {}).is_ok()
+		"xml" => Xml.parse_str(input, {}).is_ok()
+		"json" => JsonValue.parse_str(input, {}).is_ok()
+		"markdown" => Markdown.parse_str(input, {}).len() + 1 > 0
 		"http" =>
 			if input.starts_with("HTTP/") {
-				HTTP.parse_response(input.to_utf8()).map_ok(|r| r.rest) == Ok([])
+				HTTP.Response.parse_bytes(input.to_utf8(), {}).is_ok()
 			} else {
-				HTTP.parse_request(input.to_utf8()).map_ok(|r| r.rest) == Ok([])
+				HTTP.Request.parse_bytes(input.to_utf8(), {}).is_ok()
 			}
 		_ => False
 	}

@@ -59,19 +59,19 @@ respond = |request| {
 		return Json.to_str({ version: 1.U64, id: request.id, error: "unsupported_mode" })
 	}
 	parsed = match request.mode {
-		"expr" => RocSyntax.parse_expr_str(request.source)
-		"file-hex" => RocSyntax.parse_bytes(hex_bytes(request.source))
-		"statement" => RocSyntax.parse_statement_str(request.source)
-		"header" => RocSyntax.parse_header_str(request.source)
+		"expr" => RocSyntax.parse_str(request.source, { mode: Expression })
+		"file-hex" => RocSyntax.parse_bytes(hex_bytes(request.source), {})
+		"statement" => RocSyntax.parse_str(request.source, { mode: Statement })
+		"header" => RocSyntax.parse_str(request.source, { mode: Header })
 		"repl" => {
-			file = RocSyntax.parse_str(request.source)
+			file = RocSyntax.parse_str(request.source, {})
 			root = file.nodes.get(file.root) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-			if (file.status == Complete and root.children_len == 1) file else RocSyntax.parse_statement_str(request.source)
+			if (file.status == Complete and root.children_len == 1) file else RocSyntax.parse_str(request.source, { mode: Statement })
 		}
-		_ => RocSyntax.parse_str(request.source)
+		_ => RocSyntax.parse_str(request.source, {})
 	}
 	tokens = parsed.tokens.map(|token| { kind: Str.inspect(token.kind), start: token.start, end: token.end })
 	nodes = parsed.nodes.map(|node| { kind: Str.inspect(node.kind), start: node.start, end: node.end, children_start: node.children_start, children_len: node.children_len })
-	diagnostics = parsed.diagnostics.map(|diagnostic| { stage: "parse", kind: Str.inspect(diagnostic.code), start: diagnostic.start, end: diagnostic.end })
+	diagnostics = parsed.diagnostics.map(|diagnostic| { stage: "parse", kind: Str.inspect(diagnostic.problem.code), start: diagnostic.problem.span.start, end: diagnostic.problem.span.end })
 	Json.to_str({ version: 1.U64, id: request.id, mode: request.mode, ok: parsed.status == Complete, consumed: parsed.consumed, status: Str.inspect(parsed.status), tokens, nodes, children: parsed.children, root: parsed.root, diagnostics })
 }

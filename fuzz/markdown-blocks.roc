@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
-import parser.Utf8
+import parser.Parser
 
 ## Block-structure property: fuzzer bytes choose a tree of Markdown blocks
 ## (paragraphs, ATX and setext headings, thematic breaks, fenced and indented
@@ -780,9 +780,9 @@ generate = |bytes| {
 
 parse : Str -> List(Markdown)
 parse = |text| {
-	match Utf8.parse_str(Markdown.parser, text) {
+	match (Markdown.parser({})).parse_str(text) {
 		Ok(blocks) => blocks
-		Err(_) => crash "Markdown.parser failed on:\n${text}"
+		Err(_) => crash "Markdown.parser({}) failed on:\n${text}"
 	}
 }
 

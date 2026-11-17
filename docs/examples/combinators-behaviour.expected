@@ -1,1 +1,1 @@
-Err(ParseError({ offset: 0, problem: PortOutOfRange({ max: 65535.0, value: 70000 }) }))
+Err(ParseError({ location: Text({ column: 1, line: 1, offset: 0 }), path: [], problem: PortOutOfRange({ max: 65535.0, value: 70000 }) }))

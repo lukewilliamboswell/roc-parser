@@ -5,78 +5,76 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.Utf8
-
 # tag::applicative[]
 # Applicative style: a constructor function, then one `keep` per field and
 # one `skip` per piece of punctuation. No step depends on an earlier value.
 Point : { x : U64, y : U64 }
 
-point : Parser(Utf8.Bytes, Point, _)
+point : Parser(Parser.Utf8.Bytes, Point, _)
 point =
 	Parser.const(|x| |y| { x, y })
-		.skip(Utf8.codeunit('('))
-		.keep(Utf8.digits({}))
-		.skip(Utf8.codeunit(','))
-		.keep(Utf8.digits({}))
-		.skip(Utf8.codeunit(')'))
+		.skip(Parser.Utf8.codeunit('('))
+		.keep(Parser.Utf8.digits({}))
+		.skip(Parser.Utf8.codeunit(','))
+		.keep(Parser.Utf8.digits({}))
+		.skip(Parser.Utf8.codeunit(')'))
 
-expect Utf8.parse_str(point, "(3,4)") == Ok({ x: 3, y: 4 })
+expect (point).parse_str("(3,4)") == Ok({ x: 3, y: 4 })
 # end::applicative[]
 
 # tag::monadic[]
 # A parser is a function from input to a result and the rest of the input.
 # `custom` wraps such a function directly.
-take : U64 -> Parser(Utf8.Bytes, Utf8.Bytes, _)
+take : U64 -> Parser(Parser.Utf8.Bytes, Parser.Utf8.Bytes, _)
 take = |n|
 	Parser.custom(
 		|input|
 			if input.len() >= n {
 				Ok({ value: input.take_first(n), rest: input.drop_first(n) })
 			} else {
-				Err(ParseError({ problem: MissingBytes(n), offset: 0 }))
+				Err(ParseError(Parser.Diagnostic.{ problem: MissingBytes(n), location: InputOffset(0), path: [] }))
 			},
 	)
 
 # Monadic style: the next parser depends on a value already read. Here a
 # length prefix says how many bytes follow.
-length_prefix : Parser(Utf8.Bytes, U64, _)
-length_prefix = Utf8.digits({}).skip(Utf8.codeunit(':'))
+length_prefix : Parser(Parser.Utf8.Bytes, U64, _)
+length_prefix = Parser.Utf8.digits({}).skip(Parser.Utf8.codeunit(':'))
 
-counted : Parser(Utf8.Bytes, Str, _)
+counted : Parser(Parser.Utf8.Bytes, Str, _)
 counted = length_prefix.and_then(take).map(Str.from_utf8_lossy)
 
-expect Utf8.parse_str(counted, "3:abc") == Ok("abc")
-expect Utf8.parse_str(counted, "3:ab").is_err()
+expect (counted).parse_str("3:abc") == Ok("abc")
+expect (counted).parse_str("3:ab").is_err()
 # end::monadic[]
 
 # tag::ordered[]
 # Ordered choice, as in a PEG: the first alternative that succeeds wins, and
 # a failed alternative is retried from the same input.
-sign : Parser(Utf8.Bytes, [Plus, Minus, PlusPlus], _)
+sign : Parser(Parser.Utf8.Bytes, [Plus, Minus, PlusPlus], _)
 sign =
 	Parser.one_of([
-		Parser.const(PlusPlus).skip(Utf8.string("++")),
-		Parser.const(Plus).skip(Utf8.string("+")),
-		Parser.const(Minus).skip(Utf8.string("-")),
+		Parser.const(PlusPlus).skip(Parser.Utf8.string("++")),
+		Parser.const(Plus).skip(Parser.Utf8.string("+")),
+		Parser.const(Minus).skip(Parser.Utf8.string("-")),
 	])
 
-expect Utf8.parse_str(sign, "++") == Ok(PlusPlus)
-expect Utf8.parse_str(sign, "-") == Ok(Minus)
+expect (sign).parse_str("++") == Ok(PlusPlus)
+expect (sign).parse_str("-") == Ok(Minus)
 # end::ordered[]
 
 # tag::furthest[]
 # Furthest failure: `many` stops at the bad second point, but the error the
 # runner reports is that point's own failure, at the byte where it happened.
-points : Parser(Utf8.Bytes, List(Point), _)
+points : Parser(Parser.Utf8.Bytes, List(Point), _)
 points = Parser.many(point)
 
-expect Utf8.parse_str(points, "(1,2)(3,x)") == Err(ParseError({ problem: ExpectedDigit, offset: 8 }))
+expect (points).parse_str("(1,2)(3,x)") == Err(ParseError(Parser.Diagnostic.{ problem: ExpectedDigit, location: Text({ offset: 8, line: 1, column: 9 }), path: [] }))
 # end::furthest[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(Utf8.parse_str(point, "(3,4)")))?
-	Stdout.line!(Str.inspect(Utf8.parse_str(counted, "3:abc")))?
-	Stdout.line!(Str.inspect(Utf8.parse_str(sign, "++")))?
-	Stdout.line!(Str.inspect(Utf8.parse_str(points, "(1,2)(3,x)")))
+	Stdout.line!(Str.inspect((point).parse_str("(3,4)")))?
+	Stdout.line!(Str.inspect((counted).parse_str("3:abc")))?
+	Stdout.line!(Str.inspect((sign).parse_str("++")))?
+	Stdout.line!(Str.inspect((points).parse_str("(1,2)(3,x)")))
 }

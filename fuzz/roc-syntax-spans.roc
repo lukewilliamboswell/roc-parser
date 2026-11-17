@@ -143,12 +143,12 @@ check = |parsed| {
 
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
-	check(RocSyntax.parse_bytes(bytes))
-	check(RocSyntax.parse_expr_bytes(bytes))
+	check(RocSyntax.parse_bytes(bytes, {}))
+	check(RocSyntax.parse_bytes(bytes, { mode: Expression }))
 	match Str.from_utf8(bytes) {
 		Ok(source) => {
-			check(RocSyntax.parse_statement_str(source))
-			check(RocSyntax.parse_header_str(source))
+			check(RocSyntax.parse_str(source, { mode: Statement }))
+			check(RocSyntax.parse_str(source, { mode: Header }))
 		}
 		Err(_) => {}
 	}

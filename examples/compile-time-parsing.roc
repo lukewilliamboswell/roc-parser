@@ -5,9 +5,8 @@ app [main!] {
 
 import cli.Stdout
 import parser.CSV
-import parser.Literal
+import parser.Parser
 import parser.RocSyntax
-import parser.Utf8
 import parser.Yaml
 
 # tag::imported[]
@@ -16,7 +15,7 @@ import "assets/compile-time-settings.yaml" as settings_text : Str
 Config : { name : Str, port : U16 }
 
 config : Config
-config = Literal.require(
+config = Parser.Quotation.require(
 	Yaml.validate_as({
 		source: settings_text,
 		name: "compile-time-settings.yaml",
@@ -42,7 +41,7 @@ table =
 # end::quoted[]
 
 # tag::configured[]
-answer = Literal.require(
+answer = Parser.Quotation.require(
 	Yaml.validate({
 		source: "answer: yes",
 		lints: { legacy_booleans: False },
@@ -54,7 +53,7 @@ answer = Literal.require(
 # tag::custom[]
 Count := { value : U64 }.{
 	from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])
-	from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits({}), source }).map_ok(|value| Count.{ value })
+	from_quote = |source| Parser.Quotation.check({ parser: Parser.Utf8.digits({}), source }).map_ok(|value| Count.{ value })
 }
 
 count : Count
@@ -62,7 +61,7 @@ count = "42"
 # end::custom[]
 
 import "assets/compile-time-source.roc" as source_text : Str
-source = Literal.require(RocSyntax.validate({ source: source_text, name: "compile-time-source.roc" }))
+source = Parser.Quotation.require(RocSyntax.validate({ source: source_text, name: "compile-time-source.roc" }))
 
 main! = |_args| {
 	person = people.value.first() ?? { name: "", age: 0 }
