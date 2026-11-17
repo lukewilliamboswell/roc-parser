@@ -523,7 +523,7 @@ process_line = |s, bytes| {
 			Ok(decoded) => decoded
 			Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + 1 + error.index, line: at.line, column: at.column + 1 + error.index, message: error.message }) }
 		}
-		if content.contains(0) {
+		if contains_nul(content) {
 			return { state: s, result: Error(bad("NUL is not allowed in QIF fields")) }
 		}
 		if s.section == "" {
@@ -540,7 +540,7 @@ process_line = |s, bytes| {
 		Ok(value) => value
 		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, message: error.message }) }
 	}
-	if bytes.contains(0) {
+	if contains_nul(bytes) {
 		return { state: s, result: Error(bad("NUL is not allowed in QIF fields")) }
 	}
 	if content.is_empty() {
@@ -581,6 +581,27 @@ process_line = |s, bytes| {
 
 has_break : Str -> Bool
 has_break = |text| text.to_utf8().any(|b| b == '\r' or b == '\n' or b == 0)
+
+# A fixed byte test avoids creating an iterator closure for every input byte.
+contains_nul : List(U8) -> Bool
+contains_nul = |bytes| {
+	zero = U8x16.splat(0)
+	var $index = 0
+	while bytes.len() - $index >= 16 {
+		block = U8x16.load(bytes, $index) ?? U8x16.splat(1)
+		if U8x16.to_bitmask(U8x16.eq_lanes(block, zero)) != 0 {
+			return True
+		}
+		$index = $index + 16
+	}
+	while $index < bytes.len() {
+		if bytes.get($index) == Ok(0) {
+			return True
+		}
+		$index = $index + 1
+	}
+	False
+}
 
 valid_amount : Str -> Bool
 valid_amount = |text| {
@@ -959,4 +980,15 @@ expect {
 		(NeedInput, Item(Record(_)), Item(Header(_)), NeedInput, Item(Record(record))) => account.state.account == name and field.state.account == name and record.account == name and record.fields == [{ code: 'P', value: "paid" }]
 		_ => False
 	}
+}
+expect {
+	var $same = True
+	for prefix in (0.U64).to(65) {
+		for suffix in (0.U64).to(33) {
+			bytes = List.repeat(1.U8, prefix).append(0).concat(List.repeat(255, suffix))
+			$same = $same and contains_nul(bytes)
+		}
+		$same = $same and !contains_nul(List.repeat(255.U8, prefix))
+	}
+	$same
 }
