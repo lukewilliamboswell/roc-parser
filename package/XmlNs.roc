@@ -271,15 +271,15 @@ XmlNs := {
 						match rest.next() {
 							Done => Ok({ declaration, root })
 							Failed(error) => Err(error)
-							_ => Err(InvalidXml({ line: 1, column: 1, message: "internal error: an event after the root element" }))
+							_ => Err(InvalidXml({ line: 1, column: 1, problem: UnexpectedEventAfterRoot }))
 						}
 
 					Failed(error) => Err(error)
-					NotAfterStart => Err(InvalidXml({ line: 1, column: 1, message: "internal error: no root element" }))
+					NotAfterStart => Err(InvalidXml({ line: 1, column: 1, problem: MissingRootElement }))
 				}
 
 			Failed(error) => Err(error)
-			_ => Err(InvalidXml({ line: 1, column: 1, message: "internal error: no root element" }))
+			_ => Err(InvalidXml({ line: 1, column: 1, problem: MissingRootElement }))
 		}
 	}
 
@@ -299,7 +299,7 @@ XmlNs := {
 			Ok(doc) => Ok(doc)
 			Err(InvalidXml(error)) => Err(InvalidXml(error))
 			Err(InvalidNamespace(problem)) => Err(InvalidNamespace(problem))
-			Err(LimitExceeded(exceeded)) => Err(InvalidXml({ line: exceeded.line, column: exceeded.column, message: "limit exceeded" }))
+			Err(LimitExceeded(exceeded)) => Err(InvalidXml({ line: exceeded.line, column: exceeded.column, problem: ResourceLimit({ limit: exceeded.limit, max: exceeded.max }) }))
 		}
 	}
 

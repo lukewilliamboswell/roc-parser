@@ -63,7 +63,7 @@ Xml := {
 	## Input is already UTF-8, so a different declared encoding is suspicious.
 	validate : ValidationProps -> Try(Xml, [BadQuotedBytes(Str)])
 	validate = |props| {
-		xml = Xml.parse_str(props.source).map_err(|InvalidXml(error)| Quotation.error({ name: props.name, format: "XML", message: error.message, line: error.line, column: error.column }))?
+		xml = Xml.parse_str(props.source).map_err(|InvalidXml(error)| Quotation.error({ name: props.name, format: "XML", message: Xml.problem_text(error.problem), line: error.line, column: error.column }))?
 		if props.lints.non_utf8_declaration {
 			match xml.declaration {
 				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(Quotation.error({ name: props.name, format: "XML", line: 1, message: "non_utf8_declaration: input is UTF-8 but declares ${encoding}" }))
@@ -114,7 +114,17 @@ Xml := {
 	## Location and explanation of malformed XML. Lines and columns are
 	## one-based; columns count UTF-8 bytes, and `\r\n`, `\r`, and `\n` each
 	## end a line.
-	Error : { line : U64, column : U64, message : Str }
+	## XML syntax, resource and incremental-input problems. Authored names,
+	## code points and configured limits remain available without parsing text.
+	Problem : [UnexpectedEventAfterRoot, MissingRootEvent, MissingRootElement, TrailingContent, ExpectedRoot, RootText, DoctypeUnsupported, UnclosedElement(Str), UnclosedCData, ExpectedMarkupDeclaration, ForbiddenCDataEnd, ExpectedEndTagName, EndTagMismatch({ actual : Str, expected : Str }), ExpectedEndTagClose, ExpectedVersion, ExpectedQuotedVersion, BadVersion, VersionOverflow, ExpectedVersionEndQuote, ExpectedEncodingSpace, ExpectedQuotedEncoding, BadEncodingStart, ExpectedEncodingEndQuote, ExpectedStandaloneSpace, ExpectedQuotedStandalone, BadStandalone, ExpectedStandaloneEndQuote, ExpectedDeclarationClose, ExpectedEquals, CommentDoubleHyphen, UnclosedComment, ExpectedInstructionTarget, DeclarationNotAtStart, ReservedInstructionTarget(Str), NamespacedInstructionTarget(Str), ExpectedInstructionSpace(Str), UnclosedInstruction, ExpectedStartTagName, ExpectedStartTagClose(Str), ExpectedStartTagSpace(Str), ExpectedAttributeName(Str), DuplicateAttribute(Str), ExpectedQuotedAttribute, AttributeContainsLt, UnclosedAttribute, ExpectedReference, ExpectedEntitySemicolon, UnknownEntity(Str), ExpectedCharacterDigits([Decimal, Hexadecimal]), ExpectedCharacterSemicolon, InvalidCharacterReference(U32), InvalidUtf8, InvalidCharacter(U32), ResourceLimit({ limit : Limit, max : U64 }), NonUtf8Encoding(Str), UnexpectedEndTag, IncompleteMarkup, BadTextFragmentSize({ minimum : U64, actual : U64 }), InvalidBom(List(U8)), CDataOutsideRoot, UnfinishedDocument({ construct : Construct, expected_end_tag : Try(Str, [Missing]) })]
+
+	Construct : [Document, ByteOrderMark, Text, Tag, Comment, Instruction, CData, Reference]
+
+	## Display a native problem at a human-facing output boundary.
+	problem_text : Parser.Problem(Problem) -> Str
+	problem_text = |problem| Str.inspect(problem)
+
+	Error : { line : U64, column : U64, problem : Parser.Problem(Xml.Problem) }
 
 	## Parse one complete XML document.
 	##
@@ -126,7 +136,7 @@ Xml := {
 	## ```roc
 	## expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
 	##
-	## expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, message: "undeclared entity &nbsp;" }))
+	## expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, problem: UnknownEntity("nbsp") }))
 	## ```
 	parse_str : Str -> Try(Xml, [InvalidXml(Error)])
 	parse_str = |input| {
@@ -136,11 +146,11 @@ Xml := {
 				if pos == bytes.len() {
 					Ok(val)
 				} else {
-					Err(InvalidXml(locate(bytes, pos, "unexpected content after the root element")))
+					Err(InvalidXml(locate(bytes, pos, TrailingContent)))
 				}
 
-			Err(XmlFail(failure)) => Err(InvalidXml(locate(bytes, failure.offset, failure.message)))
-			Err(LimitFail(exceeded)) => Err(InvalidXml(locate(bytes, exceeded.offset, "limit exceeded")))
+			Err(XmlFail(failure)) => Err(InvalidXml(locate(bytes, failure.offset, failure.problem)))
+			Err(LimitFail(exceeded)) => Err(InvalidXml(locate(bytes, exceeded.offset, ResourceLimit({ limit: exceeded.limit, max: exceeded.max }))))
 		}
 	}
 
@@ -162,7 +172,7 @@ Xml := {
 				if pos == bytes.len() {
 					Ok(val)
 				} else {
-					Err(InvalidXml(locate(bytes, pos, "unexpected content after the root element")))
+					Err(InvalidXml(locate(bytes, pos, TrailingContent)))
 				}
 
 			Err(failure) => Err(read_error(bytes, failure))
@@ -179,11 +189,11 @@ Xml := {
 	## [Xml.parse_str], which reports a line and column.
 	##
 	## ```roc
-	## expect Utf8.parse_str(Xml.parser, "<a></b>") == Err(ParseError({ message: "end tag </b> does not match start tag <a>", offset: 3 }))
+	## expect Utf8.parse_str(Xml.parser, "<a></b>") == Err(ParseError({ problem: EndTagMismatch({ actual: "b", expected: "a" }), offset: 3 }))
 	##
-	## expect Utf8.parse_str(Xml.parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
+	## expect Utf8.parse_str(Xml.parser, "<a/> <b/>") == Err(ParseError({ problem: UnexpectedInput, offset: 5 }))
 	## ```
-	parser : Parser(Utf8.Bytes, Xml)
+	parser : Parser(Utf8.Bytes, Xml, Problem)
 	parser =
 		Parser.custom(
 			|input| {
@@ -191,8 +201,8 @@ Xml := {
 				# without validating each one again.
 				match read_document(Str.from_utf8(input) ?? "", input, unbounded(input)) {
 					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
-					Err(XmlFail(failure)) => Err(ParseError({ message: failure.message, offset: failure.offset }))
-					Err(LimitFail(exceeded)) => Err(ParseError({ message: "limit exceeded", offset: exceeded.offset }))
+					Err(XmlFail(failure)) => Err(ParseError({ problem: failure.problem, offset: failure.offset }))
+					Err(LimitFail(exceeded)) => Err(ParseError({ problem: ResourceLimit({ limit: exceeded.limit, max: exceeded.max }), offset: exceeded.offset }))
 				}
 			},
 		)
@@ -211,7 +221,7 @@ Xml := {
 	ReaderProps := { max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, namespaces : Bool ?? False }
 
 	## A limit of [Xml.ReaderProps].
-	Limit : [Depth, Elements, Attributes]
+	Limit : [Depth, Elements, Attributes, TokenBytes, ReferenceBytes, ContextBytes, TextBytes]
 
 	## Why reading stopped: malformed XML, or a document that would exceed a
 	## limit of [Xml.ReaderProps]. `max` is the limit, and the line and column
@@ -228,7 +238,7 @@ Xml := {
 	StreamProps := { max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, max_token_bytes : U64 ?? 65_536, max_text_bytes : U64 ?? 65_536, max_context_bytes : U64 ?? 4_194_304, namespaces : Bool ?? False }
 
 	## Original byte offset and one-based physical line and byte column.
-	StreamError : { offset : U64, line : U64, column : U64, message : Str }
+	StreamError : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Xml.Problem) }
 
 	## Incremental decoder retaining bounded unfinished syntax and open names.
 	Decoder : ChunkState
@@ -288,7 +298,7 @@ Xml := {
 			Ok(value) => Folded(value)
 			Err(Failed(failure)) => Failed(read_error(bytes, failure))
 			Err(Rejected(problem, offset)) => {
-				at = locate(bytes, offset, "")
+				at = position(bytes, offset)
 				Rejected(problem, { line: at.line, column: at.column })
 			}
 		}
@@ -369,7 +379,7 @@ Xml := {
 					if pos == bytes.len() {
 						Done
 					} else {
-						Failed(InvalidXml(locate(bytes, pos, "unexpected content after the root element")))
+						Failed(InvalidXml(locate(bytes, pos, TrailingContent)))
 					}
 
 				Err(failure) => Failed(read_error(bytes, failure))
@@ -453,7 +463,7 @@ Xml := {
 				Built(built) => Element(built.node, built.context, { ..input_reader, cursor: built.cursor })
 				Unread(failure) => Failed(read_error(bytes, failure))
 				Rejected(error, offset) => {
-					at = locate(bytes, offset, "")
+					at = position(bytes, offset)
 					Rejected(error, { line: at.line, column: at.column })
 				}
 			}
@@ -468,7 +478,7 @@ Xml := {
 		## tag. Lines and columns count as in [Xml.Error].
 		location : Reader -> { line : U64, column : U64 }
 		location = |input_reader| {
-			at = locate(input_reader.bytes, input_reader.cursor.at, "")
+			at = position(input_reader.bytes, input_reader.cursor.at)
 			{ line: at.line, column: at.column }
 		}
 	}
@@ -479,7 +489,7 @@ Xml := {
 	## ```roc
 	## expect Xml.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
 	##
-	## expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, message: "expected a root element, but found text" }))
+	## expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, problem: RootText }))
 	## ```
 	reader : Str, ReaderProps -> Try(Reader, ReadError)
 	reader = |input, props| {
@@ -534,7 +544,7 @@ Xml := {
 
 }
 
-Failure : { offset : U64, message : Str }
+Failure : { offset : U64, problem : Parser.Problem(Xml.Problem) }
 
 ReadFailure : [XmlFail(Failure), LimitFail({ limit : Xml.Limit, max : U64, offset : U64 })]
 
@@ -575,15 +585,15 @@ Open : {
 ## processing instructions and whitespace that follow it.
 Step : [Ev(Xml.Event, Cursor), Finished(U64)]
 
-fail : U64, Str -> Try(_, ReadFailure)
-fail = |offset, message| Err(XmlFail({ offset, message }))
+fail : U64, Parser.Problem(Xml.Problem) -> Try(_, ReadFailure)
+fail = |offset, problem| Err(XmlFail({ offset, problem }))
 
 read_error : List(U8), ReadFailure -> Xml.ReadError
 read_error = |bytes, failure| {
 	match failure {
-		XmlFail(problem) => InvalidXml(locate(bytes, problem.offset, problem.message))
+		XmlFail(problem) => InvalidXml(locate(bytes, problem.offset, problem.problem))
 		LimitFail(exceeded) => {
-			at = locate(bytes, exceeded.offset, "")
+			at = position(bytes, exceeded.offset)
 			LimitExceeded({ limit: exceeded.limit, max: exceeded.max, line: at.line, column: at.column })
 		}
 	}
@@ -601,8 +611,14 @@ unbounded = |bytes| { depth: bytes.len(), elements: bytes.len(), attributes: byt
 no_start : U64
 no_start = 18_446_744_073_709_551_615
 
-locate : List(U8), U64, Str -> Xml.Error
-locate = |bytes, offset, message| {
+locate : List(U8), U64, Parser.Problem(Xml.Problem) -> Xml.Error
+locate = |bytes, offset, problem| {
+	at = position(bytes, offset)
+	{ line: at.line, column: at.column, problem }
+}
+
+position : List(U8), U64 -> { line : U64, column : U64 }
+position = |bytes, offset| {
 	var $line = 1
 	var $line_start = 0
 	var $index = 0
@@ -620,7 +636,7 @@ locate = |bytes, offset, message| {
 		}
 		$index = $index + 1
 	}
-	{ line: $line, column: offset - $line_start + 1, message }
+	{ line: $line, column: offset - $line_start + 1 }
 }
 
 # See https://www.w3.org/TR/xml/#NT-document
@@ -638,11 +654,11 @@ read_document = |src, bytes, limits| {
 			built = build_element(src, bytes, limits, after_start, root.name, root.attributes)?
 			match step(src, bytes, limits, built.cursor)? {
 				Finished(end) => Ok({ val: { declaration, root: built.node }, pos: end })
-				Ev(_, _) => fail(0, "internal error: an event after the root element")
+				Ev(_, _) => fail(0, UnexpectedEventAfterRoot)
 			}
 		}
 
-		_ => fail(0, "internal error: the document did not start with its root element")
+		_ => fail(0, MissingRootEvent)
 	}
 }
 
@@ -658,13 +674,13 @@ open_reader = |src, bytes, limits| {
 	}
 	$pos = skip_misc(bytes, $pos, limits.namespaces)?
 	if starts_with_at(bytes, $pos, "<!DOCTYPE".to_utf8()) {
-		return fail($pos, "document type declarations are not supported")
+		return fail($pos, DoctypeUnsupported)
 	}
 	if bytes.get($pos) != Ok('<') {
 		return if $pos >= bytes.len() {
-			fail($pos, "expected a root element")
+			fail($pos, ExpectedRoot)
 		} else {
-			fail($pos, "expected a root element, but found text")
+			fail($pos, RootText)
 		}
 	}
 	Ok({ src, bytes, limits, declaration: Box.box($declaration), cursor: { pos: $pos, open: [], pending_end: False, closed: False, start: no_start, at: $pos, elements: 0 } })
@@ -692,7 +708,7 @@ step = |src, bytes, limits, r| {
 			match scan(src, bytes, limits.namespaces, r.pos)? {
 				TagAt(tag) => tag
 				TextUntil(text, pos) => return Ok(Ev(Text(text), { ..r, pos, start: no_start, at: r.pos }))
-				EndOfInput(pos) => return fail(pos, "expected </${reader_open_name(r.open)}> before the end of the document")
+				EndOfInput(pos) => return fail(pos, UnclosedElement(reader_open_name(r.open)))
 			}
 		}
 	if bytes.get(at + 1) == Ok('/') {
@@ -801,7 +817,7 @@ scan_content = |src, bytes, namespaces, start| {
 					cdata_byte =
 						match bytes.get($pos) {
 							Ok(b) => b
-							Err(_) => return fail(cdata_start, "unterminated CDATA section")
+							Err(_) => return fail(cdata_start, UnclosedCData)
 						}
 					if cdata_byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
 						$pos = $pos + 3
@@ -829,7 +845,7 @@ scan_content = |src, bytes, namespaces, start| {
 			} else if next == '?' {
 				$pos = skip_processing_instruction(bytes, $pos, namespaces)?
 			} else if next == '!' {
-				return fail($pos, "expected a comment or CDATA section after '<!'")
+				return fail($pos, ExpectedMarkupDeclaration)
 			} else {
 				return Ok(TagAt($pos))
 			}
@@ -840,7 +856,7 @@ scan_content = |src, bytes, namespaces, start| {
 			$run_start = $pos
 			$run_end = $pos
 		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
-			return fail($pos, "']]>' is not allowed in character data")
+			return fail($pos, ForbiddenCDataEnd)
 		} else if byte == '\r' {
 			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
 			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
@@ -879,15 +895,15 @@ read_end_tag = |src, bytes, at, expected| {
 	end =
 		match name_end(bytes, at + 2) {
 			Ok(pos) => pos
-			Err(_) => return fail(at + 2, "expected an element name in the end tag")
+			Err(_) => return fail(at + 2, ExpectedEndTagName)
 		}
 	len = end - (at + 2)
 	if len != expected.end - expected.start or !same_bytes(bytes, at + 2, expected.start, len) {
-		return fail(at, "end tag </${slice_str(src, bytes, at + 2, end)}> does not match start tag <${slice_str(src, bytes, expected.start, expected.end)}>")
+		return fail(at, EndTagMismatch({ actual: slice_str(src, bytes, at + 2, end), expected: slice_str(src, bytes, expected.start, expected.end) }))
 	}
 	close = skip_space(bytes, end)
 	if bytes.get(close) != Ok('>') {
-		return fail(close, "expected '>' to close the end tag")
+		return fail(close, ExpectedEndTagClose)
 	}
 	Ok({ name_end: end, pos: close + 1 })
 }
@@ -906,14 +922,14 @@ read_end_named = |src, bytes, at, expected| {
 			return Ok({ name_end: known_end, pos: known_end + 1 })
 		}
 	}
-	end = name_end(bytes, at + 2) ?? return fail(at + 2, "expected an element name in the end tag")
+	end = name_end(bytes, at + 2) ?? return fail(at + 2, ExpectedEndTagName)
 	actual = slice_str(src, bytes, at + 2, end)
 	if actual != expected {
-		return fail(at, "end tag </${actual}> does not match start tag <${expected}>")
+		return fail(at, EndTagMismatch({ actual, expected }))
 	}
 	close = skip_space(bytes, end)
 	if bytes.get(close) != Ok('>') {
-		return fail(close, "expected '>' to close the end tag")
+		return fail(close, ExpectedEndTagClose)
 	}
 	Ok({ name_end: end, pos: close + 1 })
 }
@@ -963,7 +979,7 @@ build_element = |src, bytes, limits, r, name, attributes| {
 				$pos = pos
 			}
 
-			EndOfInput(pos) => return fail(pos, "expected </${slice_str(src, bytes, $range.start, $range.end)}> before the end of the document")
+			EndOfInput(pos) => return fail(pos, UnclosedElement(slice_str(src, bytes, $range.start, $range.end)))
 			TagAt(at) =>
 				if bytes.get(at + 1) == Ok('/') {
 					end_tag = read_end_tag(src, bytes, at, $range)?
@@ -1026,27 +1042,27 @@ parse_xml_declaration : List(U8), U64 -> Parsed(Xml.Declaration)
 parse_xml_declaration = |bytes, start| {
 	var $pos = skip_space(bytes, start + 5)
 	if !starts_with_at(bytes, $pos, "version".to_utf8()) {
-		return fail($pos, "expected version information in the XML declaration")
+		return fail($pos, ExpectedVersion)
 	}
 	$pos = skip_eq(bytes, $pos + 7)?
 	version_quote = bytes.get($pos) ?? 0
 	if version_quote != '"' and version_quote != '\'' {
-		return fail($pos, "expected a quoted XML version")
+		return fail($pos, ExpectedQuotedVersion)
 	}
 	if !starts_with_at(bytes, $pos + 1, "1.".to_utf8()) or !is_digit_at(bytes, $pos + 3) {
-		return fail($pos + 1, "expected an XML version of the form 1.x")
+		return fail($pos + 1, BadVersion)
 	}
 	var $minor = 0
 	$pos = $pos + 3
 	while is_digit_at(bytes, $pos) {
 		if $minor >= 100_000_000_000_000_000 {
-			return fail(start, "the XML version number is too large")
+			return fail(start, VersionOverflow)
 		}
 		$minor = $minor * 10 + U8.to_u64((bytes.get($pos) ?? '0') - '0')
 		$pos = $pos + 1
 	}
 	if bytes.get($pos) != Ok(version_quote) {
-		return fail($pos, "expected the XML version to end with a matching quote")
+		return fail($pos, ExpectedVersionEndQuote)
 	}
 	version = { major: 1, minor: $minor }
 	$pos = $pos + 1
@@ -1056,23 +1072,23 @@ parse_xml_declaration = |bytes, start| {
 	$pos = after_version
 	if starts_with_at(bytes, $pos, "encoding".to_utf8()) {
 		if after_version == skip_space_start(bytes, after_version) {
-			return fail($pos, "expected whitespace before the encoding declaration")
+			return fail($pos, ExpectedEncodingSpace)
 		}
 		$pos = skip_eq(bytes, $pos + 8)?
 		quote = bytes.get($pos) ?? 0
 		if quote != '"' and quote != '\'' {
-			return fail($pos, "expected a quoted encoding name")
+			return fail($pos, ExpectedQuotedEncoding)
 		}
 		name_start = $pos + 1
 		if !(is_alphabetical(bytes.get(name_start) ?? 0)) {
-			return fail(name_start, "encoding names must start with a letter")
+			return fail(name_start, BadEncodingStart)
 		}
 		$pos = name_start + 1
 		while is_encoding_char(bytes.get($pos) ?? 0) {
 			$pos = $pos + 1
 		}
 		if bytes.get($pos) != Ok(quote) {
-			return fail($pos, "expected the encoding name to end with a matching quote")
+			return fail($pos, ExpectedEncodingEndQuote)
 		}
 		name = bytes.sublist({ start: name_start, len: $pos - name_start })
 		$encoding =
@@ -1085,12 +1101,12 @@ parse_xml_declaration = |bytes, start| {
 	}
 	if starts_with_at(bytes, $pos, "standalone".to_utf8()) {
 		if $pos == skip_space_start(bytes, $pos) {
-			return fail($pos, "expected whitespace before the standalone declaration")
+			return fail($pos, ExpectedStandaloneSpace)
 		}
 		$pos = skip_eq(bytes, $pos + 10)?
 		quote = bytes.get($pos) ?? 0
 		if quote != '"' and quote != '\'' {
-			return fail($pos, "expected a quoted standalone value")
+			return fail($pos, ExpectedQuotedStandalone)
 		}
 		value_start = $pos + 1
 		$pos =
@@ -1099,15 +1115,15 @@ parse_xml_declaration = |bytes, start| {
 			} else if starts_with_at(bytes, value_start, "no".to_utf8()) {
 				value_start + 2
 			} else {
-				return fail(value_start, "standalone must be \"yes\" or \"no\"")
+				return fail(value_start, BadStandalone)
 			}
 		if bytes.get($pos) != Ok(quote) {
-			return fail($pos, "expected the standalone value to end with a matching quote")
+			return fail($pos, ExpectedStandaloneEndQuote)
 		}
 		$pos = skip_space(bytes, $pos + 1)
 	}
 	if !starts_with_at(bytes, $pos, "?>".to_utf8()) {
-		return fail($pos, "expected '?>' to close the XML declaration")
+		return fail($pos, ExpectedDeclarationClose)
 	}
 	Ok({ val: { version, encoding: $encoding }, pos: $pos + 2 })
 }
@@ -1129,7 +1145,7 @@ skip_eq = |bytes, start| {
 	if bytes.get(pos) == Ok('=') {
 		Ok(skip_space(bytes, pos + 1))
 	} else {
-		fail(pos, "expected '='")
+		fail(pos, ExpectedEquals)
 	}
 }
 
@@ -1161,12 +1177,12 @@ skip_comment = |bytes, start| {
 			return if bytes.get($pos + 2) == Ok('>') {
 				Ok($pos + 3)
 			} else {
-				fail($pos, "'--' is not allowed inside a comment")
+				fail($pos, CommentDoubleHyphen)
 			}
 		}
 		$pos = check_char(bytes, $pos)?
 	}
-	fail(start, "unterminated comment")
+	fail(start, UnclosedComment)
 }
 
 # See https://www.w3.org/TR/xml/#NT-PI. With namespaces, a target may not
@@ -1176,23 +1192,23 @@ skip_processing_instruction = |bytes, start, namespaces| {
 	target =
 		match parse_name("", bytes, start + 2) {
 			Ok(name) => name
-			Err(_) => return fail(start + 2, "expected a processing instruction target")
+			Err(_) => return fail(start + 2, ExpectedInstructionTarget)
 		}
 	if ascii_lowercase(target.val.to_utf8()) == "xml".to_utf8() {
 		return if target.val == "xml" {
-			fail(start, "the XML declaration is only allowed at the very start of the document")
+			fail(start, DeclarationNotAtStart)
 		} else {
-			fail(start + 2, "processing instruction targets matching 'xml' are reserved")
+			fail(start + 2, ReservedInstructionTarget(target.val))
 		}
 	}
 	if namespaces and target.val.contains(":") {
-		return fail(start + 2, "processing instruction targets may not contain ':' when namespaces are processed")
+		return fail(start + 2, NamespacedInstructionTarget(target.val))
 	}
 	if starts_with_at(bytes, target.pos, "?>".to_utf8()) {
 		return Ok(target.pos + 2)
 	}
 	if !is_space_at(bytes, target.pos) {
-		return fail(target.pos, "expected whitespace after the processing instruction target")
+		return fail(target.pos, ExpectedInstructionSpace(target.val))
 	}
 	var $pos = target.pos
 	while $pos < bytes.len() {
@@ -1201,7 +1217,7 @@ skip_processing_instruction = |bytes, start, namespaces| {
 		}
 		$pos = check_char(bytes, $pos)?
 	}
-	fail(start, "unterminated processing instruction")
+	fail(start, UnclosedInstruction)
 }
 
 # The pending text as a `Str`: a slice of the input when nothing was
@@ -1276,7 +1292,7 @@ build_with = |src, bytes, limits, r, context, first, on_start, on_text, on_end| 
 				$pos = pos
 			}
 
-			EndOfInput(pos) => return Unread(XmlFail({ offset: pos, message: "expected </${slice_str(src, bytes, $range.start, $range.end)}> before the end of the document" }))
+			EndOfInput(pos) => return Unread(XmlFail({ offset: pos, problem: UnclosedElement(slice_str(src, bytes, $range.start, $range.end)) }))
 			TagAt(at) =>
 				if bytes.get(at + 1) == Ok('/') {
 					end_tag =
@@ -1401,7 +1417,7 @@ parse_start_tag = |src, bytes, start, max_attributes| {
 	name =
 		match parse_name(src, bytes, start + 1) {
 			Ok(parsed) => parsed
-			Err(_) => return fail(start + 1, "expected an element name after '<'")
+			Err(_) => return fail(start + 1, ExpectedStartTagName)
 		}
 	var $attributes = []
 	# The Unique Att Spec check scans the few attributes most elements have,
@@ -1419,15 +1435,15 @@ parse_start_tag = |src, bytes, start, max_attributes| {
 			return Ok({ name: name.val, attributes: $attributes, empty: True, pos: $pos + 2 })
 		}
 		if $pos >= bytes.len() {
-			return fail($pos, "expected '>' to close the start tag <${name.val}>")
+			return fail($pos, ExpectedStartTagClose(name.val))
 		}
 		if $pos == before_space {
-			return fail($pos, "expected whitespace, '>' or '/>' in the start tag <${name.val}>")
+			return fail($pos, ExpectedStartTagSpace(name.val))
 		}
 		attribute_name =
 			match parse_name(src, bytes, $pos) {
 				Ok(parsed) => parsed
-				Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>")
+				Err(_) => return fail($pos, ExpectedAttributeName(name.val))
 			}
 		if $attributes.len() >= max_attributes {
 			return Err(LimitFail({ limit: Attributes, max: max_attributes, offset: $pos }))
@@ -1439,7 +1455,7 @@ parse_start_tag = |src, bytes, start, max_attributes| {
 				$seen.contains(attribute_name.val)
 			}
 		if duplicate {
-			return fail($pos, "duplicate attribute ${attribute_name.val}")
+			return fail($pos, DuplicateAttribute(attribute_name.val))
 		}
 		$pos = skip_eq(bytes, attribute_name.pos)?
 		value = parse_attribute_value(src, bytes, $pos)?
@@ -1487,7 +1503,7 @@ parse_attribute_value : Str, List(U8), U64 -> Parsed(Str)
 parse_attribute_value = |src, bytes, start| {
 	quote = bytes.get(start) ?? 0
 	if quote != '"' and quote != '\'' {
-		return fail(start, "attribute values must be quoted")
+		return fail(start, ExpectedQuotedAttribute)
 	}
 	plain = if (quote == '"') double_quoted_class else single_quoted_class
 	# Most values are plain ASCII up to the closing quote: find it 16 bytes
@@ -1505,7 +1521,7 @@ parse_attribute_value = |src, bytes, start| {
 		if byte == quote {
 			return Ok({ val: text_str(src, bytes, $value, $run_start, $run_end), pos: $pos + 1 })
 		} else if byte == '<' {
-			return fail($pos, "'<' is not allowed in attribute values")
+			return fail($pos, AttributeContainsLt)
 		} else if byte == '&' {
 			reference = parse_reference(bytes, $pos)?
 			$value = append_utf8(materialize(bytes, $value, $run_start, $run_end), reference.val)
@@ -1527,7 +1543,7 @@ parse_attribute_value = |src, bytes, start| {
 			$run_end = $pos
 		}
 	}
-	fail(start, "unterminated attribute value")
+	fail(start, UnclosedAttribute)
 }
 
 # See https://www.w3.org/TR/xml/#NT-Reference
@@ -1544,10 +1560,10 @@ parse_reference = |bytes, start| {
 		name =
 			match parse_name("", bytes, start + 1) {
 				Ok(parsed) => parsed
-				Err(_) => return fail(start, "'&' must start a reference; write &amp; for a literal ampersand")
+				Err(_) => return fail(start, ExpectedReference)
 			}
 		if bytes.get(name.pos) != Ok(';') {
-			return fail(name.pos, "expected ';' to end the entity reference")
+			return fail(name.pos, ExpectedEntitySemicolon)
 		}
 		replacement =
 			match name.val {
@@ -1556,7 +1572,7 @@ parse_reference = |bytes, start| {
 				"amp" => '&'
 				"apos" => '\''
 				"quot" => '"'
-				other => return fail(start, "undeclared entity &${other};")
+				other => return fail(start, UnknownEntity(other))
 			}
 		Ok({ val: replacement, pos: name.pos + 1 })
 	}
@@ -1579,13 +1595,13 @@ parse_char_reference = |bytes, start, digits_start, base| {
 		}
 	}
 	if $pos == digits_start {
-		return fail(digits_start, if (base == 16) "expected hexadecimal digits in the character reference" else "expected decimal digits in the character reference")
+		return fail(digits_start, if (base == 16) ExpectedCharacterDigits(Hexadecimal) else ExpectedCharacterDigits(Decimal))
 	}
 	if bytes.get($pos) != Ok(';') {
-		return fail($pos, "expected ';' to end the character reference")
+		return fail($pos, ExpectedCharacterSemicolon)
 	}
 	if !is_xml_char($code) {
-		return fail(start, "character reference to a character that is not allowed in XML")
+		return fail(start, InvalidCharacterReference($code))
 	}
 	Ok({ val: $code, pos: $pos + 1 })
 }
@@ -1709,12 +1725,12 @@ is_xml_char = |c| {
 check_char : List(U8), U64 -> Try(U64, ReadFailure)
 check_char = |bytes, pos| {
 	match decode_scalar(bytes, pos) {
-		Err(_) => fail(pos, "invalid UTF-8")
+		Err(_) => fail(pos, InvalidUtf8)
 		Ok(scalar) =>
 			if is_xml_char(scalar.code) {
 				Ok(pos + scalar.len)
 			} else {
-				fail(pos, "character U+${hex_code(scalar.code)} is not allowed in XML")
+				fail(pos, InvalidCharacter(scalar.code))
 			}
 	}
 }
@@ -2073,10 +2089,10 @@ expect {
 }
 
 # The parser combinator reports leftover input after the document.
-expect Utf8.parse_str(Xml.parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
+expect Utf8.parse_str(Xml.parser, "<a/> <b/>") == Err(ParseError({ problem: UnexpectedInput, offset: 5 }))
 
 # The parser combinator reports structured failures with a byte offset.
-expect Utf8.parse_str(Xml.parser, "<a></b>") == Err(ParseError({ message: "end tag </b> does not match start tag <a>", offset: 3 }))
+expect Utf8.parse_str(Xml.parser, "<a></b>") == Err(ParseError({ problem: EndTagMismatch({ actual: "b", expected: "a" }), offset: 3 }))
 
 # The parser leaves the input after the document for the next parser.
 expect Utf8.parse_str_partial(Xml.parser, "<a/>\n<!-- c -->rest").map_ok(|{ value: _, rest }| rest) == Ok("rest")
@@ -2154,7 +2170,7 @@ expect Xml.parse_str("<p>Hello, <b>world</b>!</p>").map_ok(|xml| xml.root.text()
 
 # Doc examples: parse_str and parser.
 expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
-expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, message: "undeclared entity &nbsp;" }))
+expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, problem: UnknownEntity("nbsp") }))
 
 # Quotation validation keeps native XML failures ahead of lint failures.
 expect {
@@ -2248,9 +2264,9 @@ expect {
 }
 
 # Failures match parse_str's, including content after the root element.
-expect events_of("<a></b>", {}) == Err(InvalidXml({ line: 1, column: 4, message: "end tag </b> does not match start tag <a>" }))
-expect events_of("<a/><b/>", {}) == Err(InvalidXml({ line: 1, column: 5, message: "unexpected content after the root element" }))
-expect events_of("<a>x", {}) == Err(InvalidXml({ line: 1, column: 5, message: "expected </a> before the end of the document" }))
+expect events_of("<a></b>", {}) == Err(InvalidXml({ line: 1, column: 4, problem: EndTagMismatch({ actual: "b", expected: "a" }) }))
+expect events_of("<a/><b/>", {}) == Err(InvalidXml({ line: 1, column: 5, problem: TrailingContent }))
+expect events_of("<a>x", {}) == Err(InvalidXml({ line: 1, column: 5, problem: UnclosedElement("a") }))
 
 # `element` builds the subtree directly after a start, then reading
 # continues after its end tag; anywhere else it reports NotAfterStart.
@@ -2336,7 +2352,7 @@ expect {
 
 # With namespaces, processing instruction targets may not contain a colon.
 expect Xml.parse("<a><?x:y?></a>", {}).is_ok()
-expect Xml.parse("<a><?x:y?></a>", { namespaces: True }) == Err(InvalidXml({ line: 1, column: 6, message: "processing instruction targets may not contain ':' when namespaces are processed" }))
+expect Xml.parse("<a><?x:y?></a>", { namespaces: True }) == Err(InvalidXml({ line: 1, column: 6, problem: NamespacedInstructionTarget("x:y") }))
 
 # Text after a rewrite keeps growing in place: these take linear time.
 expect {
@@ -2412,7 +2428,7 @@ expect {
 	}
 }
 expect Xml.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
-expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, message: "expected a root element, but found text" }))
+expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, problem: RootText }))
 
 # Doc examples: element_with.
 expect {
@@ -2469,7 +2485,7 @@ parse_source_start_head : Str, List(U8), U64 -> Try([Complete({ name : Str, empt
 parse_source_start_head = |src, bytes, start| {
 	name = match parse_name(src, bytes, start + 1) {
 		Ok(parsed) => parsed
-		Err(_) => return fail(start + 1, "expected an element name after '<'")
+		Err(_) => return fail(start + 1, ExpectedStartTagName)
 	}
 	if bytes.get(name.pos) == Ok('>') {
 		return Ok(Complete({ name: name.val, empty: False, pos: name.pos + 1 }))
@@ -2488,7 +2504,7 @@ source_attribute_name = |state, written, offset| {
 		has_attribute_name(state.attributes, written)
 	} else state.seen.contains(written)
 	if duplicate {
-		return fail(offset, "duplicate attribute ${written}")
+		return fail(offset, DuplicateAttribute(written))
 	}
 	Ok(written)
 }
@@ -2519,15 +2535,15 @@ parse_source_attributes_with = |src, bytes, name, max_attributes, initial, on_na
 			return Ok({ name: name.val, state: $state, empty: True, pos: $pos + 2 })
 		}
 		if $pos >= bytes.len() {
-			return fail($pos, "expected '>' to close the start tag <${name.val}>").map_err(|failure| Failed(failure))
+			return fail($pos, ExpectedStartTagClose(name.val)).map_err(|failure| Failed(failure))
 		}
 		if $pos == before_space {
-			return fail($pos, "expected whitespace, '>' or '/>' in the start tag <${name.val}>").map_err(|failure| Failed(failure))
+			return fail($pos, ExpectedStartTagSpace(name.val)).map_err(|failure| Failed(failure))
 		}
 		attribute_start = $pos
 		attribute_name = match parse_name(src, bytes, $pos) {
 			Ok(parsed) => parsed
-			Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>").map_err(|failure| Failed(failure))
+			Err(_) => return fail($pos, ExpectedAttributeName(name.val)).map_err(|failure| Failed(failure))
 		}
 		if $count >= max_attributes {
 			return Err(Failed(LimitFail({ limit: Attributes, max: max_attributes, offset: $pos })))
@@ -2580,16 +2596,16 @@ fold_source_impl = |src, bytes, limits, initial, on_event| {
 			if start == bytes.len() {
 				return Ok($state)
 			}
-			return Err(Failed(XmlFail({ offset: start, message: "unexpected content after the root element" })))
+			return Err(Failed(XmlFail({ offset: start, problem: TrailingContent })))
 		} else if $open.is_empty() and leading == '<' and following == '!' and starts_with_at(bytes, start, "<!DOCTYPE".to_utf8()) {
-			return Err(Failed(XmlFail({ offset: start, message: "document type declarations are not supported" })))
+			return Err(Failed(XmlFail({ offset: start, problem: DoctypeUnsupported })))
 		} else if start >= bytes.len() {
 			if $open.is_empty() {
-				return Err(Failed(XmlFail({ offset: start, message: "expected a root element" })))
+				return Err(Failed(XmlFail({ offset: start, problem: ExpectedRoot })))
 			}
-			return Err(Failed(XmlFail({ offset: start, message: "expected </${open_name(src, bytes, $open)}> before the end of the document" })))
+			return Err(Failed(XmlFail({ offset: start, problem: UnclosedElement(open_name(src, bytes, $open)) })))
 		} else if $open.is_empty() and leading != '<' {
-			return Err(Failed(XmlFail({ offset: start, message: "expected a root element, but found text" })))
+			return Err(Failed(XmlFail({ offset: start, problem: RootText })))
 		} else if !$open.is_empty() and leading == '<' and following == '!' and starts_with_at(bytes, start, "<![CDATA[".to_utf8()) {
 			parsed = read_source_cdata(src, bytes, start).map_err(|failure| Failed(failure))?
 			$pos = parsed.pos
@@ -2599,7 +2615,7 @@ fold_source_impl = |src, bytes, limits, initial, on_event| {
 			$pos = parsed.pos
 			$state = on_event($state, Text({ value: parsed.val, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
 		} else if !$open.is_empty() and following == '!' {
-			return Err(Failed(XmlFail({ offset: start, message: "expected a comment or CDATA section after '<!'" })))
+			return Err(Failed(XmlFail({ offset: start, problem: ExpectedMarkupDeclaration })))
 		} else if following == '/' {
 			end_tag = read_end_tag(src, bytes, start, $open.last() ?? { start: 0, end: 0 }).map_err(|failure| Failed(failure))?
 			$pos = end_tag.pos
@@ -2647,7 +2663,7 @@ read_source_text = |src, bytes, start| {
 			$run_start = $pos
 			$run_end = $pos
 		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
-			return fail($pos, "']]>' is not allowed in character data")
+			return fail($pos, ForbiddenCDataEnd)
 		} else if byte == '\r' {
 			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
 			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
@@ -2687,7 +2703,7 @@ read_source_cdata = |src, bytes, start| {
 			$pos = end
 		}
 	}
-	fail(start, "unterminated CDATA section")
+	fail(start, UnclosedCData)
 }
 
 expect Xml.fold_source(
@@ -2753,20 +2769,20 @@ chunk_advance = |state, byte| {
 	}
 }
 
-chunk_error : ChunkAt, Str -> Xml.StreamError
-chunk_error = |at, message| { offset: at.offset, line: at.line, column: at.column, message }
+chunk_error : ChunkAt, Parser.Problem(Xml.Problem) -> Xml.StreamError
+chunk_error = |at, problem| { offset: at.offset, line: at.line, column: at.column, problem }
 
-chunk_fail : ChunkState, U64, ChunkAt, Str -> Streaming.Step(ChunkState, Xml.Event, Xml.StreamError)
-chunk_fail = |state, consumed, at, message| { state: { ..state, done: True }, consumed, outcome: Failed(chunk_error(at, message)) }
+chunk_fail : ChunkState, U64, ChunkAt, Parser.Problem(Xml.Problem) -> Streaming.Step(ChunkState, Xml.Event, Xml.StreamError)
+chunk_fail = |state, consumed, at, problem| { state: { ..state, done: True }, consumed, outcome: Failed(chunk_error(at, problem)) }
 
 chunk_locate : ChunkAt, List(U8), ReadFailure -> Xml.StreamError
 chunk_locate = |base, bytes, failure| {
 	problem = match failure {
 		XmlFail(value) => value
-		LimitFail(value) => { offset: value.offset, message: "XML attribute limit exceeded" }
+		LimitFail(value) => { offset: value.offset, problem: ResourceLimit({ limit: value.limit, max: value.max }) }
 	}
-	at = locate(bytes, problem.offset, problem.message)
-	{ offset: base.offset + problem.offset, line: base.line + at.line - 1, column: if (at.line == 1) base.column + at.column - 1 else at.column, message: at.message }
+	at = locate(bytes, problem.offset, problem.problem)
+	{ offset: base.offset + problem.offset, line: base.line + at.line - 1, column: if (at.line == 1) base.column + at.column - 1 else at.column, problem: at.problem }
 }
 
 chunk_utf8_left : U8, U8 -> U8
@@ -2797,7 +2813,7 @@ chunk_emit_text = |state, consumed, cdata| {
 			|failure| {
 				problem = match failure {
 					XmlFail(value) => { ..value, offset: if (value.offset >= 9) value.offset - 9 else 0 }
-					LimitFail(_) => { offset: 0, message: "XML text limit exceeded" }
+					LimitFail(value) => { offset: 0, problem: ResourceLimit({ limit: value.limit, max: value.max }) }
 				}
 				chunk_locate(state.piece_at, bytes, XmlFail(problem))
 			},
@@ -2832,7 +2848,7 @@ chunk_finish_markup = |state| {
 			if starts_with_at(bytes, 0, "<?xml".to_utf8()) and is_space_at(bytes, 5) and (at.offset == 0 or (state.bom and at.offset == 3)) {
 				declaration = parse_xml_declaration(bytes, 0).map_err(|failure| chunk_locate(at, bytes, failure))?
 				match declaration.val.encoding {
-					Ok(OtherEncoding(_)) => return Err(chunk_error(at, "chunked XML accepts only UTF-8 encoding declarations"))
+					Ok(OtherEncoding(encoding)) => return Err(chunk_error(at, NonUtf8Encoding(encoding)))
 					_ => {}
 				}
 				Ok({ state: { ..finish, declaration: Box.box(Ok(declaration.val)) }, event: Silent })
@@ -2843,7 +2859,7 @@ chunk_finish_markup = |state| {
 		}
 		Markup(Tag) => {
 			if bytes.get(1) == Ok('/') {
-				opened = state.open.last().map_err(|_| chunk_error(at, "unexpected end tag outside the root element"))?
+				opened = state.open.last().map_err(|_| chunk_error(at, UnexpectedEndTag))?
 				# The shared validator compares names by ranges in one byte list.
 				comparison = bytes.concat(opened.name.to_utf8())
 				_ = read_end_tag("", comparison, 0, { start: bytes.len(), end: comparison.len() }).map_err(|failure| chunk_locate(at, bytes, failure))?
@@ -2851,22 +2867,22 @@ chunk_finish_markup = |state| {
 				Ok({ state: { ..finish, open, context_bytes: state.context_bytes - opened.retained_bytes, closed: open.is_empty(), event_at: at }, event: Emit(End(opened.name)) })
 			} else {
 				if state.closed {
-					return Err(chunk_error(at, "unexpected content after the root element"))
+					return Err(chunk_error(at, TrailingContent))
 				}
 				if state.open.len() >= props.max_depth {
-					return Err(chunk_error(at, "XML depth limit exceeded"))
+					return Err(chunk_error(at, ResourceLimit({ limit: Depth, max: props.max_depth })))
 				}
 				if state.elements >= props.max_elements {
-					return Err(chunk_error(at, "XML element limit exceeded"))
+					return Err(chunk_error(at, ResourceLimit({ limit: Elements, max: props.max_elements })))
 				}
 				if bytes.len() > props.max_context_bytes - U64.min(state.context_bytes, props.max_context_bytes) {
-					return Err(chunk_error(at, "XML open-element context byte limit exceeded"))
+					return Err(chunk_error(at, ResourceLimit({ limit: ContextBytes, max: props.max_context_bytes })))
 				}
 				tag = parse_start_tag("", bytes, 0, props.max_attributes).map_err(|failure| chunk_locate(at, bytes, failure))?
 				Ok({ state: { ..finish, open: state.open.append({ name: tag.name, retained_bytes: bytes.len() }), context_bytes: state.context_bytes + bytes.len(), elements: state.elements + 1, pending_end: tag.empty, event_at: at }, event: Emit(Start({ name: tag.name, attributes: tag.attributes })) })
 			}
 		}
-		_ => Err(chunk_error(at, "incomplete XML markup"))
+		_ => Err(chunk_error(at, IncompleteMarkup))
 	}
 }
 
@@ -2879,7 +2895,7 @@ chunk_step = |initial, bytes, end| {
 		return { state: $state, consumed: 0, outcome: Done }
 	}
 	if props.max_text_bytes < 4 {
-		return chunk_fail($state, 0, chunk_at($state), "max_text_bytes must be at least 4")
+		return chunk_fail($state, 0, chunk_at($state), BadTextFragmentSize({ minimum: 4, actual: props.max_text_bytes }))
 	}
 	if $state.pending_end {
 		opened = $state.open.last() ?? { name: "", retained_bytes: 0 }
@@ -2893,7 +2909,7 @@ chunk_step = |initial, bytes, end| {
 				Start(tag) if !$state.closed and $state.open.len() < props.max_depth and $state.elements < props.max_elements and tag.pos - $index <= props.max_context_bytes - U64.min($state.context_bytes, props.max_context_bytes) => {
 					length = tag.pos - $index
 					at = chunk_at($state)
-					end_at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+					end_at = position(bytes.sublist({ start: $index, len: length }), length)
 					name = chunk_owned_text(tag.name)
 					empty = tag.empty
 					attributes = chunk_owned_attributes(tag.attributes)
@@ -2904,7 +2920,7 @@ chunk_step = |initial, bytes, end| {
 						Ok(opened) if opened.name == tag.name => {
 							length = tag.pos - $index
 							at = chunk_at($state)
-							end_at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+							end_at = position(bytes.sublist({ start: $index, len: length }), length)
 							open = $state.open.drop_last(1)
 							return { state: { ..$state, open, context_bytes: $state.context_bytes - opened.retained_bytes, closed: open.is_empty(), event_at: at, skip_text_lf: False, brackets: 0, offset: $state.offset + length, line: $state.line + end_at.line - 1, column: if (end_at.line == 1) $state.column + length else end_at.column, previous_cr: False }, consumed: $index + length, outcome: Item(End(opened.name)) }
 						}
@@ -2937,7 +2953,7 @@ chunk_step = |initial, bytes, end| {
 					$index = $index + 1
 					if $state.buffer.len() == 3 {
 						if $state.buffer != [0xEF, 0xBB, 0xBF] {
-							return chunk_fail($state, $index, { offset: 0, line: 1, column: 1 }, "invalid UTF-8 byte order mark")
+							return chunk_fail($state, $index, { offset: 0, line: 1, column: 1 }, InvalidBom($state.buffer))
 						}
 						$state = { ..$state, mode: Data, buffer: [], bom: True }
 					}
@@ -2955,7 +2971,7 @@ chunk_step = |initial, bytes, end| {
 								# concat produces an owned bounded token; names cannot retain
 								# the potentially much larger source chunk after it is read.
 								token = [].concat(bytes.sublist({ start: $index, len: stop - $index }))
-								at = locate(token, token.len(), "")
+								at = position(token, token.len())
 								$state = { ..$state, mode: Markup(Tag), buffer: token, piece_at: chunk_at($state), skip_text_lf: False, brackets: 0, offset: $state.offset + stop - $index, line: $state.line + at.line - 1, column: if (at.line == 1) $state.column + at.column - 1 else at.column, previous_cr: False }
 								$index = stop
 								match chunk_finish_markup($state) {
@@ -2973,16 +2989,16 @@ chunk_step = |initial, bytes, end| {
 						}
 					} else if $state.open.is_empty() {
 						if !is_space(byte) {
-							return chunk_fail($state, $index, chunk_at($state), if ($state.closed) "unexpected content after the root element" else "expected a root element, but found text")
+							return chunk_fail($state, $index, chunk_at($state), if ($state.closed) TrailingContent else RootText)
 						}
 						$state = chunk_advance($state, byte)
 						$index = $index + 1
 					} else {
 						if $state.reference and $state.reference_bytes >= props.max_token_bytes {
-							return chunk_fail($state, $index, chunk_at($state), "XML reference byte limit exceeded")
+							return chunk_fail($state, $index, chunk_at($state), ResourceLimit({ limit: ReferenceBytes, max: props.max_token_bytes }))
 						}
 						if byte == '>' and $state.brackets >= 2 {
-							return chunk_fail($state, $index, { offset: $state.offset - 2, line: $state.line, column: $state.column - 2 }, "']]>' is not allowed in character data")
+							return chunk_fail($state, $index, { offset: $state.offset - 2, line: $state.line, column: $state.column - 2 }, ForbiddenCDataEnd)
 						}
 						if $state.buffer.is_empty() {
 							$state = { ..$state, piece_at: chunk_at($state) }
@@ -2998,7 +3014,7 @@ chunk_step = |initial, bytes, end| {
 				}
 				Markup(kind) => {
 					if $state.buffer.len() >= props.max_token_bytes {
-						return chunk_fail($state, $index, $state.piece_at, "XML token byte limit exceeded")
+						return chunk_fail($state, $index, $state.piece_at, ResourceLimit({ limit: TokenBytes, max: props.max_token_bytes }))
 					}
 					$state = chunk_advance({ ..$state, buffer: $state.buffer.append(byte) }, byte)
 					$index = $index + 1
@@ -3014,11 +3030,11 @@ chunk_step = |initial, bytes, end| {
 								$state = { ..$state, mode: Markup(Comment) }
 							} else if $state.buffer == "<![CDATA[".to_utf8() {
 								if $state.open.is_empty() {
-									return chunk_fail($state, $index, $state.piece_at, "CDATA is only allowed inside the root element")
+									return chunk_fail($state, $index, $state.piece_at, CDataOutsideRoot)
 								}
 								$state = { ..$state, mode: CData, buffer: [], cdata_brackets: 0, skip_text_lf: False }
 							} else if !chunk_prefix($state.buffer, "<!--") and !chunk_prefix($state.buffer, "<![CDATA[") {
-								return chunk_fail($state, $index, $state.piece_at, "expected a comment or CDATA section; DTDs are unsupported")
+								return chunk_fail($state, $index, $state.piece_at, ExpectedMarkupDeclaration)
 							}
 						}
 						Tag => {
@@ -3103,7 +3119,7 @@ chunk_step = |initial, bytes, end| {
 		return chunk_emit_text($state, $index, False)
 	}
 	if $state.mode != Data or !$state.closed {
-		return chunk_fail($state, $index, chunk_at($state), "incomplete XML document at end of input")
+		return chunk_fail($state, $index, chunk_at($state), unfinished_problem($state))
 	}
 	{ state: { ..$state, done: True }, consumed: $index, outcome: Done }
 }
@@ -3380,7 +3396,7 @@ expect Xml.parse("<r>\n<a>x</a>\n<b/></r>", { max_elements: 2 }) == Err(LimitExc
 
 expect Xml.parse("<r>\n<a>x</a></r>", { max_depth: 1 }) == Err(LimitExceeded({ limit: Depth, max: 1, line: 2, column: 1 }))
 
-expect Xml.parse_str("</>") == Err(InvalidXml({ line: 1, column: 3, message: "expected an element name in the end tag" }))
+expect Xml.parse_str("</>") == Err(InvalidXml({ line: 1, column: 3, problem: ExpectedEndTagName }))
 
 expect ["<''a>", "<\"\"a>", "<p:a>", "<a>tail"].all(|source| chunk_test_read([source.to_utf8()], {}).is_err() and chunk_test_splits(source, {}))
 
@@ -3429,7 +3445,7 @@ expect [
 		props = { max_token_bytes: case.budget, max_text_bytes: 4 }
 		match chunk_test_read([case.source.to_utf8()], props) {
 			Err(ReadFailed(ParseErr(problem))) =>
-				problem.message == "XML reference byte limit exceeded"
+				problem.problem == ResourceLimit({ limit: ReferenceBytes, max: case.budget })
 					and problem.offset == case.offset
 					and chunk_test_splits(case.source, props)
 			_ => False
@@ -3540,7 +3556,7 @@ chunk_fill = |initial, bytes, empty| {
 					length = tag.pos - $index
 					$event_at = { offset: $offset, line: $line, column: $column }
 					$piece_at = $event_at
-					at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+					at = position(bytes.sublist({ start: $index, len: length }), length)
 					name = chunk_owned_text(tag.name)
 					$pending_end = tag.empty
 					stop = tag.pos
@@ -3561,7 +3577,7 @@ chunk_fill = |initial, bytes, empty| {
 							length = tag.pos - $index
 							$event_at = { offset: $offset, line: $line, column: $column }
 							$piece_at = $event_at
-							at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+							at = position(bytes.sublist({ start: $index, len: length }), length)
 							$open = $open.drop_last(1)
 							$context_bytes = $context_bytes - opened.retained_bytes
 							$closed = $open.is_empty()
@@ -3581,7 +3597,7 @@ chunk_fill = |initial, bytes, empty| {
 			text = chunk_direct_text(bytes, $index, props.max_text_bytes, props.max_token_bytes) ?? break
 			length = text.pos - $index
 			part = bytes.sublist({ start: $index, len: length })
-			at = locate(part, length, "")
+			at = position(part, length)
 			$event_at = { offset: $offset, line: $line, column: $column }
 			$piece_at = $event_at
 			$offset = $offset + length
@@ -3637,4 +3653,19 @@ chunk_direct_text = |bytes, start, maximum, reference_limit| {
 		}
 	}
 	Err(Fallback)
+}
+
+unfinished_problem : ChunkState -> Parser.Problem(Xml.Problem)
+unfinished_problem = |state| {
+	construct = match state.mode {
+		Initial => Document
+		Bom => ByteOrderMark
+		Data => if (state.reference) Reference else Text
+		Markup(Comment) => Comment
+		Markup(Instruction) => Instruction
+		Markup(_) => Tag
+		CData => CData
+	}
+	expected_end_tag = state.open.last().map_ok(|entry| entry.name).map_err(|_| Missing)
+	UnfinishedDocument({ construct, expected_end_tag })
 }
