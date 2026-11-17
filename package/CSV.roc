@@ -275,7 +275,7 @@ CSV := { records : List(CSV.Record) }.{
 	## and state types.
 	row.Parseable(errs) :
 		where [
-			row.parser_for : CsvFormat -> (State -> Try({ value : row, rest : State }, errs)),
+			row.parser_for : CsvFormat(errs) -> (State -> Try({ value : row, rest : State }, errs)),
 		]
 
 	## Typed rows use exact headers unless another mode is explicitly selected.
@@ -331,8 +331,9 @@ CSV := { records : List(CSV.Record) }.{
 		},
 	)
 
-	## The format value for custom parser_for implementations.
-	Format : CsvFormat
+	## The format protocol for custom parser_for implementations.
+	## Its parameter is the complete error row shared by all parsing operations.
+	Format(errors) : CsvFormat(errors)
 
 	## Limits for one unfinished record; completed rows leave the decoder.
 	Resource : CSVReader.Resource
@@ -449,125 +450,176 @@ CSV := { records : List(CSV.Record) }.{
 	State :: { row : Record, header : List(Str), column : U64, cell : U64, record : U64, nested : Bool }
 }
 
-CsvFormat :: [Default].{
+CsvFormat(errors) :: [Default].{
 
 	## Field names are matched as written; [CSV.decode_str] normalizes the header instead.
-	rename_field : CsvFormat, Str -> Str
+	rename_field : CsvFormat([InvalidCsv(CSV.Error), ..errors]), Str -> Str
 	rename_field = |_, name| name
 
 	## Read the cell as UTF-8 text, verbatim.
-	parse_str : CsvFormat, CSV.State -> Try({ value : Str, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_str : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : Str, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
 	parse_str = |_, state| {
-		bytes = current_cell(state)?
-		match Str.from_utf8(bytes) {
-			Ok(value) => Ok({ value, rest: state })
-			Err(_) => Err(cell_error(state, expected_problem(Text, bytes)))
-		}
+		widened = {
+			bytes = current_cell(state)?
+			match Str.from_utf8(bytes) {
+				Ok(value) => Ok({ value, rest: state })
+				Err(_) => Err(cell_error(state, expected_problem(Text, bytes)))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## Read `true` or `false` in any letter case.
-	parse_bool : CsvFormat, CSV.State -> Try({ value : Bool, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_bool : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : Bool, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
 	parse_bool = |_, state| {
-		bytes = current_cell(state)?
-		word = lowercase_ascii(bytes)
-		if word == "true".to_utf8() {
-			Ok({ value: True, rest: state })
-		} else if word == "false".to_utf8() {
-			Ok({ value: False, rest: state })
-		} else {
-			Err(cell_error(state, expected_problem(Boolean, bytes)))
-		}
+		widened = {
+			bytes = current_cell(state)?
+			word = lowercase_ascii(bytes)
+			if word == "true".to_utf8() {
+				Ok({ value: True, rest: state })
+			} else if word == "false".to_utf8() {
+				Ok({ value: False, rest: state })
+			} else {
+				Err(cell_error(state, expected_problem(Boolean, bytes)))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## Read ASCII digits with an optional `+` as a U8.
-	parse_u8 : CsvFormat, CSV.State -> Try({ value : U8, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_u8 = |_, state| cell_int(state, U8.from_str, False, U8)
+	parse_u8 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : U8, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_u8 = |_, state| {
+		widened = cell_int(state, U8.from_str, False, U8)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional sign as a I8.
-	parse_i8 : CsvFormat, CSV.State -> Try({ value : I8, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_i8 = |_, state| cell_int(state, I8.from_str, True, I8)
+	parse_i8 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : I8, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_i8 = |_, state| {
+		widened = cell_int(state, I8.from_str, True, I8)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional `+` as a U16.
-	parse_u16 : CsvFormat, CSV.State -> Try({ value : U16, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_u16 = |_, state| cell_int(state, U16.from_str, False, U16)
+	parse_u16 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : U16, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_u16 = |_, state| {
+		widened = cell_int(state, U16.from_str, False, U16)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional sign as a I16.
-	parse_i16 : CsvFormat, CSV.State -> Try({ value : I16, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_i16 = |_, state| cell_int(state, I16.from_str, True, I16)
+	parse_i16 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : I16, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_i16 = |_, state| {
+		widened = cell_int(state, I16.from_str, True, I16)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional `+` as a U32.
-	parse_u32 : CsvFormat, CSV.State -> Try({ value : U32, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_u32 = |_, state| cell_int(state, U32.from_str, False, U32)
+	parse_u32 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : U32, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_u32 = |_, state| {
+		widened = cell_int(state, U32.from_str, False, U32)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional sign as a I32.
-	parse_i32 : CsvFormat, CSV.State -> Try({ value : I32, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_i32 = |_, state| cell_int(state, I32.from_str, True, I32)
+	parse_i32 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : I32, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_i32 = |_, state| {
+		widened = cell_int(state, I32.from_str, True, I32)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional `+` as a U64.
-	parse_u64 : CsvFormat, CSV.State -> Try({ value : U64, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_u64 = |_, state| cell_int(state, U64.from_str, False, U64)
+	parse_u64 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : U64, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_u64 = |_, state| {
+		widened = cell_int(state, U64.from_str, False, U64)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional sign as a I64.
-	parse_i64 : CsvFormat, CSV.State -> Try({ value : I64, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_i64 = |_, state| cell_int(state, I64.from_str, True, I64)
+	parse_i64 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : I64, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_i64 = |_, state| {
+		widened = cell_int(state, I64.from_str, True, I64)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional `+` as a U128.
-	parse_u128 : CsvFormat, CSV.State -> Try({ value : U128, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_u128 = |_, state| cell_int(state, U128.from_str, False, U128)
+	parse_u128 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : U128, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_u128 = |_, state| {
+		widened = cell_int(state, U128.from_str, False, U128)?
+		Ok(widened)
+	}
 
 	## Read ASCII digits with an optional sign as a I128.
-	parse_i128 : CsvFormat, CSV.State -> Try({ value : I128, rest : CSV.State }, [InvalidCsv(CSV.Error)])
-	parse_i128 = |_, state| cell_int(state, I128.from_str, True, I128)
+	parse_i128 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : I128, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
+	parse_i128 = |_, state| {
+		widened = cell_int(state, I128.from_str, True, I128)?
+		Ok(widened)
+	}
 
 	## Read an optional sign, digits and an optional fraction.
-	parse_dec : CsvFormat, CSV.State -> Try({ value : Dec, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_dec : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : Dec, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
 	parse_dec = |_, state| {
-		bytes = current_cell(state)?
-		match dec_from_bytes(bytes) {
-			Ok(value) => Ok({ value, rest: state })
-			Err(_) => Err(cell_error(state, expected_problem(Dec, bytes)))
-		}
+		widened = {
+			bytes = current_cell(state)?
+			match dec_from_bytes(bytes) {
+				Ok(value) => Ok({ value, rest: state })
+				Err(_) => Err(cell_error(state, expected_problem(Dec, bytes)))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## Read a float with the grammar of [CSV.f64].
-	parse_f32 : CsvFormat, CSV.State -> Try({ value : F32, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_f32 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : F32, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
 	parse_f32 = |_, state| {
-		bytes = current_cell(state)?
-		match decimal_f64(bytes) {
-			Ok(value) => Ok({ value: value.to_f32_wrap(), rest: state })
-			Err(_) => Err(cell_error(state, expected_problem(F32, bytes)))
-		}
+		widened = {
+			bytes = current_cell(state)?
+			match decimal_f64(bytes) {
+				Ok(value) => Ok({ value: value.to_f32_wrap(), rest: state })
+				Err(_) => Err(cell_error(state, expected_problem(F32, bytes)))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## Read a float with the grammar of [CSV.f64].
-	parse_f64 : CsvFormat, CSV.State -> Try({ value : F64, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_f64 : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : F64, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
 	parse_f64 = |_, state| {
-		bytes = current_cell(state)?
-		match decimal_f64(bytes) {
-			Ok(value) => Ok({ value, rest: state })
-			Err(_) => Err(cell_error(state, expected_problem(F64, bytes)))
-		}
+		widened = {
+			bytes = current_cell(state)?
+			match decimal_f64(bytes) {
+				Ok(value) => Ok({ value, rest: state })
+				Err(_) => Err(cell_error(state, expected_problem(F64, bytes)))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## An empty cell is null, so a `Try(a, [Null])` field is `Err(Null)`.
-	parse_null : CsvFormat, CSV.State -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	parse_null : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try(CSV.State, [InvalidCsv(CSV.Error), ..errors])
 	parse_null = |_, state| {
-		bytes = current_cell(state)?
-		if (bytes.is_empty()) Ok(state) else Err(cell_error(state, expected_problem(Empty, bytes)))
+		widened = {
+			bytes = current_cell(state)?
+			if (bytes.is_empty()) Ok(state) else Err(cell_error(state, expected_problem(Empty, bytes)))
+		}?
+		Ok(widened)
 	}
 
 	## A row is one record; a record inside a row is rejected.
-	parse_record_start : CsvFormat, CSV.State -> Try([Counted({ len : U64, rest : CSV.State }), Uncounted(CSV.State)], [InvalidCsv(CSV.Error)])
+	parse_record_start : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try([Counted({ len : U64, rest : CSV.State }), Uncounted(CSV.State)], [InvalidCsv(CSV.Error), ..errors])
 	parse_record_start = |_, state| {
-		if state.nested {
-			Err(cell_error(state, UnsupportedCell(Record)))
-		} else {
-			Ok(Uncounted(CSV.State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True }))
-		}
+		widened = {
+			if state.nested {
+				Err(cell_error(state, UnsupportedCell(Record)))
+			} else {
+				Ok(Uncounted(CSV.State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True }))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## Offer the next header name as the field to fill.
-	parse_record_field : CsvFormat,
+	parse_record_field : CsvFormat([InvalidCsv(CSV.Error), ..errors]),
 	Encoding.FieldName.FieldNames(_shape),
 	CSV.State -> Try(
 		[
@@ -577,55 +629,79 @@ CsvFormat :: [Default].{
 			Continue(CSV.State),
 			Done(CSV.State),
 		],
-		[InvalidCsv(CSV.Error)],
+		[InvalidCsv(CSV.Error), ..errors],
 	)
 	parse_record_field = |_, _, state| {
-		match state.header.get(state.column) {
-			Err(_) => Ok(Done(state))
-			Ok(name) => Ok(TryField({ name, rest: CSV.State.{ row: state.row, header: state.header, column: state.column + 1, cell: state.column, record: state.record, nested: True } }))
-		}
+		widened = {
+			match state.header.get(state.column) {
+				Err(_) => Ok(Done(state))
+				Ok(name) => Ok(TryField({ name, rest: CSV.State.{ row: state.row, header: state.header, column: state.column + 1, cell: state.column, record: state.record, nested: True } }))
+			}
+		}?
+		Ok(widened)
 	}
 
 	## The record ends after the last header column.
-	parse_record_after_field : CsvFormat, CSV.State -> Try([Continue(CSV.State), Done(CSV.State)], [InvalidCsv(CSV.Error)])
+	parse_record_after_field : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try([Continue(CSV.State), Done(CSV.State)], [InvalidCsv(CSV.Error), ..errors])
 	parse_record_after_field = |_, state| {
-		if (state.column >= state.header.len()) Ok(Done(state)) else Ok(Continue(state))
+		widened = {
+			if (state.column >= state.header.len()) Ok(Done(state)) else Ok(Continue(state))
+		}?
+		Ok(widened)
 	}
 
 	## The cell to skip is chosen by the column, so nothing is consumed.
-	skip_record_field : CsvFormat, CSV.State -> Try(CSV.State, [InvalidCsv(CSV.Error)])
-	skip_record_field = |_, state| Ok(state)
+	skip_record_field : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try(CSV.State, [InvalidCsv(CSV.Error), ..errors])
+	skip_record_field = |_, state| {
+		widened = {
+			Ok(state)
+		}?
+		Ok(widened)
+	}
 
 	## A headerless row is a tuple with one element per field.
-	parse_tuple_start : CsvFormat, CSV.State, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	parse_tuple_start : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error), ..errors])
 	parse_tuple_start = |_, state, len| {
-		if state.nested {
-			Err(cell_error(state, UnsupportedCell(Tuple)))
-		} else if state.row.len() != len {
-			Err(InvalidCsv(csv_error({ record: state.record, field: smaller(state.row.len(), len) + 1, line: 0, column: 0, problem: width_problem(state.row.len(), len) })))
-		} else {
-			Ok(CSV.State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True })
-		}
+		widened = {
+			if state.nested {
+				Err(cell_error(state, UnsupportedCell(Tuple)))
+			} else if state.row.len() != len {
+				Err(InvalidCsv(csv_error({ record: state.record, field: smaller(state.row.len(), len) + 1, line: 0, column: 0, problem: width_problem(state.row.len(), len) })))
+			} else {
+				Ok(CSV.State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True })
+			}
+		}?
+		Ok(widened)
 	}
 
 	## Move to the cell of the next tuple element.
-	parse_tuple_next : CsvFormat, CSV.State, U64, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error)])
-	parse_tuple_next = |_, state, index, _| Ok(CSV.State.{ row: state.row, header: state.header, column: index, cell: index, record: state.record, nested: True })
+	parse_tuple_next : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State, U64, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error), ..errors])
+	parse_tuple_next = |_, state, index, _| {
+		widened = {
+			Ok(CSV.State.{ row: state.row, header: state.header, column: index, cell: index, record: state.record, nested: True })
+		}?
+		Ok(widened)
+	}
 
 	## The error for a cell that holds no valid value.
-	invalid_value : CsvFormat, CSV.State -> [InvalidCsv(CSV.Error)]
+	invalid_value : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State -> [InvalidCsv(CSV.Error), ..errors]
 	invalid_value = |_, state| cell_error(state, InvalidValue)
 
 	## Finish a tuple row.
-	parse_tuple_end : CsvFormat, CSV.State, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error)])
-	parse_tuple_end = |_, state, _| Ok(state)
+	parse_tuple_end : CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error), ..errors])
+	parse_tuple_end = |_, state, _| {
+		widened = {
+			Ok(state)
+		}?
+		Ok(widened)
+	}
 
 	## Report a required field absent from the input.
-	missing_field : CsvFormat, Str -> [InvalidCsv(CSV.Error)]
+	missing_field : CsvFormat([InvalidCsv(CSV.Error), ..errors]), Str -> [InvalidCsv(CSV.Error), ..errors]
 	missing_field = |_, name| InvalidCsv(Diagnostic.{ problem: MissingRequiredField(name), location: Unavailable(NotRetained), path: [Key(name)] })
 
 	## A tag without a payload is read from its name.
-	parse_tag_union : CsvFormat, Encoding.ParseTagUnionSpec(a, CsvFormat, CSV.State, [InvalidCsv(CSV.Error)]), CSV.State -> Try({ value : a, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_tag_union : CsvFormat([InvalidCsv(CSV.Error), ..errors]), Encoding.ParseTagUnionSpec(a, CsvFormat([InvalidCsv(CSV.Error), ..errors]), CSV.State, [InvalidCsv(CSV.Error), ..errors]), CSV.State -> Try({ value : a, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errors])
 	parse_tag_union = |format, spec, state| {
 		bytes = current_cell(state)?
 		Encoding.ParseTagUnionSpec.parse(
@@ -641,6 +717,7 @@ CsvFormat :: [Default].{
 			},
 		)
 	}
+
 }
 
 parse_records_core : Str -> Try(List(CSV.Record), [InvalidCsv(CSV.Error)])
@@ -1770,7 +1847,7 @@ expect {
 
 CheckedCsvFailure := [Never].{
 	is_eq : _
-	parser_for : CSV.Format -> (CSV.State -> Try({ value : CheckedCsvFailure, rest : CSV.State }, [InvalidCsv(CSV.Error), CustomCsvFailure(Str)]))
+	parser_for : CSV.Format(errors) -> (CSV.State -> Try({ value : CheckedCsvFailure, rest : CSV.State }, [InvalidCsv(CSV.Error), CustomCsvFailure(Str), ..errors]))
 	parser_for = |_| |_| Err(CustomCsvFailure("custom detail"))
 }
 
@@ -1984,4 +2061,22 @@ expect {
 	row = Parser.many(CSV.field(CSV.u64({})))
 	report = CSV.positional_decoder({ row, reader: { max_field_bytes: 16 }, errors: { policy: ReportInvalidRecords } }).collect_report(["1\nbad\n2\n".to_utf8()].iter())?
 	report.values == [[1], [2]] and report.errors.len() == 1 and report.report.rejected_records == 1
+}
+
+## Derived parsing shares the caller's error row without losing custom failures.
+expect {
+	decode : Str -> Try(List({ name : Str, age : U64 }), [CallerFailure, InvalidCsv(CSV.Error)])
+	decode = |source| {
+		rows = CSV.decode_str(source, {})?
+		Ok(rows)
+	}
+	decode("name,age\nAda,36\n") == Ok([{ name: "Ada", age: 36 }])
+}
+expect {
+	decode : Str -> Try(List({ status : CheckedCsvFailure }), [CallerFailure, InvalidCsv(CSV.Error), CustomCsvFailure(Str)])
+	decode = |source| {
+		rows = CSV.decode_str(source, {})?
+		Ok(rows)
+	}
+	decode("status\nvalue\n") == Err(CustomCsvFailure("custom detail"))
 }
