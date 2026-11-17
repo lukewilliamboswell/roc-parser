@@ -626,6 +626,13 @@ many_help = |parser, values, input, len, furthest| {
 					# No progress: repeating would loop forever on the same input.
 					return Ok({ value: $values, rest: $input, furthest: further($furthest, next.furthest) })
 				}
+				if $values.is_empty() {
+					# Reserve only after progress. The first element's input use
+					# estimates cardinality, with bounded speculative capacity.
+					consumed = minus($len, next_len)
+					estimate = if (consumed == 0) 1 else $len // consumed
+					$values = List.with_capacity(if (estimate > 16) 16 else estimate)
+				}
 				$values = $values.append(next.value)
 				$input = next.rest
 				$len = next_len
