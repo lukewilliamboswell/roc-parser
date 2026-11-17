@@ -68,6 +68,13 @@ values. Template plans and inherited context state are opaque. Safe shared
 tree validation is `Markup.validate_tree`; internal template exemptions and
 syntax helpers are private.
 
+== HTML interpolation
+
+Text holes remain children of their authored formatting or form element,
+including sole, adjacent and nested holes. Anchor text stays inside its link.
+Placement uses HTML construction state without changing source bytes or origin
+spans, and `exact_structure` continues to reject malformed nesting.
+
 == Performance status
 
 This candidate preserves native allocation checks and includes the existing

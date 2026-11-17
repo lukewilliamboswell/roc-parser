@@ -108,7 +108,7 @@ TARGETS = dict(
         target("dom-construction", max_input_size=12, timeout=10, examples=True, scheduled=False),
         target("markup-structured", max_input_size=128, timeout=10, scheduled=False),
         target("markup-limits", max_input_size=8, timeout=10, scheduled=False),
-        target("markup-segments", max_input_size=256, timeout=10, scheduled=False),
+        target("markup-segments", max_input_size=256, timeout=10, examples=True, scheduled=False),
         target("json-raw", "json", "raw", "json", timeout=10),
         # The first two bytes choose the options, so its seeds carry them.
         target("json-options", "json-options", "raw", "json", timeout=10),

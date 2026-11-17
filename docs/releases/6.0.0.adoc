@@ -178,6 +178,10 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Fixed
 
+* HTML text holes retain their authored parent and ancestry inside formatting
+  elements and forms, including sole, adjacent and nested holes. Anchor text
+  stays inside its link; original source spans and malformed-nesting checks
+  remain intact.
 * CSV typed parsing reports failures in encounter order. An invalid value in
   an earlier completed row takes precedence over malformed CSV later in the file.
 * Optimized whole-document QIF and OFX collection, including reduced temporary
