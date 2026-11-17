@@ -431,26 +431,45 @@ parse_core = |bytes, props, decode| {
 	}
 }
 
+# Only field/context data crosses the line-handler boundary. Scalar scan
+# coordinates stay local until a public decoder step returns.
+LineState : { fields : List(QIF.Field), section : Str, account : Str, record_at : QIF.Location }
+
+decoder_at : QIF.Props, LineState, U64, U64, U64, U64, List(U8), Bool, U64 -> QIF.Decoder
+decoder_at = |props, state, offset, line_number, column, line_start, line_bytes, skip_lf, record_bytes| {
+	{ props, offset, line_number, column, line_start, line_bytes, skip_lf, record_bytes, fields: state.fields, section: state.section, account: state.account, record_at: state.record_at, done: False }
+}
+
 step_with_decode : QIF.Decoder, List(U8), Streaming.InputEnd, (List(U8), U64 -> Try(Str, [BadEncoding({ index : U64, message : Str })])) -> Streaming.Step(QIF.Decoder, QIF.Event, QIF.Error)
 step_with_decode = |initial, bytes, end, decode| {
 	if initial.done {
 		return { state: initial, consumed: 0, outcome: Done }
 	}
-	var $s = initial
+	props = initial.props
+	var $line_state = { fields: initial.fields, section: initial.section, account: initial.account, record_at: initial.record_at }
+	var $offset = initial.offset
+	var $line_number = initial.line_number
+	var $column = initial.column
+	var $line_start = initial.line_start
+	var $line_bytes = initial.line_bytes
+	var $skip_lf = initial.skip_lf
+	var $record_bytes = initial.record_bytes
 	var $pos = 0
 	while $pos < bytes.len() {
-		if $s.skip_lf and bytes.get($pos) == Ok('\n') {
-			additional = if ($s.record_bytes == 0) 0 else 1
+		if $skip_lf and bytes.get($pos) == Ok('\n') {
+			additional = if ($record_bytes == 0) 0 else 1
 			$pos = $pos + 1
-			$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional, skip_lf: False, line_start: $s.offset + 1 }
-			if $s.record_bytes > $s.props.max_record_bytes {
-				return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+			$offset = $offset + 1
+			$record_bytes = $record_bytes + additional
+			$skip_lf = False
+			$line_start = $offset
+			if $record_bytes > props.max_record_bytes {
+				state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
+				return { state: terminal(state), consumed: $pos, outcome: Failed(problem(state, "QIF record byte limit exceeded")) }
 			}
 		} else {
-			# Scan a contiguous line span before updating the persistent state.
-			# Streaming spans own their storage before any text can escape.
-			record_room = $s.props.max_record_bytes - $s.record_bytes
-			line_room = $s.props.max_line_bytes - $s.line_bytes.len()
+			record_room = props.max_record_bytes - $record_bytes
+			line_room = props.max_line_bytes - $line_bytes.len()
 			room = if (record_room < line_room) record_room else line_room
 			remaining = bytes.len() - $pos
 			# Inspect at most the budget plus its first violating byte.
@@ -461,14 +480,17 @@ step_with_decode = |initial, bytes, end, decode| {
 				record_first = record_room <= line_room
 				accepted = if (record_first) record_room else line_room
 				consumed = accepted + 1
-				$s = { ..$s, offset: $s.offset + consumed, record_bytes: $s.record_bytes + consumed, column: $s.column + accepted + (if (record_first) 0 else 1) }
-				return { state: terminal($s), consumed: $pos + consumed, outcome: Failed(problem($s, if (record_first) "QIF record byte limit exceeded" else "QIF byte limit exceeded")) }
+				$offset = $offset + consumed
+				$record_bytes = $record_bytes + consumed
+				$column = $column + accepted + (if (record_first) 0 else 1)
+				state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
+				return { state: terminal(state), consumed: $pos + consumed, outcome: Failed(problem(state, if (record_first) "QIF record byte limit exceeded" else "QIF byte limit exceeded")) }
 			}
 			span = bytes.sublist({ start: $pos, len })
-			accumulated = if $s.line_bytes.is_empty() {
+			accumulated = if $line_bytes.is_empty() {
 				if end == More {
-					# Completed payloads and section/account context can outlive
-					# the call too, so never retain a slice of a streaming chunk.
+					# Completed text can outlive this call too. Keep every streaming
+					# span independent of the caller's potentially large allocation.
 					var $pending = List.with_capacity(len)
 					var $copied = 0
 					while $copied < len {
@@ -477,49 +499,66 @@ step_with_decode = |initial, bytes, end, decode| {
 					}
 					$pending
 				} else span
-			} else $s.line_bytes.concat(span)
-			$s = { ..$s, offset: $s.offset + len, record_bytes: $s.record_bytes + len, column: $s.column + len, line_bytes: accumulated, skip_lf: False }
+			} else $line_bytes.concat(span)
+			$offset = $offset + len
+			$record_bytes = $record_bytes + len
+			$column = $column + len
+			$skip_lf = False
 			$pos = stop
 			if $pos == bytes.len() {
+				$line_bytes = accumulated
 				break
 			}
 			byte = bytes.get($pos) ?? 0
 			$pos = $pos + 1
-			additional = if ($s.line_bytes == ['^']) 0 else 1
-			$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
-			if $s.record_bytes > $s.props.max_record_bytes {
-				return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+			additional = if (accumulated == ['^']) 0 else 1
+			$offset = $offset + 1
+			$record_bytes = $record_bytes + additional
+			if $record_bytes > props.max_record_bytes {
+				state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
+				return { state: terminal(state), consumed: $pos, outcome: Failed(problem(state, "QIF record byte limit exceeded")) }
 			}
-			line = $s.line_bytes
-			$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
-			next_line_start = $s.offset
-			processed = process_line($s, line, decode)
-			$s = { ..processed.state, line_start: next_line_start }
+			$line_number = $line_number + 1
+			$column = 1
+			$skip_lf = byte == '\r'
+			$line_bytes = []
+			origin = { offset: $line_start, line: $line_number - 1, column: 1 }
+			processed = process_line($line_state, accumulated, origin, props, decode)
+			$line_state = processed.state
+			$line_start = $offset
 			match processed.result {
-				Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
-				Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
+				Emitted(event) => {
+					$record_bytes = 0
+					return { state: decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes), consumed: $pos, outcome: Item(event) }
+				}
+				Error(error) => return { state: terminal(decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)), consumed: $pos, outcome: Failed(error) }
 				Continue => {}
 			}
 		}
 	}
 	if end == More {
-		return { state: $s, consumed: $pos, outcome: NeedInput }
+		return { state: decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes), consumed: $pos, outcome: NeedInput }
 	}
-	if !$s.line_bytes.is_empty() {
-		line = $s.line_bytes
-		$s = { ..$s, line_bytes: [] }
-		processed = process_line($s, line, decode)
-		$s = processed.state
+	if !$line_bytes.is_empty() {
+		line = $line_bytes
+		$line_bytes = []
+		origin = { offset: $line_start, line: if ($column == 1) $line_number - 1 else $line_number, column: 1 }
+		processed = process_line($line_state, line, origin, props, decode)
+		$line_state = processed.state
 		match processed.result {
-			Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
-			Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
+			Emitted(event) => {
+				$record_bytes = 0
+				return { state: decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes), consumed: $pos, outcome: Item(event) }
+			}
+			Error(error) => return { state: terminal(decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)), consumed: $pos, outcome: Failed(error) }
 			Continue => {}
 		}
 	}
-	if !$s.fields.is_empty() {
-		return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "record must end with ^")) }
+	if !$line_state.fields.is_empty() {
+		state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
+		return { state: terminal(state), consumed: $pos, outcome: Failed(problem(state, "record must end with ^")) }
 	}
-	{ state: terminal($s), consumed: $pos, outcome: Done }
+	{ state: terminal(decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)), consumed: $pos, outcome: Done }
 }
 
 terminal : QIF.Decoder -> QIF.Decoder
@@ -528,12 +567,12 @@ terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done
 problem : QIF.Decoder, Str -> QIF.Error
 problem = |s, message| { offset: s.offset, line: s.line_number, column: s.column, message }
 
-process_line : QIF.Decoder, List(U8), (List(U8), U64 -> Try(Str, [BadEncoding({ index : U64, message : Str })])) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
-process_line = |s, bytes, decode| {
-	bom = s.line_start == 0 and s.props.encoding == Utf8 and bytes.take_first(3) == [0xef, 0xbb, 0xbf]
+process_line : LineState, List(U8), QIF.Location, QIF.Props, (List(U8), U64 -> Try(Str, [BadEncoding({ index : U64, message : Str })])) -> { state : LineState, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
+process_line = |s, bytes, origin, props, decode| {
+	bom = origin.offset == 0 and props.encoding == Utf8 and bytes.take_first(3) == [0xef, 0xbb, 0xbf]
 	content = if (bom) bytes.drop_first(3) else bytes
 	prefix = if (bom) 3 else 0
-	at = { offset: s.line_start + prefix, line: if (s.column == 1) s.line_number - 1 else s.line_number, column: prefix + 1 }
+	at = { offset: origin.offset + prefix, line: origin.line, column: origin.column + prefix }
 	bad = |message| { offset: at.offset, line: at.line, column: at.column, message }
 	code = content.first() ?? 0
 	if code >= 33 and code <= 126 and code != '!' and code != '^' {
@@ -549,13 +588,13 @@ process_line = |s, bytes, decode| {
 		if s.section == "" {
 			return { state: s, result: Error(bad("field requires a section header")) }
 		}
-		if s.fields.len() >= s.props.max_fields {
+		if s.fields.len() >= props.max_fields {
 			return { state: s, result: Error(bad("QIF field count limit exceeded")) }
 		}
 		record_at = if (s.fields.is_empty()) at else s.record_at
 		# Most records have several fields. Reserve only after the first field
 		# validates, and never request more entries than the caller permits.
-		pending_fields = if (s.fields.is_empty()) List.with_capacity(U64.min(8, s.props.max_fields)) else s.fields
+		pending_fields = if (s.fields.is_empty()) List.with_capacity(U64.min(8, props.max_fields)) else s.fields
 		fields = pending_fields.append({ code, value })
 		return { state: { ..s, fields, record_at }, result: Continue }
 	}
@@ -573,11 +612,11 @@ process_line = |s, bytes, decode| {
 		if !s.fields.is_empty() {
 			return { state: s, result: Error(bad("header before record terminator ^")) }
 		}
-		if bytes.len() > s.props.max_context_bytes {
+		if bytes.len() > props.max_context_bytes {
 			return { state: s, result: Error(bad("QIF context limit exceeded")) }
 		}
 		section = if (text == "!Account") "Account" else if (text.starts_with("!Type:")) Str.from_utf8_lossy(text.to_utf8().drop_first(6)) else s.section
-		return { state: { ..s, section, record_bytes: 0 }, result: Emitted(Header(text)) }
+		return { state: { ..s, section }, result: Emitted(Header(text)) }
 	}
 	if text == "^" {
 		if s.section == "" {
@@ -588,15 +627,15 @@ process_line = |s, bytes, decode| {
 		if s.section == "Account" and account == "" {
 			return { state: s, result: Error(bad("account requires N name field")) }
 		}
-		if account.count_utf8_bytes() > s.props.max_context_bytes {
+		if account.count_utf8_bytes() > props.max_context_bytes {
 			return { state: s, result: Error(bad("QIF account context limit exceeded")) }
 		}
-		return { state: { ..s, fields: [], account, record_bytes: 0 }, result: Emitted(Record(record)) }
+		return { state: { ..s, fields: [], account }, result: Emitted(Record(record)) }
 	}
 	if s.section == "" {
 		return { state: s, result: Error(bad("field requires a section header")) }
 	}
-	if s.fields.len() >= s.props.max_fields {
+	if s.fields.len() >= props.max_fields {
 		return { state: s, result: Error(bad("QIF field count limit exceeded")) }
 	}
 	{ state: s, result: Error(bad("field indicator must be printable ASCII")) }
@@ -1055,4 +1094,29 @@ expect {
 		}
 	}
 	$same
+}
+
+expect {
+	props : List(QIF.Props)
+	props = [{}, { max_line_bytes: 0 }, { max_line_bytes: 10 }, { max_record_bytes: 0 }, { max_record_bytes: 11 }, { max_record_bytes: 12 }, { max_fields: 1 }]
+	texts = ["!Type:Bank\r\nPfirst\r\n^\r\n", "!Type:Bank\r\n\r\nPfirst\n^\r!Type:Cash\n^", "!Account\rNCurrent\n^\r\n!Type:Bank\r\nPfirst\n^\r\n", "!Type:Bank\nPunterminated", "!Type:Bank\r\nP1234567890\r\n^\r\n"]
+	var $same = True
+	for text in texts {
+		bytes = text.to_utf8()
+		for options in props {
+			bulk = List.from_iter(QIF.parse_iter([bytes].iter(), options))
+			bytewise = List.from_iter(QIF.parse_iter(bytes.map(|byte| [byte]).iter(), options))
+			$same = $same and bulk == bytewise
+		}
+	}
+	$same
+}
+
+expect {
+	bytes = "!Type:Bank\r\nPone\r\n".to_utf8()
+	header = QIF.decoder({}).step(bytes, More)
+	body = header.state.step(bytes.drop_first(header.consumed), More)
+	record = body.state.step("^".to_utf8(), Final)
+	finished = record.state.step([], Final)
+	body.outcome == NeedInput and body.state.offset == 18 and body.state.line_number == 3 and body.state.column == 1 and body.state.line_start == 18 and body.state.record_bytes == 6 and !body.state.skip_lf and body.state.line_bytes.is_empty() and body.state.record_at == { offset: 12, line: 2, column: 1 } and record.state.offset == 19 and record.state.line_number == 3 and record.state.column == 2 and record.state.line_start == 18 and record.state.record_bytes == 0 and finished.outcome == Done and finished.state.done
 }
