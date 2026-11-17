@@ -114,7 +114,7 @@ QIF := { events : List(QIF.Event) }.{
 					}
 				} else {
 					# Scan a contiguous line span before updating the persistent state.
-					# Only a line crossing a source chunk needs an accumulation buffer.
+					# Streaming spans own their storage before any text can escape.
 					record_room = $s.props.max_record_bytes - $s.record_bytes
 					line_room = $s.props.max_line_bytes - $s.line_bytes.len()
 					room = if (record_room < line_room) record_room else line_room
@@ -132,12 +132,14 @@ QIF := { events : List(QIF.Event) }.{
 					}
 					span = bytes.sublist({ start: $pos, len })
 					accumulated = if $s.line_bytes.is_empty() {
-						if stop == bytes.len() and end == More {
-							# Copy a partial slice before retaining it across calls: its
-							# backing source allocation may be much larger than the line.
+						if end == More {
+							# Completed payloads and section/account context can outlive
+							# the call too, so never retain a slice of a streaming chunk.
 							var $pending = List.with_capacity(len)
-							for byte in span {
-								$pending = $pending.append(byte)
+							var $copied = 0
+							while $copied < len {
+								$pending = $pending.append(span.get($copied) ?? 0)
+								$copied = $copied + 1
 							}
 							$pending
 						} else span
@@ -156,8 +158,9 @@ QIF := { events : List(QIF.Event) }.{
 					}
 					line = $s.line_bytes
 					$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
+					next_line_start = $s.offset
 					processed = process_line($s, line)
-					$s = { ..processed.state, line_start: $s.offset }
+					$s = { ..processed.state, line_start: next_line_start }
 					match processed.result {
 						Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
 						Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
@@ -511,7 +514,7 @@ process_line = |s, bytes| {
 	content = if (bom) bytes.drop_first(3) else bytes
 	prefix = if (bom) 3 else 0
 	at = { offset: s.line_start + prefix, line: if (s.column == 1) s.line_number - 1 else s.line_number, column: prefix + 1 }
-	bad = |message| { state: s, result: Error({ offset: at.offset, line: at.line, column: at.column, message }) }
+	bad = |message| { offset: at.offset, line: at.line, column: at.column, message }
 	code = content.first() ?? 0
 	if code >= 33 and code <= 126 and code != '!' and code != '^' {
 		# An ASCII field indicator needs no conversion. Decode the payload once;
@@ -521,57 +524,59 @@ process_line = |s, bytes| {
 			Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + 1 + error.index, line: at.line, column: at.column + 1 + error.index, message: error.message }) }
 		}
 		if content.contains(0) {
-			return bad("NUL is not allowed in QIF fields")
+			return { state: s, result: Error(bad("NUL is not allowed in QIF fields")) }
 		}
 		if s.section == "" {
-			return bad("field requires a section header")
+			return { state: s, result: Error(bad("field requires a section header")) }
 		}
 		if s.fields.len() >= s.props.max_fields {
-			return bad("QIF field count limit exceeded")
+			return { state: s, result: Error(bad("QIF field count limit exceeded")) }
 		}
-		return { state: { ..s, fields: s.fields.append({ code, value }), record_at: if (s.fields.is_empty()) at else s.record_at }, result: Continue }
+		record_at = if (s.fields.is_empty()) at else s.record_at
+		fields = s.fields.append({ code, value })
+		return { state: { ..s, fields, record_at }, result: Continue }
 	}
 	text = match Streaming.decode_text(content, s.props.encoding) {
 		Ok(value) => value
 		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, message: error.message }) }
 	}
 	if bytes.contains(0) {
-		return bad("NUL is not allowed in QIF fields")
+		return { state: s, result: Error(bad("NUL is not allowed in QIF fields")) }
 	}
 	if content.is_empty() {
 		return { state: s, result: Continue }
 	}
 	if text.starts_with("!") {
 		if !s.fields.is_empty() {
-			return bad("header before record terminator ^")
+			return { state: s, result: Error(bad("header before record terminator ^")) }
 		}
 		if bytes.len() > s.props.max_context_bytes {
-			return bad("QIF context limit exceeded")
+			return { state: s, result: Error(bad("QIF context limit exceeded")) }
 		}
 		section = if (text == "!Account") "Account" else if (text.starts_with("!Type:")) Str.from_utf8_lossy(text.to_utf8().drop_first(6)) else s.section
 		return { state: { ..s, section, record_bytes: 0 }, result: Emitted(Header(text)) }
 	}
 	if text == "^" {
 		if s.section == "" {
-			return bad("record requires a section header")
+			return { state: s, result: Error(bad("record requires a section header")) }
 		}
 		record = { section: s.section, account: s.account, fields: s.fields, at: if (s.fields.is_empty()) at else s.record_at }
 		account = if (s.section == "Account") QIF.field(record, 'N') ?? "" else s.account
 		if s.section == "Account" and account == "" {
-			return bad("account requires N name field")
+			return { state: s, result: Error(bad("account requires N name field")) }
 		}
 		if account.count_utf8_bytes() > s.props.max_context_bytes {
-			return bad("QIF account context limit exceeded")
+			return { state: s, result: Error(bad("QIF account context limit exceeded")) }
 		}
 		return { state: { ..s, fields: [], account, record_bytes: 0 }, result: Emitted(Record(record)) }
 	}
 	if s.section == "" {
-		return bad("field requires a section header")
+		return { state: s, result: Error(bad("field requires a section header")) }
 	}
 	if s.fields.len() >= s.props.max_fields {
-		return bad("QIF field count limit exceeded")
+		return { state: s, result: Error(bad("QIF field count limit exceeded")) }
 	}
-	bad("field indicator must be printable ASCII")
+	{ state: s, result: Error(bad("field indicator must be printable ASCII")) }
 }
 
 has_break : Str -> Bool
@@ -923,6 +928,35 @@ expect {
 	bytes = "!Type:Bank\nP".to_utf8().concat([0xff, '\n'])
 	match QIF.parse_bytes(bytes, { max_fields: 0 }) {
 		Err(InvalidQif(error)) => error == { offset: 12, line: 2, column: 2, message: "invalid UTF-8" }
+		_ => False
+	}
+}
+
+# A large preceding chunk must not become part of retained line/field/context
+# storage. All retained text exceeds short-string storage in these examples.
+expect {
+	section = "LongSectionNameBeyondShortStringStorage"
+	value = "A field value beyond short string storage"
+	large = List.repeat('\n', 8192).concat("!Type:${section}\nP${value}\n".to_utf8())
+	header = QIF.decoder({ max_line_bytes: 128, max_context_bytes: 128 }).step(large, More)
+	pending = header.state.step(large.drop_first(header.consumed), More)
+	finished = pending.state.step("^\n".to_utf8(), Final)
+	match (header.outcome, pending.outcome, finished.outcome) {
+		(Item(Header(text)), NeedInput, Item(Record(record))) => text == "!Type:${section}" and pending.state.line_bytes.is_empty() and pending.state.fields == [{ code: 'P', value }] and record.section == section and record.fields == [{ code: 'P', value }]
+		_ => False
+	}
+}
+expect {
+	name = "An account name beyond short string storage"
+	large = List.repeat('\n', 8192).concat("!Account\nN${name}\n".to_utf8())
+	header = QIF.decoder({ max_line_bytes: 128, max_context_bytes: 128 }).step(large, More)
+	pending = header.state.step(large.drop_first(header.consumed), More)
+	account = pending.state.step("^\n".to_utf8(), More)
+	bank = account.state.step("!Type:Bank\n".to_utf8(), More)
+	field = bank.state.step("Ppaid\n".to_utf8(), More)
+	finished = field.state.step("^\n".to_utf8(), Final)
+	match (pending.outcome, account.outcome, bank.outcome, field.outcome, finished.outcome) {
+		(NeedInput, Item(Record(_)), Item(Header(_)), NeedInput, Item(Record(record))) => account.state.account == name and field.state.account == name and record.account == name and record.fields == [{ code: 'P', value: "paid" }]
 		_ => False
 	}
 }
