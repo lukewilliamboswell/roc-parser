@@ -60,7 +60,7 @@ config = [
 	# Shared release utilities run without a local build compiler.
 	Environment("release", [Extend("inventory"), Expect(["gh"])]),
 	Environment("docs", [Extend("release"), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/roc-docs-{system}"))])]),
-	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
+	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python313", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
 	Shell("bench", [Use("bench")]),
 	# Everything a pull request must pass; `blueprint run check -- --list`.

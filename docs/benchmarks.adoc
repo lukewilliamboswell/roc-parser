@@ -21,6 +21,7 @@ and how to read a report.
 You need a recent Roc nightly; the report records which one. Go,
 Rust (cargo, Rust 1.98 or newer for the financial comparators) and Python 3
 are needed only to create or qualify the corresponding reference measurements.
+Use Python 3.10–3.13 for Quiffen; Blueprint's benchmark environment supplies 3.13.
 Ordinary runs rebuild and measure Roc, then reuse qualified reference timings.
 A missing or incompatible reference is reported as `ReferenceUnavailable`; it
 is never silently rebuilt or remeasured.
