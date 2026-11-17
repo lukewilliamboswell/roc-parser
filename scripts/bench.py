@@ -374,7 +374,7 @@ class Impl:
 
     @property
     def workload(self) -> str:
-        if self.name in {"qif_parser", "roxmltree"}:
+        if self.name in {"qif_parser", "roxmltree", "rust-roxmltree"}:
             return "collect-borrowed"
         return "consume" if "consume" in self.name else "collect"
 

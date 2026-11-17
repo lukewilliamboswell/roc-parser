@@ -39,13 +39,14 @@ class ReadmeReferenceTests(unittest.TestCase):
         extra = Mock()
         extra.specs.return_value = [bench.Impl("python", "dom", "html", [], "owned DOM collection")]
         extra.build.return_value = extra.specs.return_value
-        extra.profile.side_effect = lambda impl, args, machine: {"runtime": {"version": "fake"}, "machine": machine, "sources": {"extra": "sha"}}
+        extra.profile.side_effect = lambda impl, args, machine: self.profile("extra", args, machine)
         extra.fresh_roc_check.return_value = {"status": "not_checked", "notes": ["different checksum contract"]}
         extra.qualification.return_value = {"status": "qualified", "checksum_semantics": "canonical-dom-v1", "ownership": "owned DOM"}
         return docs, builder, extra, references.ReferenceRun(builder, arguments(folder, refresh), docs, extra)
 
     def profile(self, language, args, machine):
-        return {"runtime": {"version": "fake"}, "machine": machine, "sources": {language: "sha"}}
+        return {"runtime": {"version": "fake"}, "machine": machine, "sources": {language: "sha"},
+                "build_recipe_sha256": "recipe", "measurement_protocol_sha256": "protocol"}
 
     def roc_results(self, documents):
         return [{"doc": doc.id, "iterations": 2, "checksum": 10} for doc in documents]
@@ -122,14 +123,16 @@ class ReadmeReferenceTests(unittest.TestCase):
             self.assertEqual(next(row for row in rows if row["format"] == "html")["status"], "ReferenceUnavailable")
             self.assertEqual(len(list((Path(tmp) / "cache").glob("*.json"))), 5)
 
-    def test_fastest_collection_can_be_borrowed_or_semantically_different_but_is_labeled(self):
+    def test_fastest_collection_can_be_borrowed_but_known_bad_results_cannot_win(self):
         base = {"format": "qif", "accepted": True, "workload": "collect", "median_ns": 30,
                 "ownership_differs": False, "semantic_status": "checksum_equal"}
         borrowed = {**base, "workload": "collect-borrowed", "median_ns": 10, "ownership_differs": True,
-                    "semantic_status": "checksum_differs"}
+                    "semantic_status": "checksum_equal"}
         consume = {**base, "workload": "consume", "median_ns": 1}
         failed = {**base, "median_ns": 2, "error": "failed"}
-        self.assertEqual(references.fastest_references([base, borrowed, consume, failed]), {"qif": borrowed})
+        bad = [{**base, "median_ns": 1, "semantic_status": status}
+               for status in ("different", "canonical_differs", "fresh_check_failed", "checksum_differs")]
+        self.assertEqual(references.fastest_references([base, borrowed, consume, failed, *bad]), {"qif": borrowed})
 
     def test_unstable_or_rejected_reference_is_not_publishable(self):
         document = bench.Doc("csv", "representative", "medium", b"data")

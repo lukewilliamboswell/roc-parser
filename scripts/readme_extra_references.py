@@ -233,7 +233,7 @@ def qualification(impl, doc, args, builder):
         if first["successes"] != 1 or first["checksum"] != markup.model_checksum(actual):
             raise bench.ReferenceUnavailable("reference checksum does not consume its qualified DOM")
         return {"status": "qualified", "notes": [impl.notes], "checksum_semantics": checksum_semantics(impl), "ownership": impl.notes,
-                "canonical": actual, "canonical_sha256": hashlib.sha256(json.dumps(actual, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(), "expected_checksum": first["checksum"]}
+                "canonical_sha256": hashlib.sha256(json.dumps(actual, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(), "expected_checksum": first["checksum"]}
     paths = _paths(builder.out)
     if impl.format == "asciidoc":
         result = proxy.worker_response("asciidoc", doc.data, 0, worker="ruby", script=ROOT / "scripts/asciidoc/performance_oracle.rb", gem_home=GEM_HOME, correctness=True)
@@ -244,7 +244,8 @@ def qualification(impl, doc, args, builder):
             raise bench.ReferenceUnavailable("Asciidoctor projection differs from README title/section fixture")
         return {"status": "qualified", "checksum_semantics": checksum_semantics(impl), "ownership": impl.notes,
                 "notes": ["Secure native block AST with fixed attributes and no rendering; Roc block representation differs."],
-                "projection": projection, "oracle_code_sha256": result.get("oracle_code_sha256"), "expected_checksum": result["operation_checksum"]}
+                "projection_sha256": hashlib.sha256(json.dumps(projection, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                "title": title, "sections": sections, "oracle_code_sha256": result.get("oracle_code_sha256"), "expected_checksum": result["operation_checksum"]}
     binary = paths["syntax"]
     try:
         receipt = json.loads(binary.with_suffix(".json").read_text())
@@ -279,6 +280,7 @@ def fresh_roc_check(impl, doc, args, builder, reference_evidence):
         raise bench.ReferenceUnavailable("fresh Roc canonical driver is unavailable")
     operation = "html-fragment-full" if impl.format == "html" else impl.format + "-full"
     actual = markup.canonical({"command": [str(binary), operation], "name": "current Roc"}, doc.data)
-    if actual != reference_evidence.get("canonical"):
+    actual_hash = hashlib.sha256(json.dumps(actual, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    if actual_hash != reference_evidence.get("canonical_sha256"):
         raise bench.ReferenceUnavailable("fresh Roc canonical DOM differs from cached independent reference")
     return {"status": "match", "canonical_sha256": reference_evidence["canonical_sha256"], "notes": ["DOM equality checked outside timers; Roc additionally performs authoring validation."]}

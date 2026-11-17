@@ -75,6 +75,10 @@ def fastest_references(results: list[dict]) -> dict[str, dict]:
         if "error" in row or not row.get("accepted") or row.get("workload") not in COLLECTION_WORKLOADS:
             continue
         fmt = row["format"]
+        if row.get("semantic_status") in {"different", "canonical_differs", "fresh_check_failed"}:
+            continue
+        if fmt in {"csv", "qif", "ofx"} and row.get("semantic_status") == "checksum_differs":
+            continue
         if fmt not in fastest or row["median_ns"] < fastest[fmt]["median_ns"]:
             fastest[fmt] = row
     return fastest
@@ -170,6 +174,8 @@ class ReferenceRun:
                             fresh_check = {"status": "failed", "notes": [str(error)]}
                     record = {**record, "format": document.format, "input_sha256": document.sha256,
                               "reference_cache": {"status": status, "key": digest(identity), "provenance": provenance},
+                              "reference_profile": {field: identity["profile"][field] for field in
+                                                    ("runtime", "sources", "build_recipe_sha256", "measurement_protocol_sha256")},
                               **qualification_labels(impl, record, roc_by_format.get(document.format), qualification, fresh_check)}
                 except (ReferenceUnavailable, OSError, ValueError, RuntimeError) as error:
                     record = {**bench.reference_unavailable(impl, document, str(error), identity),

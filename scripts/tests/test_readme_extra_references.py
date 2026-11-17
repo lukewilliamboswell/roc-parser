@@ -1,6 +1,7 @@
 """Supplementary references: test protocols/identity without builds or timings."""
 from pathlib import Path
 from types import SimpleNamespace
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -106,22 +107,27 @@ class SupplementarySpecsTests(unittest.TestCase):
         with patch.object(extra.markup, "canonical", return_value=tree) as canonical, patch.object(extra.bench, "run_once", return_value={"successes": 1, "checksum": extra.markup.model_checksum(tree)}):
             evidence = extra.qualification(impl, doc, SimpleNamespace(timeout=1), SimpleNamespace(out=Path("scratch")))
         self.assertEqual(evidence["status"], "qualified")
-        self.assertEqual(evidence["canonical"], tree)
+        self.assertNotIn("canonical", evidence)
+        self.assertEqual(evidence["canonical_sha256"], hashlib.sha256(json.dumps(tree, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest())
         self.assertEqual(canonical.call_args.args[0]["command"], ["reference-only"])
 
     def test_current_roc_dom_check_is_separate_from_cached_reference_evidence(self):
         impl = next(value for value in extra.specs() if value.format == "html")
         doc = extra.bench.Doc("html", "test", "medium", b"<div>text</div>")
-        evidence = {"canonical": extra.expected_markup(doc), "canonical_sha256": "reference-only"}
+        tree = extra.expected_markup(doc)
+        evidence = {"canonical_sha256": hashlib.sha256(json.dumps(tree, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()}
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "bin/roc-markup-canonical"
             binary.parent.mkdir()
             binary.write_bytes(b"placeholder")
-            with patch.object(extra.markup, "canonical", return_value=evidence["canonical"]) as run:
+            with patch.object(extra.markup, "canonical", return_value=tree) as run:
                 result = extra.fresh_roc_check(impl, doc, None, SimpleNamespace(out=Path(folder)), evidence)
                 self.assertEqual(result["status"], "match")
                 self.assertEqual(run.call_args.args[0]["command"], [str(binary), "html-fragment-full"])
-        self.assertEqual(set(evidence), {"canonical", "canonical_sha256"})
+            with patch.object(extra.markup, "canonical", return_value=[]):
+                with self.assertRaises(extra.bench.ReferenceUnavailable):
+                    extra.fresh_roc_check(impl, doc, None, SimpleNamespace(out=Path(folder)), evidence)
+        self.assertEqual(set(evidence), {"canonical_sha256"})
 
     def test_syntax_profile_identifies_pinned_reference_not_current_roc(self):
         impl = next(value for value in extra.specs() if value.format == "roc-syntax")
@@ -140,7 +146,9 @@ class SupplementarySpecsTests(unittest.TestCase):
         with patch.object(extra.proxy, "worker_response", return_value=response):
             evidence = extra.qualification(impl, doc, None, SimpleNamespace(out=Path("scratch")))
             self.assertEqual(evidence["expected_checksum"], 8)
-            self.assertEqual(evidence["projection"], response["projection"])
+            self.assertNotIn("projection", evidence)
+            self.assertEqual(evidence["title"], "Title")
+            self.assertEqual(evidence["sections"], ["First", "Second"])
         with patch.object(extra.proxy, "worker_response", return_value={**response, "projection": {"title": "wrong", "blocks": []}}):
             with self.assertRaises(extra.bench.ReferenceUnavailable):
                 extra.qualification(impl, doc, None, SimpleNamespace(out=Path("scratch")))
