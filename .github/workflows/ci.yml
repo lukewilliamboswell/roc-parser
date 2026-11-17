@@ -76,4 +76,5 @@ jobs:
             .roc-parser-tmp/roc-syntax-validation/*.stderr
             .roc-parser-tmp/bench/quick/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14

@@ -132,6 +132,7 @@ jobs:
             .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}/
             .roc-parser-tmp/fuzz/runs/${{ matrix.target }}/
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
 
   conformance:
