@@ -80,9 +80,66 @@ retain_id = |count| {
 	{ id: $id, count: $count }
 }
 
+## Only the unfinished field and its bounded context may outlive a source
+## chunk; a short seamless slice must not retain this unrelated large comment.
+pending_leaf : {} -> OFX.Decoder
+pending_leaf = |_| {
+	pad = Str.repeat("X", 262144)
+	bytes = "<!--${pad}--><OFX><BANKMSGSRSV1><STMTTRNRS><TRNUID>0</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>001</BANKID><ACCTID>0001</ACCTID></BANKACCTFROM><BANKTRANLIST><DTSTART>20260101</DTSTART><DTEND>20260201</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260101</DTPOSTED><TRNAMT>-1.00</TRNAMT><FITID>1</FITID><NAME>unfinished field".to_utf8()
+	var $state = OFX.decoder({ max_token_bytes: 524288 })
+	var $at = 0.U64
+	while True {
+		next = OFX.step($state, bytes.drop_first($at), More)
+		$state = next.state
+		$at = $at + next.consumed
+		match next.outcome {
+			NeedInput => return $state
+			Item(StatementStart(_)) => {}
+			_ => crash "pending field fixture failed before source exhaustion"
+		}
+	}
+}
+
+finish_pending : OFX.Decoder -> Bool
+finish_pending = |state| {
+	bytes = "</NAME></STMTTRN></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>".to_utf8()
+	var $state = state
+	var $at = 0.U64
+	var $transactions = 0.U64
+	var $ended = False
+	while True {
+		next = OFX.step($state, bytes.drop_first($at), Final)
+		$state = next.state
+		$at = $at + next.consumed
+		match next.outcome {
+			Item(Transaction(value)) => {
+				if value.name != "unfinished field" {
+					return False
+				}
+				$transactions = $transactions + 1
+			}
+			Item(StatementEnd) => {
+				$ended = True
+			}
+			Done => return $transactions == 1 and $ended
+			_ => return False
+		}
+	}
+}
+
 test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	count = (bytes.first() ?? 0).to_u64() * 2 + 1
+	if bytes.get(1) == Ok(254) {
+		measured = Fuzz.measure!("ofx-pending-leaf", || pending_leaf({}))
+		if measured.stats.exit_live_bytes > measured.stats.entry_live_bytes + 4096 {
+			crash "unfinished OFX field retained an unrelated source allocation"
+		}
+		if !finish_pending(measured.value) {
+			crash "detached unfinished OFX field lost document contents"
+		}
+		return Fuzz.keep
+	}
 	if bytes.get(1) == Ok(255) {
 		retained = Fuzz.measure!("ofx-retain-id", || retain_id(count))
 		if retained.value.id != "01234567890123456789012345678901" or retained.value.count != count + 1 {
@@ -111,4 +168,4 @@ test! = |bytes| {
 	Fuzz.keep
 }
 
-target = Fuzz.target_with!({ name: "ofx-ceilings", examples: [Fuzz.example({ name: "small", revision: "1", make: || [0.U8] }), Fuzz.example({ name: "large", revision: "1", make: || [255.U8] }), Fuzz.example({ name: "retain-small", revision: "1", make: || [0.U8, 255] }), Fuzz.example({ name: "retain-large", revision: "1", make: || [255.U8, 255] })], generator: Fuzz.raw_bytes, test!, show: |bytes| Str.inspect(bytes) })
+target = Fuzz.target_with!({ name: "ofx-ceilings", examples: [Fuzz.example({ name: "small", revision: "1", make: || [0.U8] }), Fuzz.example({ name: "large", revision: "1", make: || [255.U8] }), Fuzz.example({ name: "retain-small", revision: "1", make: || [0.U8, 255] }), Fuzz.example({ name: "retain-large", revision: "1", make: || [255.U8, 255] }), Fuzz.example({ name: "pending-leaf", revision: "1", make: || [0.U8, 254] })], generator: Fuzz.raw_bytes, test!, show: |bytes| Str.inspect(bytes) })

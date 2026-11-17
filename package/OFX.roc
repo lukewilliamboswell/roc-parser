@@ -317,6 +317,7 @@ advance = |state, bytes, ending| {
 	}
 	var $s = state
 	var $at = 0
+	var $borrowed_leaf = False
 	while $at < bytes.len() {
 		byte = bytes.get($at) ?? 0
 		if $s.header_done and $s.token_mode {
@@ -343,6 +344,7 @@ advance = |state, bytes, ending| {
 			}
 		} else if $s.header_done and byte != '<' {
 			end = bounded_end($at, bounded_end($at, Utf8.find_any(bytes, $at, markup_start), $s.leaf.len(), $s.props.max_token_bytes), $s.capture.len() + $s.leaf.len(), $s.props.max_record_bytes)
+			$borrowed_leaf = $s.leaf.is_empty()
 			$s = move_span($s, bytes, $at, end)
 			$s = { ..$s, leaf: $s.leaf.concat(bytes.sublist({ start: $at, len: end - $at })) }
 			$at = end
@@ -379,6 +381,7 @@ advance = |state, bytes, ending| {
 					}
 				}
 				$s = { ..$s, leaf: [], token_mode: True, token: ['<'] }
+				$borrowed_leaf = False
 			}
 		}
 		if $s.capture.len() + $s.leaf.len() > $s.props.max_record_bytes {
@@ -394,6 +397,15 @@ advance = |state, bytes, ending| {
 		}
 		{ state: { ..$s, terminal: True }, consumed: $at, outcome: Done }
 	} else {
+		if $borrowed_leaf {
+			# A complete field may borrow its current chunk, but an unfinished
+			# field must not keep that entire allocation alive across pulls.
+			var $owned = List.with_capacity($s.leaf.len())
+			for byte in $s.leaf {
+				$owned = $owned.append(byte)
+			}
+			$s = { ..$s, leaf: $owned }
+		}
 		{ state: $s, consumed: $at, outcome: NeedInput }
 	}
 }
