@@ -333,7 +333,7 @@ advance = |state, bytes, ending| {
 			}
 			if scanned.complete {
 				match consume_token($s) {
-					Err(error) => return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(error) }
+					Err(failure) => return { state: { ..failure.state, terminal: True }, consumed: $at, outcome: Failed(failure.error) }
 					Ok({ state: next, outcome }) => {
 						$s = { ..next, token: [], token_mode: False, quote: 0 }
 						match outcome {
@@ -557,70 +557,77 @@ Action : [Quiet, Emitted(OFX.Event), Rejected(OFX.Error)]
 
 Consumed : { state : State, outcome : Action }
 
-consume_token : State -> Try(Consumed, OFX.Error)
+# Keep the failure state in the result so callers can consume the input state
+# without retaining aliases for a cold error arm.
+TokenFailure : { state : State, error : OFX.Error }
+
+token_failure : State, Str -> TokenFailure
+token_failure = |state, message| { state, error: problem(state, message) }
+
+consume_token : State -> Try(Consumed, TokenFailure)
 consume_token = |state| {
-	text = decode(state, state.token)?
+	text = decode(state, state.token).map_err(|error| { state, error })?
 	if text.starts_with("<!DOCTYPE") or text.starts_with("<!ENTITY") {
-		return Err(problem(state, "DTDs and external entities are unsupported"))
+		return Err(token_failure(state, "DTDs and external entities are unsupported"))
 	}
 	if text.starts_with("<!--") or text.starts_with("<![CDATA[") {
 		if text.starts_with("<![CDATA[") and ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(state.stack.last().map_ok(|frame| frame.name) ?? "") {
 			content = Str.from_utf8_lossy(text.to_utf8().sublist({ start: 9, len: text.count_utf8_bytes() - 12 }))
 			if content != content.trim() {
-				return Err(problem(state, "padded CDATA in typed OFX fields is unsupported"))
+				return Err(token_failure(state, "padded CDATA in typed OFX fields is unsupported"))
 			}
 		}
-		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| problem(state, "malformed XML comment or CDATA"))?
+		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| token_failure(state, "malformed XML comment or CDATA"))?
 		if state.syntax == Sgml102 {
-			return Err(problem(state, "SGML comments and CDATA are unsupported"))
+			return Err(token_failure(state, "SGML comments and CDATA are unsupported"))
 		}
 		if !state.capture_tag.is_empty() {
 			return Ok({ state: { ..state, capture: state.capture.concat(state.token) }, outcome: Quiet })
 		}
 		if text.starts_with("<![CDATA[") {
-			return Err(problem(state, "CDATA outside captured record is unsupported"))
+			return Err(token_failure(state, "CDATA outside captured record is unsupported"))
 		}
 		return Ok({ state, outcome: Quiet })
 	}
 	if text.starts_with("<?") {
 		if state.root_seen {
-			return Err(problem(state, "processing instruction inside OFX is unsupported"))
+			return Err(token_failure(state, "processing instruction inside OFX is unsupported"))
 		}
 		if state.syntax == Sgml102 {
-			return Err(problem(state, "XML prologue contradicts SGML header"))
+			return Err(token_failure(state, "XML prologue contradicts SGML header"))
 		}
 		low = lower(text)
 		marker = if (low.starts_with("<?xml ")) "xml" else "ofx"
 		if state.context_seen.contains(marker) or (marker == "xml" and state.context_seen.contains("ofx")) {
-			return Err(problem(state, "duplicate or out-of-order OFX prologue"))
+			return Err(token_failure(state, "duplicate or out-of-order OFX prologue"))
 		}
 		if marker == "xml" {
-			_ = Xml.parse_str("${text}<v/>").map_err(|_| problem(state, "malformed XML declaration"))?
+			_ = Xml.parse_str("${text}<v/>").map_err(|_| token_failure(state, "malformed XML declaration"))?
 			if !state.header.is_empty() and state.header != [239, 187, 191] {
-				return Err(problem(state, "XML declaration must start the document"))
+				return Err(token_failure(state, "XML declaration must start the document"))
 			}
 		}
 		var $next = state
 		if low.starts_with("<?xml ") {
-			declared = xml_encoding(text).map_err(|message| problem(state, message))?
+			declared = xml_encoding(text).map_err(|message| token_failure(state, message))?
 			$next = { ..state, encoding: declared }
 			if (state.props.encoding == Utf8 and $next.encoding == Windows1252) or (state.props.encoding == Windows1252 and $next.encoding != Windows1252) {
-				return Err(problem(state, "encoding override contradicts XML declaration"))
+				return Err(token_failure(state, "encoding override contradicts XML declaration"))
 			}
 		} else if text.starts_with("<?OFX ") {
 			attrs = Str.from_utf8_lossy(state.token.sublist({ start: 6, len: state.token.len() - 8 }))
-			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| problem(state, "malformed OFX processing instruction"))?.root
+			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| token_failure(state, "malformed OFX processing instruction"))?.root
 			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
-				return Err(problem(state, "unsupported OFX XML header"))
+				return Err(token_failure(state, "unsupported OFX XML header"))
 			}
 			$next = { ..$next, header_info: Box.box({ ..Box.unbox($next.header_info), old_uid: node.attribute("OLDFILEUID") ?? "NONE", new_uid: node.attribute("NEWFILEUID") ?? "NONE" }) }
 		} else {
-			return Err(problem(state, "unknown OFX processing instruction"))
+			return Err(token_failure(state, "unknown OFX processing instruction"))
 		}
 		return Ok({ state: { ..$next, context_seen: state.context_seen.append(marker) }, outcome: Quiet })
 	}
 	if text.starts_with("<!") {
-		return Err(problem(state, "unsupported OFX declaration"))
+		return Err(token_failure(state, "unsupported OFX declaration"))
 	}
 	closing = text.starts_with("</")
 	self_closed = text.ends_with("/>")
@@ -628,8 +635,12 @@ consume_token = |state| {
 	end = text.count_utf8_bytes() - (if (self_closed) 2 else 1)
 	name = Str.from_utf8_lossy(state.token.sublist({ start, len: end - start })).trim()
 	if !valid_name(name) {
-		return Err(problem(state, "OFX tag names must be uppercase without attributes"))
+		return Err(token_failure(state, "OFX tag names must be uppercase without attributes"))
 	}
+	# Retaining the original record just to access its token would also keep
+	# capture/stack aliases alive and force copies on every append below.
+	token = state.token
+	token_len = token.len()
 	var $s = state
 	top = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if $s.syntax == Sgml102 and leaf_tag(top) and !(closing and name == top) {
@@ -642,75 +653,75 @@ consume_token = |state| {
 		return close_tag($s, name, text)
 	}
 	if $s.root_closed {
-		return Err(problem($s, "content after OFX root"))
+		return Err(token_failure($s, "content after OFX root"))
 	}
 	if !$s.root_seen {
 		if name != "OFX" {
-			return Err(problem($s, "expected OFX root"))
+			return Err(token_failure($s, "expected OFX root"))
 		}
 		$s = { ..$s, root_seen: True }
 	} else if $s.stack.is_empty() {
-		return Err(problem($s, "multiple OFX roots"))
+		return Err(token_failure($s, "multiple OFX roots"))
 	}
 	if name == "INVSTMTMSGSRSV1" or name == "INVSTMTRS" {
-		return Err(problem($s, "investment OFX is unsupported"))
+		return Err(token_failure($s, "investment OFX is unsupported"))
 	}
 	if $s.syntax == Xml203 and $s.capture_tag.is_empty() and !aggregate_tag(name) and !leaf_tag(name) {
-		return Err(problem($s, "unsupported OFX element outside transaction extension"))
+		return Err(token_failure($s, "unsupported OFX element outside transaction extension"))
 	}
 	if $s.syntax == Sgml102 and !aggregate_tag(name) and !leaf_tag(name) {
-		return Err(problem($s, "unknown SGML tag: closing behaviour is ambiguous"))
+		return Err(token_failure($s, "unknown SGML tag: closing behaviour is ambiguous"))
 	}
 	if $s.stack.len() >= $s.props.max_depth {
-		return Err(problem($s, "OFX exceeds max_depth"))
+		return Err(token_failure($s, "OFX exceeds max_depth"))
 	}
 	if leaf_tag($s.stack.last().map_ok(|frame| frame.name) ?? "") {
-		return Err(problem($s, "nested content in OFX scalar field"))
+		return Err(token_failure($s, "nested content in OFX scalar field"))
 	}
 	if name == "STMTTRNRS" or name == "CCSTMTTRNRS" {
 		$s = { ..$s, wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False }
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if $s.in_statement {
-			return Err(problem($s, "nested OFX statements"))
+			return Err(token_failure($s, "nested OFX statements"))
 		}
 		$s = { ..$s, context: Box.box({ ..empty_context, kind: if (name == "STMTRS") Bank else CreditCard, transaction_id: $s.wrapper_id, status: Box.unbox($s.wrapper_status), header: Box.unbox($s.header_info) }), started: False, in_statement: True, context_seen: [], balances_seen: [] }
 	}
 	parent = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !placement(name, parent) {
-		return Err(problem($s, "OFX element in invalid parent"))
+		return Err(token_failure($s, "OFX element in invalid parent"))
 	}
 	if name == "BANKACCTFROM" or name == "CCACCTFROM" {
 		if $s.started or $s.context_seen.contains("account") {
-			return Err(problem($s, "duplicate or late OFX account"))
+			return Err(token_failure($s, "duplicate or late OFX account"))
 		}
 		$s = { ..$s, context_seen: $s.context_seen.append("account") }
 	}
 	if name == "LEDGERBAL" or name == "AVAILBAL" {
 		if $s.balances_seen.contains(name) or (name == "LEDGERBAL" and $s.balances_seen.contains("AVAILBAL")) {
-			return Err(problem($s, "duplicate OFX balance"))
+			return Err(token_failure($s, "duplicate OFX balance"))
 		}
 		$s = { ..$s, balances_seen: $s.balances_seen.append(name) }
 	}
 	if capture_tag(name) {
 		if !$s.capture_tag.is_empty() {
-			return Err(problem($s, "nested OFX record aggregate"))
+			return Err(token_failure($s, "nested OFX record aggregate"))
 		}
 		$s = { ..$s, capture_tag: name, capture_depth: $s.stack.len(), capture: [] }
 	}
 	if !$s.capture_tag.is_empty() {
-		$s = { ..$s, capture: $s.capture.concat(state.token) }
+		$s = { ..$s, capture: $s.capture.concat(token) }
 	}
-	$s = { ..$s, stack: $s.stack.append({ name, offset: $s.offset - state.token.len() }) }
+	$s = { ..$s, stack: $s.stack.append({ name, offset: $s.offset - token_len }) }
 	if self_closed {
 		return close_tag($s, name, "")
 	}
 	if name == "STMTTRN" or name == "LEDGERBAL" or name == "AVAILBAL" {
 		if !$s.in_statement {
-			return Err(problem($s, "OFX record outside a statement"))
+			return Err(token_failure($s, "OFX record outside a statement"))
 		}
 		if !$s.started {
-			validate_context(Box.unbox($s.context)).map_err(|message| problem($s, message))?
+			validate_context(Box.unbox($s.context)).map_err(|message| token_failure($s, message))?
 			$s = { ..$s, started: True }
 			return Ok({ state: $s, outcome: Emitted(StatementStart(Box.unbox($s.context))) })
 		}
@@ -718,45 +729,45 @@ consume_token = |state| {
 	Ok({ state: $s, outcome: Quiet })
 }
 
-close_tag : State, Str, Str -> Try(Consumed, OFX.Error)
+close_tag : State, Str, Str -> Try(Consumed, TokenFailure)
 close_tag = |state, name, text| {
 	if state.stack.last().map_ok(|frame| frame.name) != Ok(name) {
-		return Err(problem(state, "mismatched OFX closing tag"))
+		return Err(token_failure(state, "mismatched OFX closing tag"))
 	}
 	var $s = { ..state, stack: state.stack.drop_last(1) }
 	if !$s.capture_tag.is_empty() {
 		$s = { ..$s, capture: $s.capture.concat(text.to_utf8()) }
 		if $s.stack.len() == $s.capture_depth {
 			if $s.capture.len() > $s.props.max_record_bytes {
-				return Err(problem($s, "OFX record exceeds max_record_bytes"))
+				return Err(token_failure($s, "OFX record exceeds max_record_bytes"))
 			}
-			captured = decode($s, $s.capture)?
-			root = Xml.parse_str(captured).map_err(|_| problem($s, "malformed OFX record"))?.root
+			captured = decode($s, $s.capture).map_err(|error| { state: $s, error })?
+			root = Xml.parse_str(captured).map_err(|_| token_failure($s, "malformed OFX record"))?.root
 			$s = { ..$s, capture: [], capture_tag: "" }
 			if name == "STMTTRN" {
 				if children(root).len() > $s.props.max_fields {
-					return Err(problem($s, "OFX record exceeds max_fields"))
+					return Err(token_failure($s, "OFX record exceeds max_fields"))
 				}
 				match transaction(root) {
 					Ok(value) => return Ok({ state: $s, outcome: Emitted(Transaction(value)) })
 					Err(message) => return Ok({ state: $s, outcome: Rejected(problem($s, message)) })
 				}
 			} else if name == "BANKACCTFROM" or name == "CCACCTFROM" {
-				account = account_from(root).map_err(|message| problem($s, message))?
+				account = account_from(root).map_err(|message| token_failure($s, message))?
 				$s = { ..$s, context: Box.box({ ..Box.unbox($s.context), account }) }
 			} else {
-				balance = balance_from(root).map_err(|message| problem($s, message))?
+				balance = balance_from(root).map_err(|message| token_failure($s, message))?
 				return Ok({ state: $s, outcome: Emitted(if (name == "LEDGERBAL") LedgerBalance(balance) else AvailableBalance(balance)) })
 			}
 		}
 	}
 	if name == "BANKTRANLIST" and !$s.started {
-		validate_context(Box.unbox($s.context)).map_err(|message| problem($s, message))?
+		validate_context(Box.unbox($s.context)).map_err(|message| token_failure($s, message))?
 		return Ok({ state: { ..$s, started: True }, outcome: Emitted(StatementStart(Box.unbox($s.context))) })
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if !$s.started {
-			return Err(problem($s, "OFX statement has no transaction list or balances"))
+			return Err(token_failure($s, "OFX statement has no transaction list or balances"))
 		}
 		return Ok({ state: { ..$s, in_statement: False }, outcome: Emitted(StatementEnd) })
 	}
@@ -1433,4 +1444,15 @@ expect {
 	first = document.statements.first()?.context
 	last = document.statements.last()?.context
 	document.statements.len() == 2 and first.account.account_id == "000123" and first.currency == "AUD" and first.transaction_id == "0" and last.account.account_id == "000456" and last.currency == "USD" and last.transaction_id == "2"
+}
+
+expect {
+	failed = OFX.step(OFX.decoder({}), "<OFX></BAD>".to_utf8(), Final)
+	match failed.outcome {
+		Failed(error) => {
+			after = OFX.step(failed.state, "unread".to_utf8(), Final)
+			error.offset == 11 and error.line == 1 and error.column == 12 and error.message == "mismatched OFX closing tag" and after.consumed == 0 and after.outcome == Done
+		}
+		_ => False
+	}
 }
