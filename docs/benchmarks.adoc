@@ -129,10 +129,10 @@ on an otherwise idle machine, retain the reported timing spread, and compare
 revisions on the same hardware and toolchains. The README runner below uses
 CPU affinity on Linux for its published figures.
 
-The {src}/bench/streaming-throughput.json[selected Apple M2 receipts] record
-whole-document and 4 KiB streaming measurements, implementation models, raw
-batch checksums and each 1.5x target decision. They include the remaining
-streaming target failures so improvements can be measured against the same cases.
+Keep raw timing reports and reference receipts in the ignored
+`.roc-parser-tmp/bench/` directory. Share reports as review or release attachments
+when needed; commit the harness and concise result summaries rather than
+machine-specific measurements.
 
 == Reproduce the README throughput table
 
@@ -162,8 +162,8 @@ Reading stdin and printing results are outside the
 timer. Rejected inputs, unstable checksums and runs with more than 25% timing
 spread cannot supply a published number. The runner leaves inputs, build logs
 and full measurement receipts in `.roc-parser-tmp/readme-throughput/`.
-The README's checked-in `bench/throughput.json` records its source hash,
-compiler, hardware, input hashes and samples; changing Roc requires a new run.
+The local `results.json` records its source hash, compiler, hardware, input hashes
+and samples; changing Roc requires a new run.
 The default rebuilds and measures Roc and reuses qualified reference timings.
 `--refresh-references` explicitly builds and remeasures the reference parsers,
 replacing their cached measurements. Refresh needs the Go/Rust/Python comparison toolchains, Ruby 3.4

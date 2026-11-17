@@ -17,3 +17,4 @@ __pycache__/
 .blueprint/
 
 /bench/compare/rust/target/
+/bench/*throughput.json

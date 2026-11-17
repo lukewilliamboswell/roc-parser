@@ -26,3 +26,10 @@ payloads should hold source data or user-supplied context, rather than prose
 that identifies an error. Render text at presentation boundaries, including
 compiler quotation diagnostics, instead of carrying message strings through
 the parser. Apply this rule consistently when adding or revising errors.
+
+## Generated artifacts
+
+Keep benchmark reports, timing receipts, build output and downloaded dependencies
+in ignored scratch directories such as `.roc-parser-tmp/`. Commit reproducible
+harnesses, dependency pins and required test fixtures; document useful result
+summaries without checking in raw measurement reports.

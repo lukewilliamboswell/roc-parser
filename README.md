@@ -40,8 +40,8 @@ Reference libraries construct different result models. † Uses caller-bound
 borrowing; Roc supports shared slices with reference-counted ownership.
 `qif_parser` also uses floating-point amounts. ‡ Builds a DOM; Roc also
 retains source information and validates vocabulary and values. See the
-[method and reproduction command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table)
-and [library versions and measurement receipts](bench/throughput.json).
+[method and reproduction command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table).
+Reproduced reports include library versions and full measurement receipts.
 
 CSV, QIF, OFX and JSON record streams support
 [chunked reading and writing](docs/streaming.adoc) through Roc’s builtin `Iter`
