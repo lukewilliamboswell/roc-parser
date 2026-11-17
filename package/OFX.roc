@@ -1079,7 +1079,20 @@ children = |node| match node {
 }
 
 field : Xml.Node, Str -> Str
-field = |node, name| node.children_named(name).first().map_ok(|child| child.text().trim()) ?? ""
+field = |node, name| node.children_named(name).first().map_ok(scalar_text) ?? ""
+
+# XML parsing coalesces scalar text into one child. Avoid a generic work-list
+# traversal, and detach long slices so a small retained field cannot pin a
+# discarded record or caller chunk.
+scalar_text : Xml.Node -> Str
+scalar_text = |node| match node {
+	Element(element) => match element.children {
+		[] => ""
+		[Text(value)] => value.trim().release_excess_capacity()
+		_ => node.text().trim()
+	}
+	Text(value) => value.trim().release_excess_capacity()
+}
 
 has_element_children : Xml.Node -> Bool
 has_element_children = |node| match node {
@@ -1151,25 +1164,25 @@ transaction = |node| match node {
 					}
 					match name {
 						"TRNTYPE" => {
-							$type = child.text().trim()
+							$type = scalar_text(child)
 						}
 						"DTPOSTED" => {
-							$posted = child.text().trim()
+							$posted = scalar_text(child)
 						}
 						"TRNAMT" => {
-							$amount = child.text().trim()
+							$amount = scalar_text(child)
 						}
 						"FITID" => {
-							$id = child.text().trim()
+							$id = scalar_text(child)
 						}
 						"NAME" => {
-							$name = child.text().trim()
+							$name = scalar_text(child)
 						}
 						"MEMO" => {
-							$memo = child.text().trim()
+							$memo = scalar_text(child)
 						}
 						"CHECKNUM" => {
-							$check_number = child.text().trim()
+							$check_number = scalar_text(child)
 						}
 						_ => {
 							$extensions = $extensions.append(child)
@@ -1876,4 +1889,14 @@ expect {
 	value = statement.transactions.first()?
 	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
 	OFX.write(opened.writer, Transaction({ ..value, name: "bad\u(0)" })).is_err() and OFX.write(opened.writer, Transaction({ ..value, memo: "bad\u(FFFF)" })).is_err()
+}
+
+expect [Text(" direct "), Element({ name: "V", attributes: [], children: [] }), Element({ name: "V", attributes: [], children: [Text(" Café 日本 ")] }), Element({ name: "V", attributes: [], children: [Text(" a"), Element({ name: "B", attributes: [], children: [Text("b")] }), Text("c ")] })].all(|node| scalar_text(node) == node.text().trim())
+
+expect {
+	prefix = Str.repeat("x", 4096)
+	source = "${prefix} 01234567890123456789012345678901 \r\n"
+	slice = source.drop_first_bytes(prefix.count_utf8_bytes())?
+	node = Element({ name: "FITID", attributes: [], children: [Text(slice)] })
+	scalar_text(node) == "01234567890123456789012345678901"
 }
