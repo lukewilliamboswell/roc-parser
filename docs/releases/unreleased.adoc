@@ -14,3 +14,6 @@ supports bank/card statements in SGML and XML, with XML output by default.
 Both support UTF-8 and Windows-1252, preserve exact monetary values, and provide
 semantic round trips. Typed investment support is outside these modules' current
 scope. See the streaming and format guides for supported syntax and limits.
+
+AsciiDoc `ifeval` recognizes exponents after a decimal point without fractional
+digits: `1.e2` compares as `100`, matching Asciidoctor's numeric coercion.

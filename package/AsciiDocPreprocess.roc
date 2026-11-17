@@ -553,18 +553,16 @@ expression_value = |source, attributes, lookup| {
 	}
 	var $end = whole.end
 	var $prefix = whole.digits
-	var $has_fraction = False
 	if bytes_number.get($end) == Ok('.') {
 		fraction = numeric_digits(bytes_number, $end + 1)
 		if fraction.digits != "" {
 			$prefix = Str.concat(if ($prefix == "") "0" else $prefix, Str.concat(".", fraction.digits))
-			$end = fraction.end
-			$has_fraction = True
 		}
+		$end = fraction.end
 	}
 
-	## Ruby ignores the exponent after a decimal point with no following digit.
-	if ($has_fraction or bytes_number.get($end) != Ok('.')) and $prefix != "" and (bytes_number.get($end) == Ok('e') or bytes_number.get($end) == Ok('E')) {
+	## A decimal point may precede an exponent without fractional digits.
+	if $prefix != "" and (bytes_number.get($end) == Ok('e') or bytes_number.get($end) == Ok('E')) {
 		exponent_start = $end + 1
 		exponent_sign = bytes_number.get(exponent_start) ?? 0
 		exponent = numeric_digits(bytes_number, if (exponent_sign == '+' or exponent_sign == '-') exponent_start + 1 else exponent_start)
@@ -1574,7 +1572,14 @@ expect evaluate("1.0e-999 == 0")
 expect evaluate("1_000_000 == 1000000")
 expect evaluate("1_2.3_4 == 12.34")
 expect evaluate("1__2.0 == 1")
-expect evaluate("1.e2 == 1")
+expect evaluate("1.e2 == 100")
+expect !evaluate("1.e2 == 1")
+expect evaluate("1.e+2 == 100")
+expect evaluate("1.e-2 == 0.01")
+expect evaluate("-1.e2 == -100")
+expect evaluate("1.e == 1")
+expect evaluate("1.e_2 == 1")
+expect evaluate(".e2 == 0")
 expect evaluate("1e3. == 1000")
 expect evaluate(".1e2 == 10")
 expect evaluate("1.7976931348623157e308 > 1000000000000000000000000000000000000000000000000000000000000")
