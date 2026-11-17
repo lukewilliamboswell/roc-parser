@@ -34,6 +34,53 @@ Streaming :: [].{
 		outcome : [Item(item), RecordError(problem), NeedInput, Done, Failed(problem)],
 	}
 
+    Decoder(state, item, problem) :: {
+        inner : state,
+        advance : state, List(U8), InputEnd -> Step(state, item, problem),
+        handling : ReadProps,
+    }.{
+        with_errors : Decoder(state, item, problem), ReadProps -> Decoder(state, item, problem)
+        with_errors = |current, handling| Decoder.{ inner: current.inner, advance: current.advance, handling }
+        state : Decoder(state, item, problem) -> state
+        state = |current| current.inner
+        step : Decoder(state, item, problem), List(U8), InputEnd -> Step(Decoder(state, item, problem), item, problem)
+        step = |current, bytes, end| {
+            advance_fn = current.advance
+            next = advance_fn(current.inner, bytes, end)
+            { state: Decoder.{ inner: next.state, advance: current.advance, handling: current.handling }, consumed: next.consumed, outcome: next.outcome }
+        }
+    }
+    decoder : state, (state, List(U8), InputEnd -> Step(state, item, problem)) -> Decoder(state, item, problem)
+    decoder = |inner, advance| Decoder.{ inner, advance, handling: {} }
+
+    ## Lazily read chunks using the format's configured decoder.
+    read_iter : Iter(Bytes), Decoder(state, item, problem) -> Iter(Try(ReadEvent(item, problem), ReadError(problem)))
+    read_iter = |chunks, current| iter(chunks, current.inner, current.advance, current.handling)
+
+    ## Read an effectful source; source failure never supplies a false EOF.
+    read_stream : Stream(Try(Bytes, source_error)), Decoder(state, item, problem) -> _
+    read_stream = |chunks, current| stream(chunks, current.inner, current.advance, current.handling)
+
+    Encoder(state, item, problem) :: {
+        inner : state,
+        encode : state, item -> Try({ state : state, bytes : List(U8) }, problem),
+        finish : state -> Try(List(U8), problem),
+        chunk_bytes : U64,
+    }.{
+        with_chunk_bytes : Encoder(state, item, problem), U64 -> Encoder(state, item, problem)
+        with_chunk_bytes = |current, chunk_bytes| Encoder.{ inner: current.inner, encode: current.encode, finish: current.finish, chunk_bytes }
+    }
+    encoder : state, (state, item -> Try({ state : state, bytes : List(U8) }, problem)), (state -> Try(List(U8), problem)) -> Encoder(state, item, problem)
+    encoder = |inner, encode, finish| Encoder.{ inner, encode, finish, chunk_bytes: 65_536 }
+
+    ## Encode items lazily, preserving state and emitting a bounded final suffix.
+    write_iter : Iter(item), Encoder(state, item, problem) -> _
+    write_iter = |items, current| encode_state_iter(items, current.inner, current.encode, current.finish, current.chunk_bytes)
+
+    ## Encode an effectful item source without collecting the document.
+    write_stream : Stream(Try(item, source_error)), Encoder(state, item, problem) -> _
+    write_stream = |items, current| encode_state_stream(items, current.inner, current.encode, current.finish, current.chunk_bytes)
+
 	## Supported text encodings. Undefined Windows-1252 bytes are rejected.
 	TextEncoding : [Utf8, Windows1252]
 
@@ -502,3 +549,7 @@ expect List.from_iter(Streaming.encode_state_iter(["ab", "cd"].iter(), 0.U64, |s
 
 # Independently decoded Windows-1252 control range, including every defined byte.
 expect Streaming.decode_text([128.U8, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 142, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 158, 159], Windows1252) == Ok("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ")
+
+expect Streaming.collect(Streaming.read_iter([[1.U8], [], [2]].iter(), Streaming.decoder(0, test_step))) == Ok([1, 2])
+expect Streaming.collect_report(Streaming.read_iter([[1.U8, 0, 2]].iter(), Streaming.decoder(0, test_step).with_errors({ error_policy: ReportInvalidRecords }))) == Ok({ values: [1, 2], errors: ["zero"], report: { emitted_items: 2, rejected_records: 1 } })
+expect List.from_iter(Streaming.write_iter(["ab", "cd"].iter(), Streaming.encoder(0.U64, |state, item| Ok({ state: state + 1, bytes: item.to_utf8() }), |state| Ok(state.to_str().to_utf8())).with_chunk_bytes(1))) == [Ok("a".to_utf8()), Ok("b".to_utf8()), Ok("c".to_utf8()), Ok("d".to_utf8()), Ok("2".to_utf8())]
