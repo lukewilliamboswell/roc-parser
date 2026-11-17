@@ -67,9 +67,12 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	custom = |fun| {
 		{
 			fun: |input| {
+				# Retain only the size for errors, rather than aliasing input while
+				# the custom parser consumes it.
+				len = input.len()
 				match fun(input) {
 					Ok({ value, rest }) => Ok({ value, rest, furthest: no_failure })
-					Err(ParseError({ message, offset })) => Err({ message, remaining: minus(input.len(), offset) })
+					Err(ParseError({ message, offset })) => Err({ message, remaining: minus(len, offset) })
 				}
 			},
 		}
@@ -87,9 +90,10 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## your own parsing building blocks.
 	run : Parser(input, a), input -> ParseResult(input, a) where [input.len : input -> U64]
 	run = |parser, input| {
+		len = input.len()
 		match step(parser, input) {
 			Ok({ value, rest, furthest: _ }) => Ok({ value, rest })
-			Err(failure) => Err(ParseError({ message: failure.message, offset: minus(input.len(), failure.remaining) }))
+			Err(failure) => Err(ParseError({ message: failure.message, offset: minus(len, failure.remaining) }))
 		}
 	}
 
@@ -641,6 +645,13 @@ expect {
 # Chomping until a missing newline reports a parse error.
 expect {
 	Parser.run(Parser.chomp_until('\n'), []).is_err()
+}
+
+# Custom error offsets remain clamped to the input length.
+expect {
+	parser : Parser(List(U8), {})
+	parser = Parser.custom(|_| Err(ParseError({ message: "past the input", offset: 99 })))
+	Parser.run(parser, ['a', 'b']) == Err(ParseError({ message: "past the input", offset: 2 }))
 }
 
 # Chomping while a predicate holds leaves the first non-matching byte.

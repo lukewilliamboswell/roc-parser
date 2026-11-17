@@ -179,7 +179,14 @@ CSV := { records : List(CSV.Record) }.{
 						Ok({ value, rest }) if rest.is_empty() => {
 							$values = $values.append(value)
 						}
-						Ok({ rest, .. }) => return Err(InvalidCsv(locate(bytes, leftover_error(record_parser, fields, rest.len(), $index + 1))))
+						Ok({ rest, .. }) => {
+							# Rebuild the row only for this error, so successful decoding
+							# can consume its fields without keeping another list alias.
+							match scan_record(bytes, $pos) {
+								Ok({ fields: again, .. }) => return Err(InvalidCsv(locate(bytes, leftover_error(record_parser, again, rest.len(), $index + 1))))
+								Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
+							}
+						}
 						Err(ParseError({ message, offset })) => return Err(InvalidCsv(locate(bytes, { record: $index + 1, field: offset + 1, line: 0, column: 0, message })))
 					}
 					$pos = after_break(bytes, next)
@@ -1417,6 +1424,10 @@ expect error_of(CSV.parse_with(user, "Ada,36\nAlan,forty\n")) == Ok({ record: 2,
 
 # Extra fields are an error carrying the record number.
 expect error_of(CSV.parse_with(user, "Ada,36\n\"Al\nan\",41,x\n")) == Ok({ record: 2, field: 3, line: 3, column: 8, message: "the record has 3 fields, but the parser read only 2" })
+
+# A repetition's rejected field keeps its message and quoted-field position
+# when the row is rebuilt for the leftover diagnostic. Later syntax loses to it.
+expect error_of(CSV.parse_with(Parser.many(CSV.field(CSV.u64)), "1,2\r\n3,\"4\",nope\r\n\"unterminated")) == Ok({ record: 2, field: 3, line: 2, column: 7, message: "expected a U64, found `nope`" })
 
 # Too few fields is an error too.
 expect error_of(CSV.parse_with(user, "Ada")) == Ok({ record: 1, field: 2, line: 1, column: 1, message: "expected another field, but the record has no more" })
