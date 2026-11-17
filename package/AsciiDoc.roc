@@ -1,5 +1,11 @@
+import AsciiDocTypes
+import Parser
+import Diagnostic
+
 ## Pure AsciiDoc block parsing and HTML rendering.
 AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
+
+	is_eq : _
 
 	## Reject active include directives that were left unexpanded.
 	Lints := { unexpanded_includes : Bool ?? True }
@@ -17,28 +23,20 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	}
 
 	## Parse once, reporting native failures before enabled lint failures.
-	validate : ValidationProps -> Try(Document, [BadQuotedBytes(Str)])
+	validate : ValidationProps -> Try(AsciiDoc, [InvalidAsciiDoc(Error), Unsupported(Error)])
 	validate = |props| {
-		parsed = parse_document_metadata(props.source, { includes: props.includes, attributes: props.attributes, max_depth: props.max_depth, expand_includes: props.expand_includes }).map_err(
-			|error| {
-				match error {
-					InvalidAsciiDoc(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: Str.inspect(detail.problem), line: detail.line })
-					Unsupported(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: Str.inspect(detail.problem), line: detail.line })
-				}
-			},
-		)?
+		parsed = parse_document_metadata(props.source, { includes: props.includes, attributes: props.attributes, max_depth: props.max_depth, expand_includes: props.expand_includes })?
 		match parsed.unexpanded_includes.first() {
-			Ok(error) if props.lints.unexpanded_includes => Err(Quotation.error({ name: if (error.path == "") props.name else error.path, format: "AsciiDoc", message: Str.inspect(error.problem), line: error.line }))
+			Ok(error) if props.lints.unexpanded_includes => Err(InvalidAsciiDoc({ problem: UnexpandedInclude(error.problem), location: Text({ offset: error.offset, line: error.line, column: 1 }), path: [Source(if (error.path == "") props.name else error.path)] }))
 			_ => Ok(parsed.value)
 		}
 	}
 
 	## A quoted document uses the default pure preprocessing and lint rules.
 	from_quote : Str -> Try(AsciiDoc, [BadQuotedBytes(Str)])
-	from_quote = |source| AsciiDoc.validate({ source: source }).map_ok(|document| AsciiDoc.(document))
+	from_quote = |source| AsciiDoc.validate({ source: source }).map_err(asciidoc_quotation_error)
 
 	## Parsed title and source-preserving blocks.
-	Document : { title : Str, blocks : List(Block) }
 
 	## Attribute name and its string value.
 	Attribute : { name : Str, value : Str }
@@ -59,38 +57,31 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	render_inline_attributes = |source, attrs| if (source == "") "" else render_cached_inline(source, attrs, AsciiDocAttributes.indexed_attributes(attrs, AsciiDocAttributes.empty).view, "normal", AsciiDocInline.initial_state).html
 
 	## A source block; Rich retains metadata and nested block contexts.
-	Block := [Paragraph(Str), Section({ level : U64, title : Str, blocks : List(Block) }), Listing(Str), Literal(Str), ThematicBreak, Rich({ context : Str, source : Str, title : Str, style : Str, id : Str, attrs : Attributes, blocks : List(Block), level : U64 })].{
-
-		## Compare source blocks, including metadata and nested content.
-		is_eq : _
-	}
+	Block : AsciiDocTypes.Block
 
 	## A located parse error: UTF-8 byte offset and one-based line.
-	Problem : [SourceTooLarge(U64), Preprocessing(AsciiDocPreprocess.Problem), BlockNestingTooDeep(U64), ListNestingTooDeep(U64)]
-	Error : { offset : U64, line : U64, problem : Problem }
+	Resource : [SourceBytes, BlockDepth, ListDepth]
+	Problem : [UnexpandedInclude(AsciiDocPreprocess.Problem), Preprocessing(AsciiDocPreprocess.Problem), LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed })]
+	Error : Diagnostic(Problem)
 
 	## Virtual sources and initial attributes for bounded preprocessing.
-	Options : { includes : List({ path : Str, source : Str }), attributes : List(Attribute), max_depth : U64, expand_includes : Bool }
+	Props := { includes : List({ path : Str, source : Str }) ?? [], attributes : List(Attribute) ?? [], max_depth : U64 ?? 16, expand_includes : Bool ?? False }
 
 	## Default attributes, includes disabled and include depth limited to 16.
-	default_options : Options
-	default_options = AsciiDocPreprocess.defaults
+	default_props : Props
+	default_props = {}
 
-	## Parse a UTF-8 document with default preprocessing options.
-	parse_str : Str -> Try(Document, [Unsupported(Error), InvalidAsciiDoc(Error)])
-	parse_str = |source| parse_with(source, AsciiDocPreprocess.defaults)
-
-	## Parse using only caller-supplied include sources; never reads files.
-	parse_with : Str, Options -> Try(Document, [Unsupported(Error), InvalidAsciiDoc(Error)])
-	parse_with = |source, options| parse_document_metadata(source, options).map_ok(|parsed| parsed.value)
+	## Parse using caller-supplied include sources; never reads files.
+	parse_str : Str, Props -> Try(AsciiDoc, [Unsupported(Error), InvalidAsciiDoc(Error)])
+	parse_str = |source, props| parse_document_metadata(source, props).map_ok(|parsed| parsed.value)
 
 	## Render inline substitutions with caller-supplied attributes.
 	render_inline : Str, List(Attribute) -> Str
 	render_inline = |source, attrs| AsciiDocInline.render(source, attrs)
 
 	## Render an embedded HTML document with shared IDs and footnotes.
-	render : Document -> Str
-	render = |document| render_document(document)
+	render_html : AsciiDoc -> Str
+	render_html = |document| render_document(document)
 
 	## The lines an `include::` directive selects from its source, as returned
 	## by [AsciiDoc.select_include].
@@ -223,7 +214,6 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	select_include_with = |source, attribute_list, context| AsciiDocPreprocess.select_include_with(source, attribute_list, context.tabsize)
 }
 
-import Literal as Quotation
 import AsciiDocInline
 import AsciiDocPreprocess
 import unicode.Case
@@ -236,20 +226,20 @@ import AsciiDocAttributes
 import AsciiDocSource
 
 # Parser sidecar metadata is kept outside the public document and parse APIs.
-parse_document_metadata : Str, AsciiDoc.Options -> Try({ value : AsciiDoc.Document, unexpanded_includes : List(AsciiDocPreprocess.Error) }, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
+parse_document_metadata : Str, AsciiDoc.Props -> Try({ value : AsciiDoc, unexpanded_includes : List(AsciiDocPreprocess.Error) }, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
 parse_document_metadata = |source, options| {
 	if source.to_utf8().len() > 262144 {
-		return Err(InvalidAsciiDoc({ offset: 0, line: 1, problem: SourceTooLarge(262144) }))
+		return Err(InvalidAsciiDoc({ location: Text({ offset: 0, line: 1, column: 1 }), path: [], problem: LimitExceeded({ resource: SourceBytes, max: 262144, observed: Exact(source.count_utf8_bytes()) }) }))
 	}
-	checked = match AsciiDocPreprocess.run_scoped_checked(source, options) {
+	checked = match AsciiDocPreprocess.run_scoped_checked(source, { includes: options.includes, attributes: options.attributes, max_depth: options.max_depth, expand_includes: options.expand_includes }) {
 		Ok(value) => value
-		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ offset: error.offset, line: error.line, problem: Preprocessing(error.problem) }))
+		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ location: Text({ offset: error.offset, line: error.line, column: 1 }), path: [], problem: Preprocessing(error.problem) }))
 	}
 	value = parse_processed(checked.processed)?
 	Ok({ value, unexpanded_includes: checked.unexpanded_includes })
 }
 
-parse_processed : AsciiDocPreprocess.ScopedResult -> Try(AsciiDoc.Document, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
+parse_processed : AsciiDocPreprocess.ScopedResult -> Try(AsciiDoc, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
 parse_processed = |processed| {
 	structure = structural_lines(processed.lines)
 	validate_nesting(structure)?
@@ -1061,9 +1051,9 @@ render_section_with = |level, title, sid, blocks, attrs| {
 	}
 }
 
-expect AsciiDoc.parse_str("") == Ok({ title: "", blocks: [] })
-expect AsciiDoc.parse_str("= Title\nAuthor\n\nText") == Ok({ title: "Title", blocks: [Paragraph("Text")] })
-expect AsciiDoc.parse_str("----\nx") == Ok({ title: "", blocks: [Listing("x")] })
+expect AsciiDoc.parse_str("", {}) == Ok({ title: "", blocks: [] })
+expect AsciiDoc.parse_str("= Title\nAuthor\n\nText", {}) == Ok({ title: "Title", blocks: [Paragraph("Text")] })
+expect AsciiDoc.parse_str("----\nx", {}) == Ok({ title: "", blocks: [Listing("x")] })
 
 replace : Str, Str, Str -> Str
 replace = |s, from, to| Str.join_with(s.split_on(from), to)
@@ -1575,7 +1565,7 @@ render_stateless_verbatim_block = |block| match block {
 	_ => crash "non-verbatim block in stateless rendering"
 }
 
-render_document : AsciiDoc.Document -> Str
+render_document : AsciiDoc -> Str
 render_document = |document| {
 	if document.blocks.is_empty() {
 		return ""
@@ -2006,7 +1996,7 @@ validate_nesting = |lines| {
 		}
 		else if kind != "" and !["listing", "literal", "pass", "comment", "table"].contains(delimiter(top)) {
 			if $stack.len() >= 64 {
-				return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, problem: BlockNestingTooDeep(64) }))
+				return Err(InvalidAsciiDoc({ location: Text({ offset: line.offset, line: line.line, column: 1 }), path: if (line.path == "") [] else [Source(line.path)], problem: LimitExceeded({ resource: BlockDepth, max: 64, observed: AtLeast(65) }) }))
 			}
 			$stack = $stack.append(text)
 		}
@@ -2022,12 +2012,12 @@ expect {
 		$marker = "${$marker}="
 		$n = $n + 1
 	}
-	match AsciiDoc.parse_str($source) {
-		Err(InvalidAsciiDoc(e)) => e.line == 65 and e.problem == BlockNestingTooDeep(64)
+	match AsciiDoc.parse_str($source, AsciiDoc.Props.{}) {
+		Err(InvalidAsciiDoc(e)) => Diagnostic.line_column(e.location).map_ok(|position| position.line) == Ok(65) and e.problem == LimitExceeded({ resource: BlockDepth, max: 64, observed: AtLeast(65) })
 		_ => False
 	}
 }
-expect AsciiDoc.parse_str("----\n====\n=====\n----") == Ok({ title: "", blocks: [Listing("====\n=====")] })
+expect AsciiDoc.parse_str("----\n====\n=====\n----", {}) == Ok({ title: "", blocks: [Listing("====\n=====")] })
 
 validate_list_nesting : List(AsciiDocPreprocess.ScopedLine) -> Try({}, [InvalidAsciiDoc(AsciiDoc.Error)])
 validate_list_nesting = |lines| {
@@ -2055,7 +2045,7 @@ validate_list_nesting = |lines| {
 				top = $frames.last() ?? { kind: "", level: 0 }
 				if top.kind != m.kind or top.level != m.level {
 					if $frames.len() >= 64 {
-						return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, problem: ListNestingTooDeep(64) }))
+						return Err(InvalidAsciiDoc({ location: Text({ offset: line.offset, line: line.line, column: 1 }), path: if (line.path == "") [] else [Source(line.path)], problem: LimitExceeded({ resource: ListDepth, max: 64, observed: AtLeast(65) }) }))
 					}
 					$frames = $frames.append({ kind: m.kind, level: m.level })
 				}
@@ -2084,12 +2074,12 @@ expect {
 		$marker = "${$marker}*"
 		$n = $n + 1
 	}
-	match AsciiDoc.parse_str($source) {
-		Err(InvalidAsciiDoc(e)) => e.line == 65 and e.problem == ListNestingTooDeep(64)
+	match AsciiDoc.parse_str($source, AsciiDoc.Props.{}) {
+		Err(InvalidAsciiDoc(e)) => Diagnostic.line_column(e.location).map_ok(|position| position.line) == Ok(65) and e.problem == LimitExceeded({ resource: ListDepth, max: 64, observed: AtLeast(65) })
 		_ => False
 	}
 }
-expect AsciiDoc.parse_str("* item\n*** nested").is_ok()
+expect AsciiDoc.parse_str("* item\n*** nested", {}).is_ok()
 
 implicit_list_style : Str -> Str
 implicit_list_style = |text| {
@@ -2156,7 +2146,7 @@ expect {
 		$marker = "${$marker}="
 		$n = $n + 1
 	}
-	AsciiDoc.parse_str($source).is_ok()
+	AsciiDoc.parse_str($source, {}).is_ok()
 }
 
 wrap_part_intro : List(AsciiDoc.Block), AsciiDoc.Attributes -> List(AsciiDoc.Block)
@@ -2369,11 +2359,11 @@ prepare_header = |attrs, refs| {
 	AsciiDocInline.render_state(title, AsciiDocAttributes.materialize(final), { subs: "normal" }, early.state)
 }
 
-expect match AsciiDoc.parse_str("= {counter:n}") {
+expect match AsciiDoc.parse_str("= {counter:n}", AsciiDoc.Props.{}) {
 	Ok(doc) => doc.title == "2" and doc.blocks.is_empty()
 	_ => False
 }
-expect match AsciiDoc.parse_str("= {project} Guide\n:project: Roc") {
+expect match AsciiDoc.parse_str("= {project} Guide\n:project: Roc", AsciiDoc.Props.{}) {
 	Ok(doc) => doc.title == "Roc Guide" and doc.blocks.is_empty()
 	_ => False
 }
@@ -2415,11 +2405,11 @@ expect first_emission_after([1, 3, 5], 0) == 0 and first_emission_after([1, 3, 5
 
 expect {
 	source = "Before footnote:[Root before].\n\n[cols=\"a\"]\n|===\n|Outer before footnote:[Outer before].\n\n[cols=\"a\"]\n!===\n!Inner footnote:[Inner].\n!===\n\nOuter after footnote:[Outer after].\n|===\n\nAfter footnote:[Root after]."
-	match AsciiDoc.parse_str(source) {
+	match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 		Ok(doc) => {
 			identified = identify_blocks(doc.blocks, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
 			prepared = prepare_blocks(identified.blocks, AsciiDocInline.initial_state)
-			html = AsciiDoc.render(doc)
+			html = AsciiDoc.render_html(doc)
 			prepared.state.emitted_footnotes == [2, 3, 4] and [1.U64, 2, 3, 4, 5].all(|n| html.split_on("id=\"_footnotedef_${n.to_str()}\"").len() == 2)
 		}
 		_ => False
@@ -2438,9 +2428,9 @@ cached_has_attribute = |attrs, view, name| if (view.indexed) AsciiDocAttributes.
 expect {
 	header = dense_test_header({})
 	source = "${header}\n\n[#first.red]\n.First title\nhttps://example.test[First]\n\n[#second.blue]\n.Second title\nhttps://example.test[Second]"
-	match AsciiDoc.parse_str(source) {
+	match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 		Ok(doc) => {
-			html = AsciiDoc.render(doc)
+			html = AsciiDoc.render_html(doc)
 			html.contains("id=\"first\" class=\"paragraph red\"") and html.contains("id=\"second\" class=\"paragraph blue\"") and html.contains("<div class=\"title\">First title</div>") and html.contains("<div class=\"title\">Second title</div>")
 		}
 		_ => False
@@ -2450,9 +2440,9 @@ expect {
 expect {
 	header = dense_test_header({})
 	source = "= Guide\n${header}\n:toc:\n\n== Start\n\n[options=hardbreaks]\nOne\nTwo footnote:[Shared]\n\nAfter"
-	match AsciiDoc.parse_str(source) {
+	match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 		Ok(doc) => {
-			html = AsciiDoc.render(doc)
+			html = AsciiDoc.render_html(doc)
 			html.contains("id=\"toc\"") and html.contains("One<br>\nTwo") and html.split_on("id=\"_footnotedef_1\"").len() == 2 and !html.contains("roc-source-snapshot")
 		}
 		_ => False
@@ -2461,10 +2451,10 @@ expect {
 
 expect {
 	header = dense_test_header({})
-	match (AsciiDoc.parse_str("${header}\n:value: First\n\n{value}"), AsciiDoc.parse_str("${header}\n:value: Second\n\n{value}")) {
+	match (AsciiDoc.parse_str("${header}\n:value: First\n\n{value}", {}), AsciiDoc.parse_str("${header}\n:value: Second\n\n{value}", {})) {
 		(Ok(first), Ok(second)) => {
 			combined = { title: "", blocks: first.blocks.concat(second.blocks) }
-			html = AsciiDoc.render(combined)
+			html = AsciiDoc.render_html(combined)
 			html.contains("<p>First</p>") and html.contains("<p>Second</p>")
 		}
 		_ => False
@@ -2474,9 +2464,9 @@ expect {
 expect {
 	header = dense_test_header({})
 	source = "${header}\n\n{counter:n}\n\n--\n{counter:n}\n\n:n: 8\n\n{counter:n}\n--\n\n{counter:n}"
-	match AsciiDoc.parse_str(source) {
+	match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 		Ok(doc) => {
-			html = AsciiDoc.render(doc)
+			html = AsciiDoc.render_html(doc)
 			["<p>1</p>", "<p>2</p>", "<p>9</p>", "<p>10</p>"].all(|value| html.contains(value))
 		}
 		_ => False
@@ -2515,7 +2505,7 @@ render_cached_inline = |source, attrs, view, subs, state| {
 }
 
 # Materialize independent ordered bindings throughout a parsed document.
-without_internal_caches : AsciiDoc.Document -> AsciiDoc.Document
+without_internal_caches : AsciiDoc -> AsciiDoc
 without_internal_caches = |document| { title: document.title, blocks: clear_source_caches(document.blocks) }
 
 clear_source_caches : List(AsciiDoc.Block) -> List(AsciiDoc.Block)
@@ -2529,7 +2519,7 @@ clear_source_caches = |blocks| blocks.map(
 
 expect {
 	source = "${dense_test_header({})}\n:value: Original\n\n{value}"
-	match AsciiDoc.parse_str(source) {
+	match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 		Ok(doc) => {
 			original = render_node(doc.blocks.first() ?? empty_item)
 			valid = AsciiDocAttributes.indexed_attributes(original.attrs, AsciiDocAttributes.empty)
@@ -2537,15 +2527,15 @@ expect {
 			changed = { ..original, attrs: original.attrs.map(|a| if (a.name == "value") { name: a.name, value: "Changed" } else a) }
 			invalidated = without_internal_caches({ title: doc.title, blocks: [Rich(changed)] })
 			cleared = render_node(invalidated.blocks.first() ?? empty_item)
-			valid.view.first.get("value") == Ok("Original") and !AsciiDocAttributes.indexed_attributes(cleared.attrs, valid.cache).view.indexed and AsciiDoc.render(invalidated).contains("<p>Changed</p>")
+			valid.view.first.get("value") == Ok("Original") and !AsciiDocAttributes.indexed_attributes(cleared.attrs, valid.cache).view.indexed and AsciiDoc.render_html(invalidated).contains("<p>Changed</p>")
 		}
 		_ => False
 	}
 }
 
 expect {
-	match AsciiDoc.parse_str("[caption=Prefix]\n.Title\nBody") {
-		Ok(doc) => AsciiDoc.render(doc).contains("<div class=\"title\">Title</div>")
+	match AsciiDoc.parse_str("[caption=Prefix]\n.Title\nBody", AsciiDoc.Props.{}) {
+		Ok(doc) => AsciiDoc.render_html(doc).contains("<div class=\"title\">Title</div>")
 		_ => False
 	}
 }
@@ -2592,24 +2582,24 @@ prepared_toc_list = |blocks, level, levels| {
 	if ($items.is_empty()) "" else "<ul class=\"sectlevel${actual_level.to_str()}\">\n${Str.join_with($items, "\n")}\n</ul>"
 }
 
-expect match AsciiDoc.parse_str(".{blank}\nBody") {
-	Ok(doc) => AsciiDoc.render(doc).contains("<div class=\"title\"></div>")
+expect match AsciiDoc.parse_str(".{blank}\nBody", AsciiDoc.Props.{}) {
+	Ok(doc) => AsciiDoc.render_html(doc).contains("<div class=\"title\"></div>")
 	_ => False
 }
 
-expect match AsciiDoc.parse_str(".First\n|===\n|One\n|===\n\n.Second\n|===\n|Two\n|===") {
-	Ok(doc) => AsciiDoc.render(doc).contains("<caption class=\"title\">Table 2. Second</caption>")
+expect match AsciiDoc.parse_str(".First\n|===\n|One\n|===\n\n.Second\n|===\n|Two\n|===", AsciiDoc.Props.{}) {
+	Ok(doc) => AsciiDoc.render_html(doc).contains("<caption class=\"title\">Table 2. Second</caption>")
 	_ => False
 }
 
 expect {
 	source = "${dense_test_header({})}\n:imagesdir: assets\n\nimage::first.png[First,100,80,role=first]\n\nimage::second.png[Second,200,160,role=second]"
-	match AsciiDoc.parse_str(source) {
+	match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 		Ok(doc) => {
 			first = render_node(doc.blocks.first() ?? empty_item)
 			second = render_node(doc.blocks.get(1) ?? empty_item)
 			bindings = AsciiDoc.materialize_attributes(first.attrs)
-			html = AsciiDoc.render(doc)
+			html = AsciiDoc.render_html(doc)
 			bindings.contains({ name: "imagesdir", value: "assets" }) and !bindings.any(|a| a.name == "\u(0)roc-source-snapshot") and AsciiDoc.render_inline_attributes("{imagesdir}", first.attrs) == "assets" and attribute(first.attrs, "1") == "First" and attribute(second.attrs, "1") == "Second" and html.contains("alt=\"First\" width=\"100\" height=\"80\"") and html.contains("alt=\"Second\" width=\"200\" height=\"160\"")
 		}
 		_ => False
@@ -2620,7 +2610,7 @@ expect {
 	bindings = [{ name: "label", value: "first" }, { name: "label", value: "last" }, { name: "empty", value: "" }]
 	attrs = AsciiDoc.attributes(bindings)
 	manual = { title: "", blocks: [Rich({ context: "paragraph", source: "{label} {empty}", title: "", style: "", id: "", attrs, blocks: [], level: 0 })] }
-	AsciiDoc.materialize_attributes(attrs) == bindings and AsciiDoc.render_inline_attributes("{label}", attrs) == "first" and AsciiDoc.render(manual).contains("<p>first </p>")
+	AsciiDoc.materialize_attributes(attrs) == bindings and AsciiDoc.render_inline_attributes("{label}", attrs) == "first" and AsciiDoc.render_html(manual).contains("<p>first </p>")
 }
 
 # Sharing the immutable standard source must not share mutable Inline state or
@@ -2631,14 +2621,14 @@ expect {
 	middle = Rich({ ..render_node(Paragraph("{counter:n} footnote:[Middle]")), attrs: AsciiDoc.attributes(AsciiDocPreprocess.standard.append({ name: "n", value: "8" })) })
 	mixed = { title: "", blocks: [first, middle, last] }
 	legacy = { title: "", blocks: [Rich(render_node(first)), middle, Rich(render_node(last))] }
-	actual = AsciiDoc.render(mixed)
-	actual == AsciiDoc.render(legacy) and actual == AsciiDoc.render(mixed) and actual.contains("<p>9 ") and actual.contains("id=\"_footnotedef_3\"")
+	actual = AsciiDoc.render_html(mixed)
+	actual == AsciiDoc.render_html(legacy) and actual == AsciiDoc.render_html(mixed) and actual.contains("<p>9 ") and actual.contains("id=\"_footnotedef_3\"")
 }
 
 expect {
 	simple = { title: "", blocks: [Section({ level: 1, title: "{counter:n}", blocks: [Paragraph("{counter:n}"), Paragraph("{counter:n}")] })] }
 	legacy = { title: "", blocks: [Rich({ ..render_node(Section({ level: 1, title: "{counter:n}", blocks: [] })), blocks: [Rich(render_node(Paragraph("{counter:n}"))), Rich(render_node(Paragraph("{counter:n}")))] })] }
-	AsciiDoc.render(simple) == AsciiDoc.render(legacy)
+	AsciiDoc.render_html(simple) == AsciiDoc.render_html(legacy)
 }
 
 # The bounded standard scope has a fixed private key and certificate, so its
@@ -2687,8 +2677,8 @@ expect {
 	}
 	source = Str.join_with($parts, "\n\n")
 	options = { ..AsciiDocPreprocess.defaults, attributes: [{ name: "outfilesuffix", value: ".temporary" }, { name: "outfilesuffix", value: ".html" }] }
-	match (AsciiDoc.parse_str(source), AsciiDoc.parse_with(source, options)) {
-		(Ok(expected), Ok(actual)) => AsciiDoc.render(actual) == AsciiDoc.render(expected) and AsciiDoc.render(actual).contains("<p>24</p>") and actual.blocks.any(
+	match (AsciiDoc.parse_str(source, {}), AsciiDoc.parse_str(source, options)) {
+		(Ok(expected), Ok(actual)) => AsciiDoc.render_html(actual) == AsciiDoc.render_html(expected) and AsciiDoc.render_html(actual).contains("<p>24</p>") and actual.blocks.any(
 			|block| match block {
 				Paragraph("Body") => True
 				_ => False
@@ -2704,8 +2694,8 @@ expect {
 	manual = AsciiDoc.attributes(bindings)
 	legacy = AsciiDocAttributes.from_source(AsciiDocAttributes.with_snapshot(bindings))
 	opts = { ..AsciiDocPreprocess.defaults, attributes: [{ name: "outfilesuffix", value: ".temporary" }] }
-	match AsciiDoc.parse_with("{outfilesuffix}", opts) {
-		Ok(document) => AsciiDocAttributes.classify_baseline(stored, bindings) == Ok(False) and !plain_attrs(stored) and AsciiDocAttributes.classify_baseline(manual, bindings) == Err(Unknown) and AsciiDocAttributes.classify_baseline(legacy, bindings) == Err(Unknown) and plain_attrs(manual) and plain_attrs(legacy) and AsciiDoc.render(document).contains("<p>.temporary</p>") and document.blocks.any(
+	match AsciiDoc.parse_str("{outfilesuffix}", opts) {
+		Ok(document) => AsciiDocAttributes.classify_baseline(stored, bindings) == Ok(False) and !plain_attrs(stored) and AsciiDocAttributes.classify_baseline(manual, bindings) == Err(Unknown) and AsciiDocAttributes.classify_baseline(legacy, bindings) == Err(Unknown) and plain_attrs(manual) and plain_attrs(legacy) and AsciiDoc.render_html(document).contains("<p>.temporary</p>") and document.blocks.any(
 			|block| match block {
 				Rich(_) => True
 				_ => False
@@ -2720,7 +2710,7 @@ expect {
 expect {
 	var $same = True
 	for source in ["= {counter:n}\n\n{counter:n}", "= {project} Guide\n:project: Roc\n\nBody {project}", "= Header footnote:[Header note]\n\nBody footnote:[Body note]", "= <<target>> {counter:n}\n\n[#target]\n== Target\n\nBody {counter:n}", "= Title\n:doctitle: {counter:n}\n\nBody {counter:n}"] {
-		match AsciiDoc.parse_str(source) {
+		match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 			Ok(doc) => {
 				node = render_node(doc.blocks.first() ?? empty_item)
 				flattened = node.attrs.map(|a| a)
@@ -2728,7 +2718,7 @@ expect {
 				refs = identify_blocks(doc.blocks, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
 				typed_header = prepare_header(node.attrs, refs)
 				manual_header = prepare_header(flattened, refs)
-				$same = $same and typed_header.html == manual_header.html and typed_header.state.attributes == manual_header.state.attributes and typed_header.state.removed == manual_header.state.removed and typed_header.state.footnotes == manual_header.state.footnotes and AsciiDoc.render(doc) == AsciiDoc.render(legacy)
+				$same = $same and typed_header.html == manual_header.html and typed_header.state.attributes == manual_header.state.attributes and typed_header.state.removed == manual_header.state.removed and typed_header.state.footnotes == manual_header.state.footnotes and AsciiDoc.render_html(doc) == AsciiDoc.render_html(legacy)
 			}
 			Err(_) => {
 				$same = False
@@ -2754,7 +2744,7 @@ expect {
 # A definition after the title is missing from the initial snapshot but safe
 # in the final scope. The common referenced title must qualify.
 expect {
-	match AsciiDoc.parse_str("= Header {project}\n:project: Roc\n\n== Body\n\nText") {
+	match AsciiDoc.parse_str("= Header {project}\n:project: Roc\n\n== Body\n\nText", AsciiDoc.Props.{}) {
 		Ok(doc) => header_ref_independent(render_node(doc.blocks.first() ?? empty_item).attrs) and doc.title == "Header Roc"
 		_ => False
 	}
@@ -2765,7 +2755,7 @@ expect {
 expect {
 	var $same = True
 	for source in ["= {project}\n:project: Roc\n\n== Body", "= {project}\n:project: pass:[<<target>>]\n\n[[target]]\n== Destination", "= {project}\n:project: &lt;&lt;target&gt;&gt;\n\n[[target]]\n== Destination", "= Title\n:doctitle: <<target>>\n\n[[target]]\n== Destination", "= {lt}{lt}target{gt}{gt}\n\n[[target]]\n== Destination", "= {two-colons}\n\nBody", "= pass:normal[<<target>>]\n\n[[target]]\n== Destination", "= footnote:[See <<target>>]\n\n[[target]]\n== Destination", "= xref:target[See <<other>>]\n\n[[target]]\n== Target\n\n[[other]]\n== Other", "= {counter:n} footnote:[Header]\n\nBody {counter:n} footnote:[Body]"] {
-		match AsciiDoc.parse_str(source) {
+		match AsciiDoc.parse_str(source, AsciiDoc.Props.{}) {
 			Ok(doc) => {
 				attrs = render_node(doc.blocks.first() ?? empty_item).attrs
 				refs = identify_blocks(doc.blocks, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
@@ -2816,7 +2806,7 @@ expect {
 		node = render_node(actual.first() ?? empty_item)
 		new_header = prepare_header(node.attrs, [])
 		old_header = prepare_header(AsciiDoc.attributes(bindings), [])
-		$same = $same and AsciiDocAttributes.header_parts(node.attrs).is_ok() and AsciiDoc.materialize_attributes(node.attrs) == bindings and actual == legacy and new_header.html == old_header.html and new_header.state.attributes == old_header.state.attributes and new_header.state.removed == old_header.state.removed and new_header.state.footnotes == old_header.state.footnotes and AsciiDoc.render({ title: new_header.html, blocks: actual }) == AsciiDoc.render({ title: old_header.html, blocks: legacy })
+		$same = $same and AsciiDocAttributes.header_parts(node.attrs).is_ok() and AsciiDoc.materialize_attributes(node.attrs) == bindings and actual == legacy and new_header.html == old_header.html and new_header.state.attributes == old_header.state.attributes and new_header.state.removed == old_header.state.removed and new_header.state.footnotes == old_header.state.footnotes and AsciiDoc.render_html({ title: new_header.html, blocks: actual }) == AsciiDoc.render_html({ title: old_header.html, blocks: legacy })
 	}
 	$same
 }
@@ -2841,18 +2831,18 @@ expect {
 	legacy_empty = [Rich({ ..empty_node, attrs: AsciiDoc.attributes(empty_bindings) })]
 	new_header = prepare_header(empty_node.attrs, [])
 	old_header = prepare_header(AsciiDoc.attributes(empty_bindings), [])
-	AsciiDocAttributes.header_parts(actual.attrs).is_err() and AsciiDoc.materialize_attributes(actual.attrs) == bindings and stored == [Rich({ ..render_node(manual), attrs: AsciiDoc.attributes(bindings) })] and empty_part and AsciiDoc.materialize_attributes(empty_node.attrs) == empty_bindings and empty_stored == legacy_empty and new_header.html == old_header.html and new_header.state.attributes == old_header.state.attributes and new_header.state.removed == old_header.state.removed and new_header.state.footnotes == old_header.state.footnotes and AsciiDoc.render({ title: new_header.html, blocks: empty_stored }) == AsciiDoc.render({ title: old_header.html, blocks: legacy_empty })
+	AsciiDocAttributes.header_parts(actual.attrs).is_err() and AsciiDoc.materialize_attributes(actual.attrs) == bindings and stored == [Rich({ ..render_node(manual), attrs: AsciiDoc.attributes(bindings) })] and empty_part and AsciiDoc.materialize_attributes(empty_node.attrs) == empty_bindings and empty_stored == legacy_empty and new_header.html == old_header.html and new_header.state.attributes == old_header.state.attributes and new_header.state.removed == old_header.state.removed and new_header.state.footnotes == old_header.state.footnotes and AsciiDoc.render_html({ title: new_header.html, blocks: empty_stored }) == AsciiDoc.render_html({ title: old_header.html, blocks: legacy_empty })
 }
 
 # Verbatim blocks keep their text literal and number automatic callouts per block.
 expect {
-	html = AsciiDoc.render({ title: "Provided title", blocks: [Listing("code <.>"), Literal("footnote:[literal] <.>"), ThematicBreak] })
+	html = AsciiDoc.render_html({ title: "Provided title", blocks: [Listing("code <.>"), Literal("footnote:[literal] <.>"), ThematicBreak] })
 	html == "<div class=\"listingblock\">\n<div class=\"content\">\n<pre>code <b class=\"conum\">(1)</b></pre>\n</div>\n</div>\n<div class=\"literalblock\">\n<div class=\"content\">\n<pre>footnote:[literal] <b class=\"conum\">(1)</b></pre>\n</div>\n</div>\n<hr>"
 }
 
 # Literal footnote-looking text cannot consume the following paragraph's number.
 expect {
-	html = AsciiDoc.render({ title: "", blocks: [Listing("footnote:[literal]"), Paragraph("Real footnote:[note]")] })
+	html = AsciiDoc.render_html({ title: "", blocks: [Listing("footnote:[literal]"), Paragraph("Real footnote:[note]")] })
 	html.contains("<pre>footnote:[literal]</pre>") and html.contains("id=\"_footnoteref_1\"") and !html.contains("id=\"_footnoteref_2\"")
 }
 
@@ -2862,22 +2852,22 @@ expect {
 	document = "= Checked\n\nText"
 	document.title == "Checked" and document.blocks == [Paragraph("Text")]
 }
-expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", name: "book.adoc" }) {
-	Err(BadQuotedBytes(message)) => message.contains("book.adoc:1: AsciiDoc: UnexpandedInclude")
+expect match asciidoc_quote_validate({ source: "include::chapter.adoc[]", name: "book.adoc" }) {
+	Err(BadQuotedBytes(message)) => message.contains("book.adoc:1:1: AsciiDoc: UnexpandedInclude")
 	Ok(_) => False
 }
-expect AsciiDoc.validate({ source: "include::chapter.adoc[]", lints: { unexpanded_includes: False } }).is_ok()
-expect AsciiDoc.validate({ source: "\\include::chapter.adoc[]\n\nlink:chapter.adoc[role=include]" }).is_ok()
-expect AsciiDoc.validate({ source: "ifdef::missing[]\ninclude::chapter.adoc[]\nendif::[]" }).is_ok()
-expect match AsciiDoc.validate({ source: "ifdef::enabled[include::chapter.adoc[]]", attributes: [{ name: "enabled", value: "" }] }) {
+expect asciidoc_quote_validate({ source: "include::chapter.adoc[]", lints: { unexpanded_includes: False } }).is_ok()
+expect asciidoc_quote_validate({ source: "\\include::chapter.adoc[]\n\nlink:chapter.adoc[role=include]" }).is_ok()
+expect asciidoc_quote_validate({ source: "ifdef::missing[]\ninclude::chapter.adoc[]\nendif::[]" }).is_ok()
+expect match asciidoc_quote_validate({ source: "ifdef::enabled[include::chapter.adoc[]]", attributes: [{ name: "enabled", value: "" }] }) {
 	Err(BadQuotedBytes(message)) => message.contains("UnexpandedInclude")
 	Ok(_) => False
 }
-expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", expand_includes: True, includes: [{ path: "chapter.adoc", source: "Expanded" }] }) {
+expect match asciidoc_quote_validate({ source: "include::chapter.adoc[]", expand_includes: True, includes: [{ path: "chapter.adoc", source: "Expanded" }] }) {
 	Ok(document) => document.blocks == [Paragraph("Expanded")]
 	Err(_) => False
 }
-expect match AsciiDoc.validate({ source: "include::missing.adoc[]", expand_includes: True }) {
+expect match asciidoc_quote_validate({ source: "include::missing.adoc[]", expand_includes: True }) {
 	Err(BadQuotedBytes(message)) => message.contains("MissingInclude") and !message.contains("UnexpandedInclude")
 	Ok(_) => False
 }
@@ -2890,15 +2880,15 @@ expect {
 		$marker = "${$marker}="
 		$depth = $depth + 1
 	}
-	match AsciiDoc.validate({ source: $source }) {
-		Err(BadQuotedBytes(message)) => message.contains("BlockNestingTooDeep") and !message.contains("UnexpandedInclude")
+	match asciidoc_quote_validate({ source: $source }) {
+		Err(BadQuotedBytes(message)) => message.contains("BlockDepth") and !message.contains("UnexpandedInclude")
 		Ok(_) => False
 	}
 }
 
-expect AsciiDoc.validate({ source: "////\ninclude::missing.adoc[]\n////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
-expect AsciiDoc.validate({ source: "/////\ninclude::missing.adoc[]\n/////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
-expect AsciiDoc.validate({ source: "----\ninclude::missing.adoc[]\n----" }).is_err()
+expect asciidoc_quote_validate({ source: "////\ninclude::missing.adoc[]\n////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
+expect asciidoc_quote_validate({ source: "/////\ninclude::missing.adoc[]\n/////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
+expect asciidoc_quote_validate({ source: "----\ninclude::missing.adoc[]\n----" }).is_err()
 
 # Include selection. The examples in the doc comments first.
 expect AsciiDoc.select_include("one\ntwo\nthree\n", "lines=2..3") == { text: "two\nthree", lines: [2, 3], problems: [] }
@@ -3108,8 +3098,8 @@ expect match AsciiDocPreprocess.run("a\ninclude::empty.adoc[]\nb", { ..AsciiDocP
 # AsciiDoc keeps it wherever its lines land.
 render_included : Str, Str, Str -> Str
 render_included = |source, path, part| {
-	match AsciiDoc.parse_with(source, { ..AsciiDoc.default_options, expand_includes: True, includes: [{ path, source: part }] }) {
-		Ok(document) => AsciiDoc.render(document)
+	match AsciiDoc.parse_str(source, { ..AsciiDoc.default_props, expand_includes: True, includes: [{ path, source: part }] }) {
+		Ok(document) => AsciiDoc.render_html(document)
 		Err(_) => "error"
 	}
 }
@@ -3129,8 +3119,8 @@ expect render_included("include::part.rb[]", "part.rb", "[source]  \n----  \ncod
 expect render_included("include::part.rb[]", "part.rb", "ifdef::nope[]\nhidden\nendif::[]\ninclude::other.rb[]\n") == "<div class=\"paragraph\">\n<p>ifdef::nope[]\nhidden\nendif::[]\ninclude::other.rb[]</p>\n</div>"
 # The document's own lines lose trailing whitespace before any directive,
 # delimiter or attribute entry is recognized.
-expect AsciiDoc.parse_str("----  \n:kept: yes\n----") == Ok({ title: "", blocks: [Listing(":kept: yes")] })
-expect AsciiDoc.parse_str(":on:\nifdef::on[]  \nshown\nendif::[]  \nifdef::on[body  ]").map_ok(AsciiDoc.render) == Ok("<div class=\"paragraph\">\n<p>shown\nbody</p>\n</div>")
+expect AsciiDoc.parse_str("----  \n:kept: yes\n----", {}) == Ok({ title: "", blocks: [Listing(":kept: yes")] })
+expect AsciiDoc.parse_str(":on:\nifdef::on[]  \nshown\nendif::[]  \nifdef::on[body  ]", {}).map_ok(AsciiDoc.render_html) == Ok("<div class=\"paragraph\">\n<p>shown\nbody</p>\n</div>")
 
 # `tabsize`: in a document that sets it, `indent=` first expands each tab to
 # the next tab stop, counting every character as one column.
@@ -3168,15 +3158,15 @@ expect {
 	)
 }
 expect render_included(":tabsize: 3x\n\n----\ninclude::part.roc[indent=0]\n----", "part.roc", "\t// tag::a[]\n\tfn = |x|\n\t\n\t\tx\ty\n\t// end::a[]\n  é\tz\n").contains("<pre> // tag::a[]\n fn = |x|\n \n    x  y\n // end::a[]\né   z</pre>")
-expect match AsciiDoc.parse_with("----\ninclude::part.rb[indent=0]\n----", { ..AsciiDoc.default_options, expand_includes: True, attributes: [{ name: "tabsize", value: "4" }], includes: [{ path: "part.rb", source: "\t\tx\n\t  y" }] }) {
-	Ok(document) => AsciiDoc.render(document).contains("<pre>  x\ny</pre>")
+expect match AsciiDoc.parse_str("----\ninclude::part.rb[indent=0]\n----", { ..AsciiDoc.default_props, expand_includes: True, attributes: [{ name: "tabsize", value: "4" }], includes: [{ path: "part.rb", source: "\t\tx\n\t  y" }] }) {
+	Ok(document) => AsciiDoc.render_html(document).contains("<pre>  x\ny</pre>")
 	Err(_) => False
 }
 
 # Verbatim blocks expand tabs from their own `tabsize`, or the document's
 # when they have none. Zero, a negative number or text disables it.
 render_source : Str -> Str
-render_source = |source| AsciiDoc.parse_str(source).map_ok(AsciiDoc.render) ?? "error"
+render_source = |source| AsciiDoc.parse_str(source, {}).map_ok(AsciiDoc.render_html) ?? "error"
 
 expect render_source(":tabsize: 4\n\n----\n\tx\na\tb\nabcd\te\n\t\tf\tg\n----").contains("<pre>    x\na   b\nabcd    e\n        f   g</pre>")
 expect render_source(":tabsize: 4\n\n----\né\tx\n中文\ty\n----").contains("<pre>é   x\n中文  y</pre>")
@@ -3257,3 +3247,23 @@ expect render_source("xref:other\noc[Other]").contains("<a href=\"#other\noc\">O
 # row decides; a bare number is that many columns.
 expect render_source("[cols=\"= 1\"]\n|===\n2.2+|Wide |A\n|B\n|===").contains("<col style=\"width: 33.3333%;\">")
 expect render_source("[cols=3]\n|===\n|A |B |C\n|===").contains("<col style=\"width: 33.3333%;\">")
+
+asciidoc_quotation_error : [InvalidAsciiDoc(AsciiDoc.Error), Unsupported(AsciiDoc.Error)] -> [BadQuotedBytes(Str)]
+asciidoc_quotation_error = |failure| {
+	error = match failure {
+		InvalidAsciiDoc(detail) | Unsupported(detail) => detail
+	}
+	position = Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }
+	name = match error.path.first() {
+		Ok(Source(source)) => source
+		_ => "<literal>"
+	}
+	problem = match error.problem {
+		UnexpandedInclude(reason) => Str.inspect(reason)
+		reason => Str.inspect(reason)
+	}
+	Parser.Quotation.error({ name, format: "AsciiDoc", line: position.line, column: position.column, message: problem })
+}
+
+asciidoc_quote_validate : AsciiDoc.ValidationProps -> Try(AsciiDoc, [BadQuotedBytes(Str)])
+asciidoc_quote_validate = |props| AsciiDoc.validate(props).map_err(asciidoc_quotation_error)
