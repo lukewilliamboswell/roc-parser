@@ -98,13 +98,18 @@ test! = |bytes| {
 	values_source : Stream(Try(List(U8), [Injected({ code : U64 })]))
 	values_source = [Ok([composed_byte]), Err(Injected({ code: bytes.len() })), Ok([1.U8])].iter().stream()
 	var $values = []
-	for! item in (Parser.decoder({ initial_state: 0, step })).values_stream(values_source).map(|value| value) {
+	for! item in (Parser.decoder({ initial_state: 0, step })).values_stream(values_source).map(
+		|result| match result {
+			Ok(value) => Ok(value.to_u64())
+			Err(error) => Err(error)
+		},
+	) {
 		$values = $values.append(item)
 	}
 	wanted_values = match composed_byte {
 		0 => [Err(ZeroByte(0))]
 		255 => [Err(ForbiddenByte(0))]
-		_ => [Ok(composed_byte), Err(SourceErr(Injected({ code: bytes.len() })))]
+		_ => [Ok(composed_byte.to_u64()), Err(SourceErr(Injected({ code: bytes.len() })))]
 	}
 	if $values != wanted_values {
 		crash "stream composition changed native or source failure payloads"
