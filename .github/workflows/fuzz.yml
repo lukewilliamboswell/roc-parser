@@ -98,6 +98,8 @@ jobs:
           - http-raw
           - http-roundtrip
           - http-smuggling
+          - http-stream
+          - http-stream-ceilings
           - parser-combinators
           - validate
           - string-primitives

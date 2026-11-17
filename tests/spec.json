@@ -53,6 +53,39 @@
       ]
     },
     {
+      "path": "examples/http-streaming.roc",
+      "cases": [
+        {
+          "name": "request",
+          "args": [],
+          "stdin": "POST /notes HTTP/1.1\r\nHost: a\r\nContent-Length: 2\r\n\r\nhi",
+          "stdout": "request /notes\nbody bytes: 2\nfinished; protocol bytes: 0\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "head",
+          "args": [
+            "head"
+          ],
+          "stdin": "HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\n",
+          "stdout": "response 200\nbody bytes: 0\nfinished; protocol bytes: 0\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "connect",
+          "args": [
+            "connect"
+          ],
+          "stdin": "HTTP/1.1 200 Connected\r\n\r\nraw",
+          "stdout": "response 200\nbody bytes: 0\nprotocol switch\nfinished; protocol bytes: 3\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/json-streaming.roc",
       "cases": [
         {

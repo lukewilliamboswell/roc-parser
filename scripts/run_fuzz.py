@@ -138,6 +138,8 @@ TARGETS = dict(
         target("http-raw", "http-request", "raw", "http-raw", max_input_size=65536, timeout=10),
         target("http-roundtrip", timeout=10),
         target("http-smuggling", timeout=10),
+        target("http-stream", max_input_size=1024, timeout=10, examples=True),
+        target("http-stream-ceilings", max_input_size=1, timeout=20, examples=True),
         target("parser-combinators", max_input_size=256),
         # The first byte chooses the format and the second an offset.
         target("validate", "validate", "raw", max_input_size=1024, timeout=10),
