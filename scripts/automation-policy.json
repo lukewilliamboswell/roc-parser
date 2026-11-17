@@ -32,7 +32,9 @@
         "scripts/tests/test_import_roc_syntax_snapshots.py",
         "scripts/tests/test_markup_vocabulary.py",
         "scripts/tests/test_mutate_roc_syntax.py",
+        "scripts/tests/test_oracle_cache.py",
         "scripts/tests/test_package_driver.py",
+        "scripts/tests/test_reference_cache.py",
         "scripts/tests/test_repository_policy.py",
         "scripts/tests/test_review_json.py",
         "scripts/tests/test_review_markup.py",
@@ -64,6 +66,8 @@
       "contract": "Independent parsing, compiler fixture, fuzz and benchmark harnesses own generated inputs, reference comparisons, subprocess measurement and failure evidence. Python is their test runtime; repository checks, release assembly and documentation generation are Roc entry points.",
       "paths": [
         "scripts/_common.py",
+        "scripts/_oracle_cache.py",
+        "scripts/_reference_cache.py",
         "scripts/asciidoc/generate_standard_tree.py",
         "scripts/asciidoc/models.py",
         "scripts/asciidoc/mutations.py",

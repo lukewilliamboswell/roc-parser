@@ -165,7 +165,7 @@ def _writer_uncached(data):
 
 def external_writer(data):
     return ORACLE_CACHE.answer("ofxtools.write-project", data, {"output_version": 203, "output_encoding": "UTF-8"},
-                              lambda: _writer_uncached(data), adapters=(_writer_uncached,),
+                              lambda: _writer_uncached(data), adapters=(_writer_uncached, _oracle_uncached),
                               requirements=DATA / "requirements.txt", primary="ofxtools")
 
 

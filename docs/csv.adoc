@@ -345,16 +345,4 @@ measurements; parse-only benchmarks intentionally keep their input in memory.
 See <<benchmarks>> and <<performance>> for build modes, receipts and comparison
 requirements.
 
-== Reuse correctness oracle answers
-
-The conformance review caches deterministic reference answers in
-`.roc-parser-tmp/oracle-cache`, including rejections and independent writer
-output. Every comparison still runs the current Roc probe. Exact input bytes,
-oracle dependency versions, options, adapter code and Python version identify
-the reference answer; changing Roc alone does not invalidate it.
-
-Pass `--refresh-oracles` to recompute reference answers, or `--no-oracle-cache`
-to bypass both cache reads and writes. Corrupt entries are recomputed, and
-transient execution failures are never stored. Cached answers remain usable
-without installed oracle packages when their version receipt matches the
-requested dependency pins.
+The conformance review uses the shared <<correctness-oracle-cache,correctness oracle cache>>.

@@ -217,6 +217,13 @@ class BenchmarkReferenceCache(unittest.TestCase):
             with patch.object(bench, "ROOT", root), patch.object(bench, "BENCH", root / "bench"), patch.object(bench.os, "walk", side_effect=walk):
                 self.assertEqual(len(bench.reference_sources("rust")), 2)
 
+    def test_rust_identity_probes_disable_automatic_toolchain_installation(self):
+        def probe(command, cwd=bench.ROOT, env=None):
+            self.assertEqual(env["RUSTUP_AUTO_INSTALL"], "0")
+            return "installed rust toolchain"
+        with patch.object(bench, "reference_probe", side_effect=probe), patch.object(bench, "cargo_lock_versions", return_value={}):
+            bench.reference_runtime("rust", None)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,15 +67,16 @@ pins, installed runtime/library versions, build recipe, ownership/workload,
 measurement settings, and machine/CPU-affinity/governor/resource configuration.
 Changing any of these requires an explicit reference refresh. Go builds and
 identity probes use `GOTOOLCHAIN=local`; select an installed Go compiler on
-`PATH`, because cache qualification must not download toolchains.
+`PATH`, because cache qualification must not download toolchains. Rust identity
+probes also disable automatic toolchain installation.
 
 Cache files retain calibration, warmup and every measured batch, original
 commands, timestamps and source-report provenance. Corrupt, stale or incomplete
 receipts are rejected. Reports mark cache hits and preserve their original
 measurement date: reused timings are historical measurements, not fresh timing
 samples. They have no time-based expiry; refresh explicitly when new reference
-measurements are needed. This measurement cache is separate from the QIF/OFX
-correctness-oracle output cache: performance depends on runtime, hardware and
+measurements are needed. This measurement cache is separate from the shared
+<<correctness-oracle-cache,correctness oracle cache>>: performance depends on runtime, hardware and
 measurement conditions as well as the input.
 
 == How a measurement works

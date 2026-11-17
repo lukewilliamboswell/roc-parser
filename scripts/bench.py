@@ -846,8 +846,9 @@ def reference_probe(command: list[str], cwd: Path = ROOT, env: dict | None = Non
 
 def reference_runtime(lang: str, python: str | None) -> dict:
     if lang == "rust":
-        return {"compiler": reference_probe(["rustc", "--version", "--verbose"]),
-                "cargo": reference_probe(["cargo", "--version"]), "libraries": cargo_lock_versions()}
+        probe_env = {**os.environ, "RUSTUP_AUTO_INSTALL": "0"}
+        return {"compiler": reference_probe(["rustc", "--version", "--verbose"], env=probe_env),
+                "cargo": reference_probe(["cargo", "--version"], env=probe_env), "libraries": cargo_lock_versions()}
     if lang == "go":
         return {"compiler": reference_probe(["go", "version"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"}),
                 "configuration": json.loads(reference_probe(["go", "env", "-json", "GOOS", "GOARCH", "GOAMD64",

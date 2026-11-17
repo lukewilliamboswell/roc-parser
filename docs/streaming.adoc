@@ -66,6 +66,21 @@ invalid bytes and unrepresentable output characters produce errors. Writers
 never replace characters silently. Round trips preserve supported semantics;
 formatting, quoting and permitted numeric/date spellings may be normalized.
 
+[#correctness-oracle-cache]
+== Reuse correctness oracle answers
+
+The conformance review caches deterministic reference answers in
+`.roc-parser-tmp/oracle-cache`, including rejections and independent writer
+output. Every comparison still runs the current Roc probe. Exact input bytes,
+oracle dependency versions, options, adapter code and Python version identify
+the reference answer; changing Roc alone does not invalidate it.
+
+Pass `--refresh-oracles` to recompute reference answers, or `--no-oracle-cache`
+to bypass both cache reads and writes. Corrupt entries are recomputed, and
+transient execution failures are never stored. Cached answers remain usable
+without installed oracle packages when their version receipt matches the
+requested dependency pins.
+
 == Implement another chunk decoder
 
 `Streaming.Step` returns the updated state, the number of bytes consumed from

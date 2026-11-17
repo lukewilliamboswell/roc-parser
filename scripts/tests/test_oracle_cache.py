@@ -196,6 +196,22 @@ class ReviewIntegrationTests(unittest.TestCase):
         self.assertIn("local_date", review.oracle_date_defaults("D1/2/24\n"))
         self.assertIn("local_date", review.oracle_date_defaults("DJanuary 2\n"))
 
+    def test_ofx_writer_cache_tracks_primary_normalization_changes(self):
+        review = load_review("ofx")
+        with tempfile.TemporaryDirectory() as folder:
+            review.ORACLE_CACHE = cache.OracleCache(folder, version_reader=lambda primary, pins: pins)
+            calls = []
+            def writer(data):
+                calls.append(data)
+                return {"status": "ok", "bytes": b"written"}
+            with patch.object(review, "_writer_uncached", writer):
+                with patch.object(review, "_oracle_uncached", adapter_one):
+                    review.external_writer(b"source")
+                    review.external_writer(b"source")
+                with patch.object(review, "_oracle_uncached", adapter_two):
+                    review.external_writer(b"source")
+            self.assertEqual(calls, [b"source", b"source"])
+
     def test_ofx_all_reference_operations_cached_while_changed_roc_is_rechecked(self):
         review = load_review("ofx")
         with tempfile.TemporaryDirectory() as folder:
