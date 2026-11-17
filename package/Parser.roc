@@ -199,7 +199,7 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	## Wrap a closed native union in a domain tag when combining formats.
 	map_problem : Parser(input, a, p), (Parser.Problem(p) -> Parser.Problem(q)) -> Parser(input, a, q)
 	map_problem = |parser, transform| {
-		convert = |failure| { problem: transform(failure.problem), remaining: failure.remaining }
+		convert = |failure| if (failure.remaining == U64.highest) no_failure({}) else { problem: transform(failure.problem), remaining: failure.remaining }
 		{
 			fun: |input| match step(parser, input) {
 				Ok({ value, rest, furthest }) => Ok({ value, rest, furthest: convert(furthest) })

@@ -160,7 +160,7 @@ Utf8 :: [].{
 	utf8 : List(U8) -> Parser(Bytes, List(U8), Problem(p))
 	utf8 = |expected_string| {
 		# Implemented manually instead of a sequence of codeunits
-		# because of efficiency and better error messages
+		# to compare the entire expected byte sequence at once
 		Parser.custom(
 			|input| {
 				{ before: start, others: input_rest } = input.split_at(expected_string.len())
@@ -558,30 +558,8 @@ scan_class = |bytes, pos, class, want| {
 	$i
 }
 
-str_from_codeunit : U8 -> Str
-str_from_codeunit = |cu| {
-	str_from_utf8([cu])
-}
+# A mismatch retains the expected byte without retaining the input.
 
-## Bytes of remaining input quoted in failure messages.
-excerpt_len : U64
-excerpt_len = 32
-
-## Render the start of the remaining input for a failure message.
-##
-## Failures are cheap and frequent (every losing branch of `alt`/`one_of`, the
-## last iteration of `many`), so quoting the whole remaining input made those
-## combinators quadratic in the input length. Quote a bounded prefix instead.
-excerpt : Utf8.Bytes -> Str
-excerpt = |bytes| {
-	if bytes.len() <= excerpt_len {
-		str_from_utf8(bytes)
-	} else {
-		Str.concat(str_from_utf8(bytes.sublist({ start: 0, len: excerpt_len })), "…")
-	}
-}
-
-# Failure messages quote only a bounded prefix of the remaining input.
 expect {
 	long = List.repeat('b', 1000)
 	match Parser.run(Utf8.codeunit('a'), long) {
@@ -860,7 +838,7 @@ even =
 # Flattening keeps an Ok value from the mapped function.
 expect Utf8.parse_str(even, "42") == Ok(42)
 
-# Flattening turns an Err value into a parse failure with its message.
+# Flattening retains a caller-defined structured rejection.
 expect Utf8.parse_str(even, "7") == Err(ParseError({ problem: OddNumber, offset: 0 }))
 
 # Capturing up to a delimiter returns the bytes before it.
