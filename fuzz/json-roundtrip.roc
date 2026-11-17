@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.JsonValue
+import parser.Parser
 import parser.Utf8
 
 ## Round-trip property: fuzzer bytes choose a JSON value, a JsonValue.Options
@@ -60,8 +61,8 @@ Choice : {
 }
 
 ## What parse_with must return: a value, or an error at a byte offset whose
-## message is `message` (or starts with it, when `exact` is False).
-Expectation : [Value(JsonValue), Failure({ offset : U64, message : Str, exact : Bool })]
+## problem is the expected structured failure.
+Expectation : [Value(JsonValue), Failure({ offset : U64, problem : Parser.Problem(JsonValue.Problem) })]
 
 Input : {
 	choice : Choice,
@@ -689,11 +690,6 @@ generate_value = |start| {
 	}
 }
 
-## Printable ASCII other than `"` and `\`, which an error message can quote
-## without escaping.
-is_plain_key : Str -> Bool
-is_plain_key = |key| key.to_utf8().all(|byte| byte >= 0x20 and byte < 0x7F and byte != '"' and byte != '\\')
-
 generate_duplicate : Cur -> Input
 generate_duplicate = |start| {
 	mode = pick(start, 4)
@@ -770,12 +766,11 @@ generate_duplicate = |start| {
 	last = Object(members.map(|member| if (member.key == original.key) { key: member.key, value: repeat_value } else member))
 	wrapped = |object| if (wrapped_in_array) Array($before.append(object)) else object
 	offset = Str.count_utf8_bytes(prefix)
-	plain = is_plain_key(original.key)
-	failure = |suffix| Failure({ offset, message: if (plain) "duplicate key \"${original.key}\"${suffix}" else "duplicate key \"", exact: plain })
+	failure = |different| Failure({ offset, problem: if (different) ConflictingDuplicateKey(original.key) else DuplicateKey(original.key) })
 	expected =
 		match choice.duplicates {
-			Reject => failure("")
-			CollapseIdentical => if (same.n == 0) Value(wrapped(first)) else failure(" with a different value")
+			Reject => failure(False)
+			CollapseIdentical => if (same.n == 0) Value(wrapped(first)) else failure(True)
 			KeepFirst => Value(wrapped(first))
 			KeepLast => Value(wrapped(last))
 		}
@@ -843,15 +838,14 @@ test = |input| {
 				check_one_past(input, expected)
 			}
 		}
-		Failure({ offset, message, exact }) => {
-			matches = |found| if (exact) found == message else Str.starts_with(found, message)
+		Failure({ offset, problem: expected_problem }) => {
 			location = line_column(input.text.to_utf8(), offset)
 			match actual {
-				Err(InvalidJsonValue(error)) if error.line == location.line and error.column == location.column and matches(error.message) => {}
+				Err(InvalidJsonValue(error)) if error.line == location.line and error.column == location.column and error.problem == expected_problem => {}
 				_ => crash "expected an error at ${location.line.to_str()}:${location.column.to_str()}\n${describe(input)}\n--- actual ---\n${show_result(actual)}"
 			}
 			match combinator {
-				Err(ParseError(problem)) if problem.offset == offset and matches(problem.message) => {}
+				Err(ParseError(problem)) if problem.offset == offset and problem.problem == expected_problem => {}
 				_ => crash "JsonValue.parser_with must fail at offset ${offset.to_str()}: ${Str.inspect(combinator)}\n${describe(input)}"
 			}
 		}
@@ -891,24 +885,24 @@ check_writer = |input, expected| {
 check_one_past : Input, JsonValue -> {}
 check_one_past = |input, expected| {
 	limits = input.choice.limits
-	lowered = |name, changed, message|
+	lowered = |name, changed, accepted|
 		match JsonValue.parse_with(input.text, options_of({ ..input.choice, limits: changed })) {
-			Err(InvalidJsonValue(error)) if message.any(|start| Str.starts_with(error.message, start)) => {}
-			other => crash "lowering ${name} by one must fail with ${Str.inspect(message)}: ${show_result(other)}\n${describe(input)}"
+			Err(InvalidJsonValue(error)) if accepted.contains(error.problem) => {}
+			other => crash "lowering ${name} by one must fail with ${Str.inspect(accepted)}: ${show_result(other)}\n${describe(input)}"
 		}
 	if limits.max_depth > 0 {
 		less = limits.max_depth - 1
-		lowered("max_depth", { ..limits, max_depth: less }, ["nesting exceeds the limit of ${less.to_str()} level"])
+		lowered("max_depth", { ..limits, max_depth: less }, [LimitExceeded({ limit: Nesting, max: less })])
 	}
 	if limits.max_items > 0 {
 		less = limits.max_items - 1
-		lowered("max_items", { ..limits, max_items: less }, ["array has more than ${less.to_str()} item", "object has more than ${less.to_str()} member"])
+		lowered("max_items", { ..limits, max_items: less }, [LimitExceeded({ limit: ArrayItems, max: less }), LimitExceeded({ limit: ObjectMembers, max: less })])
 	}
 	if limits.max_string_bytes > 0 {
-		lowered("max_string_bytes", { ..limits, max_string_bytes: limits.max_string_bytes - 1 }, [""])
+		lowered("max_string_bytes", { ..limits, max_string_bytes: limits.max_string_bytes - 1 }, [LimitExceeded({ limit: StringBytes, max: limits.max_string_bytes - 1 })])
 	}
 	if limits.max_number_digits > 0 and limits.max_number_digits < U64.highest {
-		lowered("max_number_digits", { ..limits, max_number_digits: limits.max_number_digits - 1 }, [""])
+		lowered("max_number_digits", { ..limits, max_number_digits: limits.max_number_digits - 1 }, [LimitExceeded({ limit: NumberCharacters, max: limits.max_number_digits - 1 })])
 	}
 	stricter =
 		match expected {
@@ -1105,7 +1099,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${JsonValue.describe_problem(error.problem)}"
 	}
 }
 
@@ -1155,7 +1149,7 @@ show_expected : Expectation -> Str
 show_expected = |expected| {
 	match expected {
 		Value(value) => Str.inspect(value)
-		Failure({ offset, message, exact }) => "error at byte ${offset.to_str()}: ${Str.inspect(message)}${if (exact) "" else "..."}"
+		Failure({ offset, problem }) => "error at byte ${offset.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 

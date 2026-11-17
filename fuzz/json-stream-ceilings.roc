@@ -54,7 +54,7 @@ read = |count, format| {
 	var $checksum = 0.U64
 	var $records = 0.U64
 	var $finished = False
-	for result in JsonStream.parse_iter(source(count, format), { format: format }) {
+	for result in Streaming.read_iter(source(count, format), JsonStream.decoder({ format: format })) {
 		match result {
 			Ok(Value(value)) => {
 				index = match value.get("i") {
@@ -89,7 +89,7 @@ read = |count, format| {
 write : U64, JsonStream.Format -> U64
 write = |count, format| {
 	var $bytes = 0.U64
-	for part in JsonStream.write_iter(values(count), { format: format }, 97) {
+	for part in Streaming.write_iter(values(count), JsonStream.encoder({ format: format }).with_chunk_bytes(97)) {
 		match part {
 			Ok(chunk) => {
 				if chunk.is_empty() or chunk.len() > 97 {
@@ -107,9 +107,9 @@ pipeline! : U64, JsonStream.Format => U64
 pipeline! = |count, format| {
 	input : Stream(Try(List(U8), [Injected]))
 	input = source(count, format).map(|chunk| Ok(chunk)).stream()
-	parsed = JsonStream.parse_stream(input, { format: format })
+	parsed = Streaming.read_stream(input, JsonStream.decoder({ format: format }))
 	var $bytes = 0.U64
-	for! part in JsonStream.write_stream(Streaming.values_stream(parsed), { format: format }, 97) {
+	for! part in Streaming.write_stream(Streaming.values_stream(parsed), JsonStream.encoder({ format: format }).with_chunk_bytes(97)) {
 		match part {
 			Ok(chunk) => {
 				if chunk.is_empty() or chunk.len() > 97 {
@@ -165,7 +165,7 @@ retain_sample = |format, salt| {
 	)
 	var $retained = ""
 	var $finished = False
-	for result in JsonStream.parse_iter(chunks, { format: format }) {
+	for result in Streaming.read_iter(chunks, JsonStream.decoder({ format: format })) {
 		match result {
 			Ok(Value(String(text))) => {
 				$retained = text
@@ -199,7 +199,7 @@ fragmented_sample = |size| {
 	)
 	var $length = 0.U64
 	var $finished = False
-	for result in JsonStream.parse_iter(chunks, { format: Array }) {
+	for result in Streaming.read_iter(chunks, JsonStream.decoder({ format: Array })) {
 		match result {
 			Ok(Value(String(text))) => {
 				$length = $length + text.count_utf8_bytes()

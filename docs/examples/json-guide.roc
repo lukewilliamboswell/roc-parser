@@ -101,7 +101,7 @@ report : Str -> Str
 report = |text| {
 	match JsonValue.parse_str(text) {
 		Ok(_) => "valid"
-		Err(InvalidJsonValue({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidJsonValue({ line, column, problem })) => "${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}"
 	}
 }
 
@@ -136,7 +136,7 @@ modes = |text| {
 		|(name, chosen)| {
 			match JsonValue.parse_with(text, chosen) {
 				Ok(value) => "${name}: ${JsonValue.to_str(value) ?? "?"}"
-				Err(InvalidJsonValue({ line, column, message })) => "${name}: ${line.to_str()}:${column.to_str()}: ${message}"
+				Err(InvalidJsonValue({ line, column, problem })) => "${name}: ${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}"
 			}
 		},
 	)
@@ -240,7 +240,7 @@ settings = Literal.require(
 
 # tag::compose[]
 ## Every value of a JSON Lines (newline-delimited JSON) log.
-json_lines : Str -> Try(List(JsonValue), [ParseError({ message : Str, offset : U64 })])
+json_lines : Str -> Try(List(JsonValue), [ParseError({ problem : Parser.Problem(JsonValue.Problem), offset : U64 })])
 json_lines = |text| Utf8.parse_str(Parser.many(JsonValue.parser), text)
 
 # end::compose[]
@@ -275,7 +275,7 @@ show! : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)]) => Try({}, _)
 show! = |parsed| {
 	match parsed {
 		Ok(value) => Stdout.line!(JsonValue.to_str(value) ?? "not writable")?
-		Err(InvalidJsonValue({ line, column, message })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${message}")?
+		Err(InvalidJsonValue({ line, column, problem })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}")?
 	}
 	Ok({})
 }

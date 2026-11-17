@@ -48,7 +48,68 @@ JsonValue := [
 
 	## Location and explanation of invalid JSON input. Lines and columns are
 	## one-based; a column counts bytes from the start of its line.
-	Error : { line : U64, column : U64, message : Str }
+	Error : { line : U64, column : U64, problem : Parser.Problem(Problem) }
+
+	## A parser resource bound, preserving its configured maximum.
+	Limit : [DocumentBytes, Nesting, ArrayItems, ObjectMembers, StringBytes, NumberCharacters]
+
+	## Why an exact numeric lexeme cannot be represented interoperably.
+	NumberProblem : [NotFinite, UnsafeInteger, SignificantDigits, DoubleOverflow, DoubleUnderflow]
+
+	## Structured JSON syntax, option, resource, and numeric failures.
+	Problem : [LimitExceeded({ limit : Limit, max : U64 }), TrailingComma, ExpectedArrayDelimiter, ExpectedObjectDelimiter, InvalidLiteral, ExpectedValue, UnexpectedContent, BomNotAllowed, TopLevelRequired([Object, ObjectOrArray]), ExpectedStringKey, ExpectedKeyColon, DuplicateKey(Str), ConflictingDuplicateKey(Str), CommentsNotAllowed, UnterminatedComment, InvalidUtf8, UnterminatedString, InvalidUnicodeEscape, UnpairedSurrogate, InvalidEscape, ControlCharacter(U32), LeadingZero, ExpectedMinusDigit, ExpectedFractionDigit, ExpectedExponentDigit, NonInteroperableNumber({ text : Str, reason : NumberProblem })]
+
+	## Human-readable display text. Match Problem tags for program decisions.
+	describe_problem : Parser.Problem(Problem) -> Str
+	describe_problem = |problem| match problem {
+		TrailingComma => "trailing comma is not allowed"
+		ExpectedArrayDelimiter => "expected ',' or ']' after an array item"
+		ExpectedObjectDelimiter => "expected ',' or '}' after an object member"
+		InvalidLiteral => "invalid literal: expected true, false or null"
+		ExpectedValue => "expected a JSON value"
+		UnexpectedContent => "unexpected content after the JSON value"
+		BomNotAllowed => "byte order mark is not allowed"
+		TopLevelRequired(ObjectOrArray) => "top-level value must be an object or an array"
+		TopLevelRequired(Object) => "top-level value must be an object"
+		ExpectedStringKey => "expected a string key"
+		ExpectedKeyColon => "expected ':' after an object key"
+		CommentsNotAllowed => "comments are not allowed"
+		UnterminatedComment => "unterminated block comment"
+		InvalidUtf8 => "invalid UTF-8"
+		UnterminatedString => "unterminated string"
+		InvalidUnicodeEscape => "invalid \\u escape: expected four hexadecimal digits"
+		UnpairedSurrogate => "unpaired surrogate in \\u escape"
+		InvalidEscape => "invalid escape sequence"
+		LeadingZero => "leading zeros are not allowed in numbers"
+		ExpectedMinusDigit => "expected a digit after '-'"
+		ExpectedFractionDigit => "expected a digit after the decimal point"
+		ExpectedExponentDigit => "expected a digit in the exponent"
+		LimitExceeded({ limit, max }) => match limit {
+			DocumentBytes => "document exceeds the limit of ${max.to_str()} bytes"
+			Nesting => "nesting exceeds the limit of ${max.to_str()} levels"
+			ArrayItems => "array has more than ${max.to_str()} items"
+			ObjectMembers => "object has more than ${max.to_str()} members"
+			StringBytes => "string exceeds the limit of ${max.to_str()} bytes"
+			NumberCharacters => "number exceeds the limit of ${max.to_str()} characters"
+		}
+		DuplicateKey(key) => "duplicate key ${quote(key)}"
+		ConflictingDuplicateKey(key) => "duplicate key ${quote(key)} with a different value"
+		ControlCharacter(code) => "control character U+${hex_upper(code)} must be escaped"
+		NonInteroperableNumber({ text, reason }) => {
+			detail = match reason {
+				NotFinite => "it is not a finite number"
+				UnsafeInteger => "it is an integer beyond 2^53-1 in magnitude"
+				SignificantDigits => "it has more than 17 significant digits"
+				DoubleOverflow => "it is too large for a double"
+				DoubleUnderflow => "it underflows to zero as a double"
+			}
+			shown = excerpt(text.to_utf8(), 0, text.count_utf8_bytes())
+			"number ${shown} is not interoperable: ${detail}"
+		}
+		UnexpectedInput => "unexpected input"
+		NoAlternatives => "no alternatives"
+		CharacterNotFound => "character not found"
+	}
 
 	## Compare two JSON values structurally. Numbers compare by their text, so
 	## `Number("1.0")` and `Number("1")` differ.
@@ -129,7 +190,7 @@ JsonValue := [
 	validate : ValidationProps -> Try(JsonValue, [BadQuotedBytes(Str)])
 	validate = |props| {
 		JsonValue.parse_with(props.source, props.options)
-			.map_err(|InvalidJsonValue(error)| Quotation.error({ name: props.name, format: "JSON", message: error.message, line: error.line, column: error.column }))
+			.map_err(|InvalidJsonValue(error)| Quotation.error({ name: props.name, format: "JSON", message: JsonValue.describe_problem(error.problem), line: error.line, column: error.column }))
 	}
 
 	## Use a strict JSON document as a quoted value.
@@ -152,7 +213,7 @@ JsonValue := [
 	## ```roc
 	## expect JsonValue.parse_str("{\"a\": [true, null]}") == Ok(Object([{ key: "a", value: Array([Bool(True), Null]) }]))
 	##
-	## expect JsonValue.parse_str("[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, message: "trailing comma is not allowed" }))
+	## expect JsonValue.parse_str("[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, problem: TrailingComma }))
 	## ```
 	parse_str : Str -> Try(JsonValue, [InvalidJsonValue(Error)])
 	parse_str = |input| JsonValue.parse_with(input, {})
@@ -169,10 +230,10 @@ JsonValue := [
 				if pos == input.count_utf8_bytes() {
 					Ok(value)
 				} else {
-					Err(InvalidJsonValue(locate(input, pos, "unexpected content after the JSON value")))
+					Err(InvalidJsonValue(locate(input, pos, UnexpectedContent)))
 				}
 
-			Err(JsonFail(failure)) => Err(InvalidJsonValue(locate(input, failure.offset, failure.message)))
+			Err(JsonFail(failure)) => Err(InvalidJsonValue(locate(input, failure.offset, failure.problem)))
 		}
 	}
 
@@ -192,22 +253,22 @@ JsonValue := [
 	parse_reusing : Str, Options, Workspace -> { result : Try(JsonValue, [InvalidJsonValue(Error)]), workspace : Workspace }
 	parse_reusing = |input, options, workspace| match scan_reusing(input, input.to_utf8(), options, workspace) {
 		Ok(parsed) => {
-			result = if (parsed.pos == input.count_utf8_bytes()) Ok(parsed.value) else Err(InvalidJsonValue(locate(input, parsed.pos, "unexpected content after the JSON value")))
+			result = if (parsed.pos == input.count_utf8_bytes()) Ok(parsed.value) else Err(InvalidJsonValue(locate(input, parsed.pos, UnexpectedContent)))
 			{ result, workspace: parsed.workspace }
 		}
-		Err(JsonFail(failure)) => { result: Err(InvalidJsonValue(locate(input, failure.offset, failure.message))), workspace: Workspace.empty() }
+		Err(JsonFail(failure)) => { result: Err(InvalidJsonValue(locate(input, failure.offset, failure.problem))), workspace: Workspace.empty() }
 	}
 
 	## A [Parser] that reads one strict JSON value and the whitespace around
 	## it, and leaves the rest of the input for the next parser. A failure is
-	## `ParseError({ message, offset })` with the byte offset of the problem.
+	## `ParseError({ problem, offset })` with the byte offset of the problem.
 	##
 	## ```roc
 	## expect Utf8.parse_str_partial(JsonValue.parser, "[1] rest").map_ok(|{ rest, .. }| rest) == Ok("rest")
 	##
-	## expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ message: "expected ',' or ']' after an array item", offset: 3 }))
+	## expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ problem: ExpectedArrayDelimiter, offset: 3 }))
 	## ```
-	parser : Parser(Utf8.Bytes, JsonValue)
+	parser : Parser(Utf8.Bytes, JsonValue, Problem)
 	parser = JsonValue.parser_with({})
 
 	## Like [JsonValue.parser], with the given [JsonValue.Options].
@@ -216,7 +277,7 @@ JsonValue := [
 	## ```roc
 	## expect Utf8.parse_str(JsonValue.parser_with({ comments: True }), "1 // one") == Ok(Number("1"))
 	## ```
-	parser_with : Options -> Parser(Utf8.Bytes, JsonValue)
+	parser_with : Options -> Parser(Utf8.Bytes, JsonValue, Problem)
 	parser_with = |options|
 		Parser.custom(
 			|input| {
@@ -224,7 +285,7 @@ JsonValue := [
 				# validating each one again.
 				match scan(Str.from_utf8(input) ?? "", input, options) {
 					Ok({ value, pos }) => Ok({ value, rest: input.drop_first(pos) })
-					Err(JsonFail(failure)) => Err(ParseError({ message: failure.message, offset: failure.offset }))
+					Err(JsonFail(failure)) => Err(ParseError({ problem: failure.problem, offset: failure.offset }))
 				}
 			},
 		)
@@ -479,15 +540,15 @@ JsonValue := [
 
 # ------------------------------------------------------------------ reading
 
-Failure : { offset : U64, message : Str }
+Failure : { offset : U64, problem : Parser.Problem(JsonValue.Problem) }
 
-fail : U64, Str -> Try(_, [JsonFail(Failure)])
-fail = |offset, message| Err(JsonFail({ offset, message }))
+fail : U64, Parser.Problem(JsonValue.Problem) -> Try(_, [JsonFail(Failure)])
+fail = |offset, problem| Err(JsonFail({ offset, problem }))
 
-locate : Str, U64, Str -> JsonValue.Error
-locate = |input, offset, message| {
+locate : Str, U64, Parser.Problem(JsonValue.Problem) -> JsonValue.Error
+locate = |input, offset, problem| {
 	position = Quotation.position(input, offset)
-	{ line: position.line, column: position.column, message }
+	{ line: position.line, column: position.column, problem }
 }
 
 ## An array or object whose closing bracket has not been read yet, saved
@@ -523,7 +584,7 @@ scan = |src, bytes, options| scan_reusing(src, bytes, options, JsonValue.Workspa
 scan_reusing : Str, List(U8), JsonValue.Options, JsonValue.Workspace -> Try({ value : JsonValue, pos : U64, workspace : JsonValue.Workspace }, [JsonFail(Failure)])
 scan_reusing = |src, bytes, options, workspace| {
 	if bytes.len() > options.max_bytes {
-		return fail(options.max_bytes, "document exceeds the limit of ${options.max_bytes.to_str()} bytes")
+		return fail(options.max_bytes, LimitExceeded({ limit: DocumentBytes, max: options.max_bytes }))
 	}
 	check = src.is_empty()
 	comments = options.comments
@@ -570,17 +631,17 @@ scan_reusing = |src, bytes, options, workspace| {
 						next = skip_ws(bytes, after + 1, comments, check)?
 						if bytes.get(next) == Ok(']') {
 							if !options.trailing_commas {
-								return fail(after, "trailing comma is not allowed")
+								return fail(after, TrailingComma)
 							}
 							$close = next
 						} else if $items.len() - $first >= max_items {
-							return fail(next, "array has more than ${max_items.to_str()} items")
+							return fail(next, LimitExceeded({ limit: ArrayItems, max: max_items }))
 						} else {
 							$have = False
 							$pos = next
 						}
 					} else if byte != ']' {
-						return fail(after, "expected ',' or ']' after an array item")
+						return fail(after, ExpectedArrayDelimiter)
 					}
 					if $have {
 						$value = Array(copy_from($items, $first))
@@ -613,11 +674,11 @@ scan_reusing = |src, bytes, options, workspace| {
 						next = skip_ws(bytes, after + 1, comments, check)?
 						if bytes.get(next) == Ok('}') {
 							if !options.trailing_commas {
-								return fail(after, "trailing comma is not allowed")
+								return fail(after, TrailingComma)
 							}
 							$close = next
 						} else if $members.len() - $first >= max_items {
-							return fail(next, "object has more than ${max_items.to_str()} members")
+							return fail(next, LimitExceeded({ limit: ObjectMembers, max: max_items }))
 						} else {
 							member = scan_key(src, bytes, next, options)?
 							$key = member.key
@@ -626,7 +687,7 @@ scan_reusing = |src, bytes, options, workspace| {
 							$pos = member.pos
 						}
 					} else if byte != '}' {
-						return fail(after, "expected ',' or '}' after an object member")
+						return fail(after, ExpectedObjectDelimiter)
 					}
 					if $have {
 						$value = Object(close_members($members, $key_ats, $first, options.duplicates)?)
@@ -656,7 +717,7 @@ scan_reusing = |src, bytes, options, workspace| {
 				$have = True
 			} else if byte == '[' {
 				if $open.len() >= max_depth {
-					return fail($pos, "nesting exceeds the limit of ${max_depth.to_str()} levels")
+					return fail($pos, LimitExceeded({ limit: Nesting, max: max_depth }))
 				}
 				next = skip_ws(bytes, $pos + 1, comments, check)?
 				if bytes.get(next) == Ok(']') {
@@ -664,7 +725,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = next + 1
 					$have = True
 				} else if max_items == 0 {
-					return fail(next, "array has more than 0 items")
+					return fail(next, LimitExceeded({ limit: ArrayItems, max: 0 }))
 				} else {
 					$open = $open.append({ container: $container, first: $first, key: $key, key_at: $key_at })
 					$container = InArray
@@ -673,7 +734,7 @@ scan_reusing = |src, bytes, options, workspace| {
 				}
 			} else if byte == '{' {
 				if $open.len() >= max_depth {
-					return fail($pos, "nesting exceeds the limit of ${max_depth.to_str()} levels")
+					return fail($pos, LimitExceeded({ limit: Nesting, max: max_depth }))
 				}
 				next = skip_ws(bytes, $pos + 1, comments, check)?
 				if bytes.get(next) == Ok('}') {
@@ -681,7 +742,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = next + 1
 					$have = True
 				} else if max_items == 0 {
-					return fail(next, "object has more than 0 members")
+					return fail(next, LimitExceeded({ limit: ObjectMembers, max: 0 }))
 				} else {
 					member = scan_key(src, bytes, next, options)?
 					$open = $open.append({ container: $container, first: $first, key: $key, key_at: $key_at })
@@ -697,7 +758,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = $pos + 4
 					$have = True
 				} else {
-					return fail($pos, "invalid literal: expected true, false or null")
+					return fail($pos, InvalidLiteral)
 				}
 			} else if byte == 'f' {
 				if at3(bytes, $pos + 1, 'a', 'l', 's') and bytes.get($pos + 4) == Ok('e') {
@@ -705,7 +766,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = $pos + 5
 					$have = True
 				} else {
-					return fail($pos, "invalid literal: expected true, false or null")
+					return fail($pos, InvalidLiteral)
 				}
 			} else if byte == 'n' {
 				if at3(bytes, $pos + 1, 'u', 'l', 'l') {
@@ -713,7 +774,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = $pos + 4
 					$have = True
 				} else {
-					return fail($pos, "invalid literal: expected true, false or null")
+					return fail($pos, InvalidLiteral)
 				}
 			} else if byte == '-' or (byte >= '0' and byte <= '9') or (non_finite and (byte == 'N' or byte == 'I')) {
 				number = scan_number(src, bytes, $pos, options)?
@@ -721,7 +782,7 @@ scan_reusing = |src, bytes, options, workspace| {
 				$pos = number.end
 				$have = True
 			} else {
-				return fail($pos, "expected a JSON value")
+				return fail($pos, ExpectedValue)
 			}
 		}
 	}
@@ -740,7 +801,7 @@ skip_bom = |bytes, allowed| {
 		if allowed {
 			Ok(3)
 		} else {
-			fail(0, "byte order mark is not allowed")
+			fail(0, BomNotAllowed)
 		}
 	} else {
 		Ok(0)
@@ -764,14 +825,14 @@ check_top_level = |bytes, pos, options| {
 		Any => Ok({})
 		ObjectOrArray =>
 			if scalar {
-				fail(pos, "top-level value must be an object or an array")
+				fail(pos, TopLevelRequired(ObjectOrArray))
 			} else {
 				Ok({})
 			}
 
 		Object =>
 			if scalar or byte == '[' {
-				fail(pos, "top-level value must be an object")
+				fail(pos, TopLevelRequired(Object))
 			} else {
 				Ok({})
 			}
@@ -783,12 +844,12 @@ check_top_level = |bytes, pos, options| {
 scan_key : Str, List(U8), U64, JsonValue.Options -> Try({ key : Str, pos : U64 }, [JsonFail(Failure)])
 scan_key = |src, bytes, start, options| {
 	if bytes.get(start) != Ok('"') {
-		return fail(start, "expected a string key")
+		return fail(start, ExpectedStringKey)
 	}
 	string = scan_string(src, bytes, start, options)?
 	colon = skip_ws(bytes, string.end, options.comments, src.is_empty())?
 	if bytes.get(colon) != Ok(':') {
-		return fail(colon, "expected ':' after an object key")
+		return fail(colon, ExpectedKeyColon)
 	}
 	Ok({ key: string.str, pos: skip_ws(bytes, colon + 1, options.comments, src.is_empty())? })
 }
@@ -819,7 +880,7 @@ close_members = |members, key_ats, first, duplicates| {
 									$out = $out.set(earlier, { key: member.key, value: member.value }) ?? []
 								}
 
-								Err(message) => return fail(key_ats.get($index) ?? 0, message)
+								Err(problem) => return fail(key_ats.get($index) ?? 0, problem)
 							}
 						}
 					}
@@ -848,7 +909,7 @@ close_members = |members, key_ats, first, duplicates| {
 									$out = $out.set(earlier, { key: member.key, value: member.value }) ?? []
 								}
 
-								Err(message) => return fail(key_ats.get($index) ?? 0, message)
+								Err(problem) => return fail(key_ats.get($index) ?? 0, problem)
 							}
 						}
 					}
@@ -885,16 +946,16 @@ small_object : U64
 small_object = 16
 
 ## What to do with `member` when `out[earlier]` has the same key.
-duplicate_action : List(Member), U64, Member, [Reject, CollapseIdentical, KeepFirst, KeepLast] -> Try([Skip, Replace], Str)
+duplicate_action : List(Member), U64, Member, [Reject, CollapseIdentical, KeepFirst, KeepLast] -> Try([Skip, Replace], Parser.Problem(JsonValue.Problem))
 duplicate_action = |out, earlier, member, duplicates| {
 	match duplicates {
-		Reject => Err("duplicate key ${quote(member.key)}")
+		Reject => Err(DuplicateKey(member.key))
 		KeepFirst => Ok(Skip)
 		KeepLast => Ok(Replace)
 		CollapseIdentical =>
 			match out.get(earlier) {
 				Ok(kept) if kept.value == member.value => Ok(Skip)
-				_ => Err("duplicate key ${quote(member.key)} with a different value")
+				_ => Err(ConflictingDuplicateKey(member.key))
 			}
 	}
 }
@@ -950,7 +1011,7 @@ skip_ws_and_comments = |bytes, start, comments, check| {
 			$pos = Utf8.skip_class(bytes, $pos + 1, ws_class)
 		} else if byte == '/' {
 			if !comments {
-				return fail($pos, "comments are not allowed")
+				return fail($pos, CommentsNotAllowed)
 			}
 			next = bytes.get($pos + 1) ?? 0
 			if next == '/' {
@@ -962,7 +1023,7 @@ skip_ws_and_comments = |bytes, start, comments, check| {
 			} else if next == '*' {
 				close = block_comment_end(bytes, $pos + 2)
 				if close >= bytes.len() {
-					return fail($pos, "unterminated block comment")
+					return fail($pos, UnterminatedComment)
 				}
 				if check {
 					check_utf8(bytes, $pos + 2, close)?
@@ -997,7 +1058,7 @@ check_utf8 : List(U8), U64, U64 -> Try({}, [JsonFail(Failure)])
 check_utf8 = |bytes, start, end| {
 	match Str.from_utf8(bytes.sublist({ start, len: end - start })) {
 		Ok(_) => Ok({})
-		Err(BadUtf8({ index, .. })) => fail(start + index, "invalid UTF-8")
+		Err(BadUtf8({ index, .. })) => fail(start + index, InvalidUtf8)
 	}
 }
 
@@ -1009,7 +1070,7 @@ slice_checked = |src, bytes, start, end| {
 	if src.is_empty() {
 		match Str.from_utf8(bytes.sublist({ start, len: end - start })) {
 			Ok(str) => Ok(str)
-			Err(BadUtf8({ index, .. })) => fail(start + index, "invalid UTF-8")
+			Err(BadUtf8({ index, .. })) => fail(start + index, InvalidUtf8)
 		}
 	} else {
 		match src.drop_first_bytes(start) {
@@ -1059,7 +1120,7 @@ scan_string = |src, bytes, start, options| {
 	run_end = plain_string_end(bytes, start + 1)
 	if bytes.get(run_end) == Ok('"') {
 		if run_end - start - 1 > options.max_string_bytes {
-			return fail(start, "string exceeds the limit of ${options.max_string_bytes.to_str()} bytes")
+			return fail(start, LimitExceeded({ limit: StringBytes, max: options.max_string_bytes }))
 		}
 		Ok({ str: slice_checked(src, bytes, start + 1, run_end)?, end: run_end + 1 })
 	} else {
@@ -1078,31 +1139,31 @@ scan_escaped_string = |bytes, start, run_end, options| {
 		byte =
 			match bytes.get($pos) {
 				Ok(b) => b
-				Err(_) => return fail(start, "unterminated string")
+				Err(_) => return fail(start, UnterminatedString)
 			}
 		if byte == '"' {
 			if $out.len() > options.max_string_bytes {
-				return fail(start, "string exceeds the limit of ${options.max_string_bytes.to_str()} bytes")
+				return fail(start, LimitExceeded({ limit: StringBytes, max: options.max_string_bytes }))
 			}
 			return match Str.from_utf8($out) {
 				Ok(str) => Ok({ str, end: $pos + 1 })
 				Err(_) => {
 					# Escapes decode to valid UTF-8, so the bad bytes are in the input.
 					check_utf8(bytes, start + 1, $pos)?
-					fail(start, "invalid UTF-8")
+					fail(start, InvalidUtf8)
 				}
 			}
 		} else if byte == '\\' {
 			escape =
 				match bytes.get($pos + 1) {
 					Ok(b) => b
-					Err(_) => return fail(start, "unterminated string")
+					Err(_) => return fail(start, UnterminatedString)
 				}
 			if escape == 'u' {
 				code =
 					match hex4(bytes, $pos + 2) {
 						Ok(c) => c
-						Err(_) => return fail($pos, "invalid \\u escape: expected four hexadecimal digits")
+						Err(_) => return fail($pos, InvalidUnicodeEscape)
 					}
 				if code >= 0xD800 and code <= 0xDBFF {
 					low =
@@ -1121,7 +1182,7 @@ scan_escaped_string = |bytes, start, run_end, options| {
 								$pos = $pos + 6
 							}
 
-							Reject => return fail($pos, "unpaired surrogate in \\u escape")
+							Reject => return fail($pos, UnpairedSurrogate)
 						}
 					}
 				} else if code >= 0xDC00 and code <= 0xDFFF {
@@ -1131,7 +1192,7 @@ scan_escaped_string = |bytes, start, run_end, options| {
 							$pos = $pos + 6
 						}
 
-						Reject => return fail($pos, "unpaired surrogate in \\u escape")
+						Reject => return fail($pos, UnpairedSurrogate)
 					}
 				} else {
 					$out = append_utf8($out, code)
@@ -1152,14 +1213,14 @@ scan_escaped_string = |bytes, start, run_end, options| {
 					} else if escape == 'f' {
 						0x0C
 					} else {
-						return fail($pos, "invalid escape sequence")
+						return fail($pos, InvalidEscape)
 					}
 				$out = $out.append(decoded)
 				$pos = $pos + 2
 			}
 		} else if byte < 0x20 {
 			if !options.control_characters {
-				return fail($pos, "control character U+${hex_upper(byte.to_u32())} must be escaped")
+				return fail($pos, ControlCharacter(byte.to_u32()))
 			}
 			$out = $out.append(byte)
 			$pos = $pos + 1
@@ -1231,12 +1292,12 @@ scan_number = |src, bytes, start, options| {
 			Err(_) => number_end(bytes, start)?
 		}
 	if end - start > options.max_number_digits {
-		return fail(start, "number exceeds the limit of ${options.max_number_digits.to_str()} characters")
+		return fail(start, LimitExceeded({ limit: NumberCharacters, max: options.max_number_digits }))
 	}
 	if options.interoperable_numbers {
 		match interoperable(bytes, start, end) {
 			Ok({}) => {}
-			Err(reason) => return fail(start, "number ${excerpt(bytes, start, end)} is not interoperable: ${reason}")
+			Err(reason) => return fail(start, NonInteroperableNumber({ text: slice_checked(src, bytes, start, end)?, reason }))
 		}
 	}
 	Ok({ str: slice_checked(src, bytes, start, end)?, end })
@@ -1274,18 +1335,18 @@ number_end = |bytes, start| {
 	if first == '0' {
 		$pos = $pos + 1
 		if is_digit(bytes.get($pos) ?? 0) {
-			return fail(start, "leading zeros are not allowed in numbers")
+			return fail(start, LeadingZero)
 		}
 	} else if first >= '1' and first <= '9' {
 		$pos = digits_end(bytes, $pos + 1)
 	} else if $pos > start {
-		return fail(start, "expected a digit after '-'")
+		return fail(start, ExpectedMinusDigit)
 	} else {
-		return fail(start, "expected a JSON value")
+		return fail(start, ExpectedValue)
 	}
 	if bytes.get($pos) == Ok('.') {
 		if !is_digit(bytes.get($pos + 1) ?? 0) {
-			return fail(start, "expected a digit after the decimal point")
+			return fail(start, ExpectedFractionDigit)
 		}
 		$pos = digits_end(bytes, $pos + 2)
 	}
@@ -1297,7 +1358,7 @@ number_end = |bytes, start| {
 			$pos = $pos + 1
 		}
 		if !is_digit(bytes.get($pos) ?? 0) {
-			return fail(start, "expected a digit in the exponent")
+			return fail(start, ExpectedExponentDigit)
 		}
 		$pos = digits_end(bytes, $pos + 1)
 	}
@@ -1342,12 +1403,12 @@ is_non_finite_lexeme = |bytes| non_finite_end(bytes, 0, True) == Ok(bytes.len())
 
 ## Why the number [start, end) cannot be held by an IEEE 754 double as
 ## I-JSON (RFC 7493 section 2.2) requires, if it cannot.
-interoperable : List(U8), U64, U64 -> Try({}, Str)
+interoperable : List(U8), U64, U64 -> Try({}, JsonValue.NumberProblem)
 interoperable = |bytes, start, end| {
 	sign = if (bytes.get(start) == Ok('-')) 1 else 0
 	first = bytes.get(start + sign) ?? 0
 	if first == 'N' or first == 'I' {
-		return Err("it is not a finite number")
+		return Err(NotFinite)
 	}
 	var $pos = start + sign
 	var $integer = True
@@ -1381,24 +1442,24 @@ interoperable = |bytes, start, end| {
 	}
 	if $integer {
 		if $digits > 16 or $value > max_safe_integer {
-			Err("it is an integer beyond 2^53-1 in magnitude")
+			Err(UnsafeInteger)
 		} else {
 			Ok({})
 		}
 	} else if $nonzero and $last_nonzero - $first_nonzero + 1 > 17 {
-		Err("it has more than 17 significant digits")
+		Err(SignificantDigits)
 	} else {
 		match F64.from_str(Str.from_utf8(bytes.sublist({ start, len: end - start })) ?? "") {
 			Ok(double) =>
 				if !double.is_finite() {
-					Err("it is too large for a double")
+					Err(DoubleOverflow)
 				} else if $nonzero and double == 0.0 {
-					Err("it underflows to zero as a double")
+					Err(DoubleUnderflow)
 				} else {
 					Ok({})
 				}
 
-			Err(_) => Err("it is too large for a double")
+			Err(_) => Err(DoubleOverflow)
 		}
 	}
 }
@@ -1748,13 +1809,13 @@ error_of = |input, options| {
 message_of : Str, JsonValue.Options -> Str
 message_of = |input, options| {
 	match error_of(input, options) {
-		Ok(error) => error.message
+		Ok(error) => JsonValue.describe_problem(error.problem)
 		Err(_) => ""
 	}
 }
 
 # The failure `parser_with` reports for raw bytes, or `Err(Parsed)`.
-parser_failure : List(U8), JsonValue.Options -> Try({ message : Str, offset : U64 }, [Parsed])
+parser_failure : List(U8), JsonValue.Options -> Try({ problem : Parser.Problem(JsonValue.Problem), offset : U64 }, [Parsed])
 parser_failure = |bytes, options| {
 	match Parser.run(JsonValue.parser_with(options), bytes) {
 		Ok(_) => Err(Parsed)
@@ -1898,51 +1959,51 @@ expect JsonValue.parse_str("\"\"") == Ok(String("")) and JsonValue.parse_str("[]
 expect ["0", "-0", "10", "1.0", "0.0", "0e0", "1E3", "-0.0e-0", "1e+2", "123456789012345678901234567890"].all(|text| JsonValue.parse_str(text) == Ok(Number(text)))
 
 # Number grammar errors point at the start of the number.
-expect error_of("01", {}) == Ok({ line: 1, column: 1, message: "leading zeros are not allowed in numbers" })
-expect error_of("[-01]", {}) == Ok({ line: 1, column: 2, message: "leading zeros are not allowed in numbers" })
-expect error_of("00", {}) == Ok({ line: 1, column: 1, message: "leading zeros are not allowed in numbers" })
-expect error_of("-", {}) == Ok({ line: 1, column: 1, message: "expected a digit after '-'" })
-expect error_of("[1, -a]", {}) == Ok({ line: 1, column: 5, message: "expected a digit after '-'" })
-expect error_of("1.", {}) == Ok({ line: 1, column: 1, message: "expected a digit after the decimal point" })
-expect error_of("[1.e3]", {}) == Ok({ line: 1, column: 2, message: "expected a digit after the decimal point" })
+expect error_of("01", {}) == Ok({ line: 1, column: 1, problem: LeadingZero })
+expect error_of("[-01]", {}) == Ok({ line: 1, column: 2, problem: LeadingZero })
+expect error_of("00", {}) == Ok({ line: 1, column: 1, problem: LeadingZero })
+expect error_of("-", {}) == Ok({ line: 1, column: 1, problem: ExpectedMinusDigit })
+expect error_of("[1, -a]", {}) == Ok({ line: 1, column: 5, problem: ExpectedMinusDigit })
+expect error_of("1.", {}) == Ok({ line: 1, column: 1, problem: ExpectedFractionDigit })
+expect error_of("[1.e3]", {}) == Ok({ line: 1, column: 2, problem: ExpectedFractionDigit })
 expect ["1e", "1e+", "1E-", "1.5ex"].all(|text| message_of(text, {}) == "expected a digit in the exponent")
-expect error_of(".5", {}) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
-expect error_of("+1", {}) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
+expect error_of(".5", {}) == Ok({ line: 1, column: 1, problem: ExpectedValue })
+expect error_of("+1", {}) == Ok({ line: 1, column: 1, problem: ExpectedValue })
 
 # Literals are exact.
-expect error_of("tru", {}) == Ok({ line: 1, column: 1, message: "invalid literal: expected true, false or null" })
-expect error_of("[nul]", {}) == Ok({ line: 1, column: 2, message: "invalid literal: expected true, false or null" })
-expect error_of("fals", {}) == Ok({ line: 1, column: 1, message: "invalid literal: expected true, false or null" })
-expect error_of("True", {}) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
-expect error_of("truex", {}) == Ok({ line: 1, column: 5, message: "unexpected content after the JSON value" })
+expect error_of("tru", {}) == Ok({ line: 1, column: 1, problem: InvalidLiteral })
+expect error_of("[nul]", {}) == Ok({ line: 1, column: 2, problem: InvalidLiteral })
+expect error_of("fals", {}) == Ok({ line: 1, column: 1, problem: InvalidLiteral })
+expect error_of("True", {}) == Ok({ line: 1, column: 1, problem: ExpectedValue })
+expect error_of("truex", {}) == Ok({ line: 1, column: 5, problem: UnexpectedContent })
 
 # Structural errors point at the offending byte.
-expect error_of("", {}) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
-expect error_of("  ", {}) == Ok({ line: 1, column: 3, message: "expected a JSON value" })
-expect error_of("[", {}) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
-expect error_of("[1", {}) == Ok({ line: 1, column: 3, message: "expected ',' or ']' after an array item" })
-expect error_of("[1 2]", {}) == Ok({ line: 1, column: 4, message: "expected ',' or ']' after an array item" })
-expect error_of("[1,,2]", {}) == Ok({ line: 1, column: 4, message: "expected a JSON value" })
-expect error_of("{", {}) == Ok({ line: 1, column: 2, message: "expected a string key" })
-expect error_of("{1:2}", {}) == Ok({ line: 1, column: 2, message: "expected a string key" })
-expect error_of("{\"a\" 1}", {}) == Ok({ line: 1, column: 6, message: "expected ':' after an object key" })
-expect error_of("{\"a\"", {}) == Ok({ line: 1, column: 5, message: "expected ':' after an object key" })
-expect error_of("{\"a\":}", {}) == Ok({ line: 1, column: 6, message: "expected a JSON value" })
-expect error_of("{\"a\":1", {}) == Ok({ line: 1, column: 7, message: "expected ',' or '}' after an object member" })
-expect error_of("{\"a\":1 \"b\":2}", {}) == Ok({ line: 1, column: 8, message: "expected ',' or '}' after an object member" })
-expect error_of("{\"a\":1,\"b\"}", {}) == Ok({ line: 1, column: 11, message: "expected ':' after an object key" })
-expect error_of("[1] x", {}) == Ok({ line: 1, column: 5, message: "unexpected content after the JSON value" })
-expect error_of("[1]]", {}) == Ok({ line: 1, column: 4, message: "unexpected content after the JSON value" })
-expect error_of("[1}", {}) == Ok({ line: 1, column: 3, message: "expected ',' or ']' after an array item" })
+expect error_of("", {}) == Ok({ line: 1, column: 1, problem: ExpectedValue })
+expect error_of("  ", {}) == Ok({ line: 1, column: 3, problem: ExpectedValue })
+expect error_of("[", {}) == Ok({ line: 1, column: 2, problem: ExpectedValue })
+expect error_of("[1", {}) == Ok({ line: 1, column: 3, problem: ExpectedArrayDelimiter })
+expect error_of("[1 2]", {}) == Ok({ line: 1, column: 4, problem: ExpectedArrayDelimiter })
+expect error_of("[1,,2]", {}) == Ok({ line: 1, column: 4, problem: ExpectedValue })
+expect error_of("{", {}) == Ok({ line: 1, column: 2, problem: ExpectedStringKey })
+expect error_of("{1:2}", {}) == Ok({ line: 1, column: 2, problem: ExpectedStringKey })
+expect error_of("{\"a\" 1}", {}) == Ok({ line: 1, column: 6, problem: ExpectedKeyColon })
+expect error_of("{\"a\"", {}) == Ok({ line: 1, column: 5, problem: ExpectedKeyColon })
+expect error_of("{\"a\":}", {}) == Ok({ line: 1, column: 6, problem: ExpectedValue })
+expect error_of("{\"a\":1", {}) == Ok({ line: 1, column: 7, problem: ExpectedObjectDelimiter })
+expect error_of("{\"a\":1 \"b\":2}", {}) == Ok({ line: 1, column: 8, problem: ExpectedObjectDelimiter })
+expect error_of("{\"a\":1,\"b\"}", {}) == Ok({ line: 1, column: 11, problem: ExpectedKeyColon })
+expect error_of("[1] x", {}) == Ok({ line: 1, column: 5, problem: UnexpectedContent })
+expect error_of("[1]]", {}) == Ok({ line: 1, column: 4, problem: UnexpectedContent })
+expect error_of("[1}", {}) == Ok({ line: 1, column: 3, problem: ExpectedArrayDelimiter })
 
 # A trailing comma is refused at the comma.
-expect error_of("[1,]", {}) == Ok({ line: 1, column: 3, message: "trailing comma is not allowed" })
-expect error_of("{\"a\":1,}", {}) == Ok({ line: 1, column: 7, message: "trailing comma is not allowed" })
+expect error_of("[1,]", {}) == Ok({ line: 1, column: 3, problem: TrailingComma })
+expect error_of("{\"a\":1,}", {}) == Ok({ line: 1, column: 7, problem: TrailingComma })
 
 # Lines count LF, CR and CRLF; columns count bytes.
-expect error_of("[\n1,\n]", {}) == Ok({ line: 2, column: 2, message: "trailing comma is not allowed" })
-expect error_of("{\r\n\"a\": tru\r\n}", {}) == Ok({ line: 2, column: 6, message: "invalid literal: expected true, false or null" })
-expect error_of("[\"é\",\r\"ü\" x]", {}) == Ok({ line: 2, column: 6, message: "expected ',' or ']' after an array item" })
+expect error_of("[\n1,\n]", {}) == Ok({ line: 2, column: 2, problem: TrailingComma })
+expect error_of("{\r\n\"a\": tru\r\n}", {}) == Ok({ line: 2, column: 6, problem: InvalidLiteral })
+expect error_of("[\"é\",\r\"ü\" x]", {}) == Ok({ line: 2, column: 6, problem: ExpectedArrayDelimiter })
 
 # --- Strings.
 
@@ -1957,29 +2018,29 @@ expect JsonValue.parse_str("\"\\uD83D\\uDE00\"") == Ok(String("😀"))
 expect JsonValue.parse_str("\"\\ud800\\udc00\\udbff\\udfff\"") == Ok(String("\u(10000)\u(10FFFF)"))
 
 # A lone surrogate is refused at its escape.
-expect error_of("\"\\ud800\"", {}) == Ok({ line: 1, column: 2, message: "unpaired surrogate in \\u escape" })
-expect error_of("\"a\\udc00\"", {}) == Ok({ line: 1, column: 3, message: "unpaired surrogate in \\u escape" })
-expect error_of("\"\\ud800\\u0041\"", {}) == Ok({ line: 1, column: 2, message: "unpaired surrogate in \\u escape" })
-expect error_of("\"\\udc00\\ud800\"", {}) == Ok({ line: 1, column: 2, message: "unpaired surrogate in \\u escape" })
+expect error_of("\"\\ud800\"", {}) == Ok({ line: 1, column: 2, problem: UnpairedSurrogate })
+expect error_of("\"a\\udc00\"", {}) == Ok({ line: 1, column: 3, problem: UnpairedSurrogate })
+expect error_of("\"\\ud800\\u0041\"", {}) == Ok({ line: 1, column: 2, problem: UnpairedSurrogate })
+expect error_of("\"\\udc00\\ud800\"", {}) == Ok({ line: 1, column: 2, problem: UnpairedSurrogate })
 
 # Escapes must be known, and `\u` needs four hexadecimal digits.
-expect error_of("\"\\x\"", {}) == Ok({ line: 1, column: 2, message: "invalid escape sequence" })
-expect error_of("\"ab\\'\"", {}) == Ok({ line: 1, column: 4, message: "invalid escape sequence" })
-expect error_of("\"\\U0041\"", {}) == Ok({ line: 1, column: 2, message: "invalid escape sequence" })
-expect error_of("\"\\u12\"", {}) == Ok({ line: 1, column: 2, message: "invalid \\u escape: expected four hexadecimal digits" })
-expect error_of("[\"\\u12G4\"]", {}) == Ok({ line: 1, column: 3, message: "invalid \\u escape: expected four hexadecimal digits" })
+expect error_of("\"\\x\"", {}) == Ok({ line: 1, column: 2, problem: InvalidEscape })
+expect error_of("\"ab\\'\"", {}) == Ok({ line: 1, column: 4, problem: InvalidEscape })
+expect error_of("\"\\U0041\"", {}) == Ok({ line: 1, column: 2, problem: InvalidEscape })
+expect error_of("\"\\u12\"", {}) == Ok({ line: 1, column: 2, problem: InvalidUnicodeEscape })
+expect error_of("[\"\\u12G4\"]", {}) == Ok({ line: 1, column: 3, problem: InvalidUnicodeEscape })
 
 # An unterminated string is reported at its opening quote.
-expect error_of("\"abc", {}) == Ok({ line: 1, column: 1, message: "unterminated string" })
-expect error_of("\"abc\\", {}) == Ok({ line: 1, column: 1, message: "unterminated string" })
-expect error_of("[\"a", {}) == Ok({ line: 1, column: 2, message: "unterminated string" })
-expect error_of("\"a\\\"", {}) == Ok({ line: 1, column: 1, message: "unterminated string" })
+expect error_of("\"abc", {}) == Ok({ line: 1, column: 1, problem: UnterminatedString })
+expect error_of("\"abc\\", {}) == Ok({ line: 1, column: 1, problem: UnterminatedString })
+expect error_of("[\"a", {}) == Ok({ line: 1, column: 2, problem: UnterminatedString })
+expect error_of("\"a\\\"", {}) == Ok({ line: 1, column: 1, problem: UnterminatedString })
 
 # Raw control characters must be escaped; DEL and space need not be.
-expect error_of("\"a\nb\"", {}) == Ok({ line: 1, column: 3, message: "control character U+000A must be escaped" })
-expect error_of("\"\u(0)\"", {}) == Ok({ line: 1, column: 2, message: "control character U+0000 must be escaped" })
-expect error_of("\"\u(1F)\"", {}) == Ok({ line: 1, column: 2, message: "control character U+001F must be escaped" })
-expect error_of("{\"a\tb\":1}", {}) == Ok({ line: 1, column: 4, message: "control character U+0009 must be escaped" })
+expect error_of("\"a\nb\"", {}) == Ok({ line: 1, column: 3, problem: ControlCharacter(0x000A) })
+expect error_of("\"\u(0)\"", {}) == Ok({ line: 1, column: 2, problem: ControlCharacter(0x0000) })
+expect error_of("\"\u(1F)\"", {}) == Ok({ line: 1, column: 2, problem: ControlCharacter(0x001F) })
+expect error_of("{\"a\tb\":1}", {}) == Ok({ line: 1, column: 4, problem: ControlCharacter(0x0009) })
 expect JsonValue.parse_str("\"\u(7F) \"") == Ok(String("\u(7F) "))
 
 # --- The parser.
@@ -1987,18 +2048,18 @@ expect JsonValue.parse_str("\"\u(7F) \"") == Ok(String("\u(7F) "))
 expect Utf8.parse_str_partial(JsonValue.parser, "[1] rest").map_ok(|{ rest, .. }| rest) == Ok("rest")
 expect Utf8.parse_str_partial(JsonValue.parser, "12abc") == Ok({ value: Number("12"), rest: "abc" })
 expect Utf8.parse_str_partial(JsonValue.parser_with({ comments: True }), "{} // c\nx") == Ok({ value: Object([]), rest: "x" })
-expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ message: "expected ',' or ']' after an array item", offset: 3 }))
-expect parser_failure([], {}) == Ok({ message: "expected a JSON value", offset: 0 })
+expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ problem: ExpectedArrayDelimiter, offset: 3 }))
+expect parser_failure([], {}) == Ok({ problem: ExpectedValue, offset: 0 })
 
 # Input that is not UTF-8 is refused where the bad bytes are, in plain and
 # escaped strings, keys and comments; the rest of the input may hold anything.
-expect parser_failure([0xFF], {}) == Ok({ message: "expected a JSON value", offset: 0 })
-expect parser_failure(['"', 0xFF, '"'], {}) == Ok({ message: "invalid UTF-8", offset: 1 })
-expect parser_failure(['"', '\\', 'n', 'a', 0xC3, '"'], {}) == Ok({ message: "invalid UTF-8", offset: 4 })
-expect parser_failure(['[', '"', 'a', 0xE2, 0x82, '"', ']'], {}) == Ok({ message: "invalid UTF-8", offset: 3 })
-expect parser_failure(['{', '"', 0xED, 0xA0, 0x80, '"', ':', '1', '}'], {}) == Ok({ message: "invalid UTF-8", offset: 2 })
-expect parser_failure(['1', ' ', '/', '/', 0xFF], { comments: True }) == Ok({ message: "invalid UTF-8", offset: 4 })
-expect parser_failure(['1', '/', '*', 0xC0, '*', '/'], { comments: True }) == Ok({ message: "invalid UTF-8", offset: 3 })
+expect parser_failure([0xFF], {}) == Ok({ problem: ExpectedValue, offset: 0 })
+expect parser_failure(['"', 0xFF, '"'], {}) == Ok({ problem: InvalidUtf8, offset: 1 })
+expect parser_failure(['"', '\\', 'n', 'a', 0xC3, '"'], {}) == Ok({ problem: InvalidUtf8, offset: 4 })
+expect parser_failure(['[', '"', 'a', 0xE2, 0x82, '"', ']'], {}) == Ok({ problem: InvalidUtf8, offset: 3 })
+expect parser_failure(['{', '"', 0xED, 0xA0, 0x80, '"', ':', '1', '}'], {}) == Ok({ problem: InvalidUtf8, offset: 2 })
+expect parser_failure(['1', ' ', '/', '/', 0xFF], { comments: True }) == Ok({ problem: InvalidUtf8, offset: 4 })
+expect parser_failure(['1', '/', '*', 0xC0, '*', '/'], { comments: True }) == Ok({ problem: InvalidUtf8, offset: 3 })
 expect Parser.run(JsonValue.parser, ['"', 'a', '"', ' ', 0xFF]) == Ok({ value: String("a"), rest: [0xFF] })
 expect Parser.run(JsonValue.parser, ['[', '"', 0xC3, 0xA9, '\\', 't', '"', ']', 0xFF]) == Ok({ value: Array([String("é\t")]), rest: [0xFF] })
 
@@ -2015,23 +2076,23 @@ read_both = |typed, dynamic| {
 }
 
 expect read_both("{\"port\": 8080}", "{\"@context\": 1}") == Ok({ port: 8080, extra: Object([{ key: "@context", value: Number("1") }]) })
-expect read_both("{\"port\": 8080}", "[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, message: "trailing comma is not allowed" }))
+expect read_both("{\"port\": 8080}", "[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, problem: TrailingComma }))
 expect read_both("{\"port\": \"x\"}", "{}").is_err()
 
 # --- Limits.
 
 # 128 levels of nesting are allowed by default, and the 129th bracket is not.
 expect JsonValue.parse_str(nested(128, "1")).is_ok()
-expect error_of(nested(129, "1"), {}) == Ok({ line: 1, column: 129, message: "nesting exceeds the limit of 128 levels" })
-expect error_of(nested(128, "{}"), {}) == Ok({ line: 1, column: 129, message: "nesting exceeds the limit of 128 levels" })
-expect error_of("{\"a\":{\"b\":[]}}", { max_depth: 2 }) == Ok({ line: 1, column: 11, message: "nesting exceeds the limit of 2 levels" })
+expect error_of(nested(129, "1"), {}) == Ok({ line: 1, column: 129, problem: LimitExceeded({ limit: Nesting, max: 128 }) })
+expect error_of(nested(128, "{}"), {}) == Ok({ line: 1, column: 129, problem: LimitExceeded({ limit: Nesting, max: 128 }) })
+expect error_of("{\"a\":{\"b\":[]}}", { max_depth: 2 }) == Ok({ line: 1, column: 11, problem: LimitExceeded({ limit: Nesting, max: 2 }) })
 expect JsonValue.parse_with("{\"a\":{\"b\":1}}", { max_depth: 2 }).is_ok()
 
 # With no nesting allowed, only scalars are accepted.
 expect ["1", "\"s\"", "null"].all(|text| JsonValue.parse_with(text, { max_depth: 0 }).is_ok())
-expect error_of("[]", { max_depth: 0 }) == Ok({ line: 1, column: 1, message: "nesting exceeds the limit of 0 levels" })
-expect error_of(" {}", { max_depth: 0 }) == Ok({ line: 1, column: 2, message: "nesting exceeds the limit of 0 levels" })
-expect JsonValue.parse_with("[1]", { max_depth: 1 }).is_ok() and error_of("[[]]", { max_depth: 1 }) == Ok({ line: 1, column: 2, message: "nesting exceeds the limit of 1 levels" })
+expect error_of("[]", { max_depth: 0 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ limit: Nesting, max: 0 }) })
+expect error_of(" {}", { max_depth: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: Nesting, max: 0 }) })
+expect JsonValue.parse_with("[1]", { max_depth: 1 }).is_ok() and error_of("[[]]", { max_depth: 1 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: Nesting, max: 1 }) })
 
 # A raised limit is checked the same way, and deep nesting does not exhaust
 # the call stack.
@@ -2040,45 +2101,45 @@ expect JsonValue.parse_with(nested(20000, "1"), { max_depth: 20000 }).map_ok(|va
 
 # `max_items` limits each array and object, at the first item past it.
 expect JsonValue.parse_with("[1,2]", { max_items: 2 }).is_ok() and JsonValue.parse_with("[[1,2],[3,4]]", { max_items: 2 }).is_ok()
-expect error_of("[1,2,3]", { max_items: 2 }) == Ok({ line: 1, column: 6, message: "array has more than 2 items" })
-expect error_of("{\"a\":1,\"b\":2,\"c\":3}", { max_items: 2 }) == Ok({ line: 1, column: 14, message: "object has more than 2 members" })
+expect error_of("[1,2,3]", { max_items: 2 }) == Ok({ line: 1, column: 6, problem: LimitExceeded({ limit: ArrayItems, max: 2 }) })
+expect error_of("{\"a\":1,\"b\":2,\"c\":3}", { max_items: 2 }) == Ok({ line: 1, column: 14, problem: LimitExceeded({ limit: ObjectMembers, max: 2 }) })
 expect JsonValue.parse_with("[[],{}]", { max_items: 2 }).is_ok() and JsonValue.parse_with("[]", { max_items: 0 }).is_ok() and JsonValue.parse_with("{}", { max_items: 0 }).is_ok()
-expect error_of("[1]", { max_items: 0 }) == Ok({ line: 1, column: 2, message: "array has more than 0 items" })
-expect error_of("{\"a\":1}", { max_items: 0 }) == Ok({ line: 1, column: 2, message: "object has more than 0 members" })
+expect error_of("[1]", { max_items: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: ArrayItems, max: 0 }) })
+expect error_of("{\"a\":1}", { max_items: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: ObjectMembers, max: 0 }) })
 expect JsonValue.parse_with("[1,2,]", { max_items: 2, trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
-expect parser_failure("[ 1]".to_utf8(), { max_items: 0 }) == Ok({ message: "array has more than 0 items", offset: 2 })
+expect parser_failure("[ 1]".to_utf8(), { max_items: 0 }) == Ok({ problem: LimitExceeded({ limit: ArrayItems, max: 0 }), offset: 2 })
 
 # Members are counted as written, before repeated keys are removed.
-expect error_of("{\"a\":1,\"a\":1}", { max_items: 1, duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
-expect error_of("{\"a\":1,\"a\":1}", { max_items: 1 }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
-expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepFirst }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
-expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepLast }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
+expect error_of("{\"a\":1,\"a\":1}", { max_items: 1, duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1 }) })
+expect error_of("{\"a\":1,\"a\":1}", { max_items: 1 }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1 }) })
+expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepFirst }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1 }) })
+expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepLast }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1 }) })
 expect JsonValue.parse_with("{\"a\":1,\"a\":2}", { max_items: 2, duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
 
 # `max_string_bytes` counts decoded UTF-8 bytes, keys included.
 expect ["\"abc\"", "\"\\u00e9a\"", "\"é\"", "{\"abc\":1}"].all(|text| JsonValue.parse_with(text, { max_string_bytes: 3 }).is_ok())
-expect error_of("\"abcd\"", { max_string_bytes: 3 }) == Ok({ line: 1, column: 1, message: "string exceeds the limit of 3 bytes" })
-expect error_of("[\"\\u00e9ab\"]", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, message: "string exceeds the limit of 3 bytes" })
-expect error_of("{\"abcd\":1}", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, message: "string exceeds the limit of 3 bytes" })
+expect error_of("\"abcd\"", { max_string_bytes: 3 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ limit: StringBytes, max: 3 }) })
+expect error_of("[\"\\u00e9ab\"]", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: StringBytes, max: 3 }) })
+expect error_of("{\"abcd\":1}", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: StringBytes, max: 3 }) })
 expect message_of("\"éé\"", { max_string_bytes: 3 }) == "string exceeds the limit of 3 bytes"
 
 # `max_number_digits` counts every character of a number.
 expect ["123", "-12", "1.5", "0"].all(|text| JsonValue.parse_with(text, { max_number_digits: 3 }).is_ok())
-expect error_of("1234", { max_number_digits: 3 }) == Ok({ line: 1, column: 1, message: "number exceeds the limit of 3 characters" })
-expect error_of("[1,-123]", { max_number_digits: 3 }) == Ok({ line: 1, column: 4, message: "number exceeds the limit of 3 characters" })
+expect error_of("1234", { max_number_digits: 3 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ limit: NumberCharacters, max: 3 }) })
+expect error_of("[1,-123]", { max_number_digits: 3 }) == Ok({ line: 1, column: 4, problem: LimitExceeded({ limit: NumberCharacters, max: 3 }) })
 
 # --- Duplicate keys.
 
 # Keys are compared after unescaping, and the error points at the second key.
-expect error_of("{\"a\":1,\"a\":2}", {}) == Ok({ line: 1, column: 8, message: "duplicate key \"a\"" })
-expect error_of("{\"a\":1,\"\\u0061\":2}", {}) == Ok({ line: 1, column: 8, message: "duplicate key \"a\"" })
+expect error_of("{\"a\":1,\"a\":2}", {}) == Ok({ line: 1, column: 8, problem: DuplicateKey("a") })
+expect error_of("{\"a\":1,\"\\u0061\":2}", {}) == Ok({ line: 1, column: 8, problem: DuplicateKey("a") })
 expect message_of("{\"a\\\"b\":1,\"a\\\"b\":2}", {}) == "duplicate key \"a\\\"b\""
 expect JsonValue.parse_str("{\"a\":{\"a\":1},\"b\":{\"a\":2}}").is_ok()
-expect error_of("[{\"a\":1},\n{\"b\":[],\"b\":{}}]", {}) == Ok({ line: 2, column: 9, message: "duplicate key \"b\"" })
+expect error_of("[{\"a\":1},\n{\"b\":[],\"b\":{}}]", {}) == Ok({ line: 2, column: 9, problem: DuplicateKey("b") })
 
 # CollapseIdentical keeps one copy of an equal repeat and refuses a different one.
 expect JsonValue.parse_with("{\"a\":{\"x\":[1]},\"a\":{\"x\":[1]},\"a\":{\"x\":[1]}}", { duplicates: CollapseIdentical }) == Ok(Object([{ key: "a", value: Object([{ key: "x", value: Array([Number("1")]) }]) }]))
-expect error_of("{\"a\":1,\"a\":2}", { duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, message: "duplicate key \"a\" with a different value" })
+expect error_of("{\"a\":1,\"a\":2}", { duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, problem: ConflictingDuplicateKey("a") })
 expect message_of("{\"a\":1,\"a\":1.0}", { duplicates: CollapseIdentical }) == "duplicate key \"a\" with a different value"
 expect message_of("{\"a\":{\"x\":1,\"y\":2},\"a\":{\"y\":2,\"x\":1}}", { duplicates: CollapseIdentical }) == "duplicate key \"a\" with a different value"
 
@@ -2090,17 +2151,17 @@ expect JsonValue.parse_with("{\"a\":1,\"b\":2,\"a\":3,\"a\":4}", { duplicates: K
 expect {
 	members = "\"k0\":[],\"k1\":[],\"k2\":[],\"k3\":[],\"k4\":[],\"k5\":[],\"k6\":[],\"k7\":[],\"k8\":[],\"k9\":[],\"k10\":[],\"k11\":[],\"k12\":[],\"k13\":[],\"k14\":[],\"k15\":[]"
 	column = Str.count_utf8_bytes("{${members},") + 1
-	error_of("{${members},\"k3\":1}", {}) == Ok({ line: 1, column, message: "duplicate key \"k3\"" })
-		and error_of("{${members},\"k15\":1}", {}) == Ok({ line: 1, column, message: "duplicate key \"k15\"" })
-		and error_of("{${members},\"k16\":1,\"k3\":1}", {}) == Ok({ line: 1, column: column + 8, message: "duplicate key \"k3\"" })
+	error_of("{${members},\"k3\":1}", {}) == Ok({ line: 1, column, problem: DuplicateKey("k3") })
+		and error_of("{${members},\"k15\":1}", {}) == Ok({ line: 1, column, problem: DuplicateKey("k15") })
+		and error_of("{${members},\"k16\":1,\"k3\":1}", {}) == Ok({ line: 1, column: column + 8, problem: DuplicateKey("k3") })
 }
 expect {
 	members = Str.drop_last_bytes(Str.drop_first_bytes(many_keys(20), 1) ?? "", 1) ?? ""
 	column = Str.count_utf8_bytes("{${members},") + 1
 	text = "{${members},\"k3\":1}"
 	keys = key_names(20)
-	error_of(text, {}) == Ok({ line: 1, column, message: "duplicate key \"k3\"" })
-		and error_of(text, { duplicates: CollapseIdentical }) == Ok({ line: 1, column, message: "duplicate key \"k3\" with a different value" })
+	error_of(text, {}) == Ok({ line: 1, column, problem: DuplicateKey("k3") })
+		and error_of(text, { duplicates: CollapseIdentical }) == Ok({ line: 1, column, problem: ConflictingDuplicateKey("k3") })
 		and JsonValue.parse_with("{${members},\"k3\":[]}", { duplicates: CollapseIdentical }).map_ok(JsonValue.keys) == Ok(keys)
 		and JsonValue.parse_with(text, { duplicates: KeepFirst }).map_ok(|value| (JsonValue.keys(value), JsonValue.get(value, "k3"))) == Ok((keys, Ok(Array([]))))
 		and JsonValue.parse_with(text, { duplicates: KeepLast }).map_ok(|value| (JsonValue.keys(value), JsonValue.get(value, "k3"))) == Ok((keys, Ok(Number("1"))))
@@ -2114,48 +2175,48 @@ expect JsonValue.parse_with("// c\n[1, /* x */ 2] // end", { comments: True }) =
 expect JsonValue.parse_with("{\"a\" /* c */ : /* d */ 1 /**/, \"b\"//\r:2}", { comments: True }) == Ok(Object([{ key: "a", value: Number("1") }, { key: "b", value: Number("2") }]))
 expect ["/**/1", "/* a * b **/1", "1 // no newline at the end", "1\r\n// one\r\n"].all(|text| JsonValue.parse_with(text, { comments: True }) == Ok(Number("1")))
 expect JsonValue.parse_with("[1] // end", { comments: True }) == Ok(Array([Number("1")])) and Utf8.parse_str(JsonValue.parser_with({ comments: True }), "[1] // end") == Ok(Array([Number("1")]))
-expect error_of("/* only */", { comments: True }) == Ok({ line: 1, column: 11, message: "expected a JSON value" })
-expect error_of("[1 / 2]", { comments: True }) == Ok({ line: 1, column: 4, message: "expected ',' or ']' after an array item" })
+expect error_of("/* only */", { comments: True }) == Ok({ line: 1, column: 11, problem: ExpectedValue })
+expect error_of("[1 / 2]", { comments: True }) == Ok({ line: 1, column: 4, problem: ExpectedArrayDelimiter })
 
 # Without the option, a comment is refused at its slash.
-expect error_of("// c\n1", {}) == Ok({ line: 1, column: 1, message: "comments are not allowed" })
-expect error_of("[1 /* x */]", {}) == Ok({ line: 1, column: 4, message: "comments are not allowed" })
-expect error_of("1 /", {}) == Ok({ line: 1, column: 3, message: "comments are not allowed" })
+expect error_of("// c\n1", {}) == Ok({ line: 1, column: 1, problem: CommentsNotAllowed })
+expect error_of("[1 /* x */]", {}) == Ok({ line: 1, column: 4, problem: CommentsNotAllowed })
+expect error_of("1 /", {}) == Ok({ line: 1, column: 3, problem: CommentsNotAllowed })
 
 # An unterminated block comment is reported where it opens.
-expect error_of("[1 /* x", { comments: True }) == Ok({ line: 1, column: 4, message: "unterminated block comment" })
-expect error_of("/* */ /*/", { comments: True }) == Ok({ line: 1, column: 7, message: "unterminated block comment" })
+expect error_of("[1 /* x", { comments: True }) == Ok({ line: 1, column: 4, problem: UnterminatedComment })
+expect error_of("/* */ /*/", { comments: True }) == Ok({ line: 1, column: 7, problem: UnterminatedComment })
 
 # Trailing commas.
 expect JsonValue.parse_with("[1,2,]", { trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
 expect JsonValue.parse_with("{\"a\":[1,],}", { trailing_commas: True }) == Ok(Object([{ key: "a", value: Array([Number("1")]) }]))
-expect error_of("[,]", { trailing_commas: True }) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
-expect error_of("[1,,]", { trailing_commas: True }) == Ok({ line: 1, column: 4, message: "expected a JSON value" })
-expect error_of("{,}", { trailing_commas: True }) == Ok({ line: 1, column: 2, message: "expected a string key" })
-expect error_of("1,", { trailing_commas: True }) == Ok({ line: 1, column: 2, message: "unexpected content after the JSON value" })
+expect error_of("[,]", { trailing_commas: True }) == Ok({ line: 1, column: 2, problem: ExpectedValue })
+expect error_of("[1,,]", { trailing_commas: True }) == Ok({ line: 1, column: 4, problem: ExpectedValue })
+expect error_of("{,}", { trailing_commas: True }) == Ok({ line: 1, column: 2, problem: ExpectedStringKey })
+expect error_of("1,", { trailing_commas: True }) == Ok({ line: 1, column: 2, problem: UnexpectedContent })
 expect JsonValue.parse_with("[1, // one\n/* end */]", { comments: True, trailing_commas: True }) == Ok(Array([Number("1")]))
 
 # A byte order mark is skipped only at the start, when allowed.
 expect JsonValue.parse_with("\u(FEFF)[1]", { bom: True }) == Ok(Array([Number("1")]))
-expect error_of("\u(FEFF)[1]", {}) == Ok({ line: 1, column: 1, message: "byte order mark is not allowed" })
-expect error_of("[\u(FEFF)1]", { bom: True }) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
-expect error_of("\u(FEFF)", { bom: True }) == Ok({ line: 1, column: 4, message: "expected a JSON value" })
+expect error_of("\u(FEFF)[1]", {}) == Ok({ line: 1, column: 1, problem: BomNotAllowed })
+expect error_of("[\u(FEFF)1]", { bom: True }) == Ok({ line: 1, column: 2, problem: ExpectedValue })
+expect error_of("\u(FEFF)", { bom: True }) == Ok({ line: 1, column: 4, problem: ExpectedValue })
 expect JsonValue.parse_with("\u(FEFF){}", { bom: True, top_level: Object }) == Ok(Object([]))
-expect error_of("\u(FEFF)[]", { bom: True, top_level: Object }) == Ok({ line: 1, column: 4, message: "top-level value must be an object" })
+expect error_of("\u(FEFF)[]", { bom: True, top_level: Object }) == Ok({ line: 1, column: 4, problem: TopLevelRequired(Object) })
 expect Utf8.parse_str(JsonValue.parser_with({ bom: True }), "\u(FEFF) [1]") == Ok(Array([Number("1")]))
-expect Utf8.parse_str(JsonValue.parser, "\u(FEFF)[1]") == Err(ParseError({ message: "byte order mark is not allowed", offset: 0 }))
+expect Utf8.parse_str(JsonValue.parser, "\u(FEFF)[1]") == Err(ParseError({ problem: BomNotAllowed, offset: 0 }))
 
 # NaN and Infinity, as number text.
 expect JsonValue.parse_with("[NaN, Infinity, -Infinity]", { non_finite: True }) == Ok(Array([Number("NaN"), Number("Infinity"), Number("-Infinity")]))
-expect error_of("NaN", {}) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
-expect error_of("[Infinity]", {}) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
-expect error_of("-Infinity", {}) == Ok({ line: 1, column: 1, message: "expected a digit after '-'" })
-expect error_of("Nan", { non_finite: True }) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
-expect error_of("-NaN", { non_finite: True }) == Ok({ line: 1, column: 1, message: "expected a digit after '-'" })
-expect error_of("[-Inf]", { non_finite: True }) == Ok({ line: 1, column: 2, message: "expected a digit after '-'" })
-expect error_of("Infinityx", { non_finite: True }) == Ok({ line: 1, column: 9, message: "unexpected content after the JSON value" })
+expect error_of("NaN", {}) == Ok({ line: 1, column: 1, problem: ExpectedValue })
+expect error_of("[Infinity]", {}) == Ok({ line: 1, column: 2, problem: ExpectedValue })
+expect error_of("-Infinity", {}) == Ok({ line: 1, column: 1, problem: ExpectedMinusDigit })
+expect error_of("Nan", { non_finite: True }) == Ok({ line: 1, column: 1, problem: ExpectedValue })
+expect error_of("-NaN", { non_finite: True }) == Ok({ line: 1, column: 1, problem: ExpectedMinusDigit })
+expect error_of("[-Inf]", { non_finite: True }) == Ok({ line: 1, column: 2, problem: ExpectedMinusDigit })
+expect error_of("Infinityx", { non_finite: True }) == Ok({ line: 1, column: 9, problem: UnexpectedContent })
 expect JsonValue.parse_with("Infinity", { non_finite: True, max_number_digits: 8 }).is_ok() and message_of("-Infinity", { non_finite: True, max_number_digits: 8 }) == "number exceeds the limit of 8 characters"
-expect JsonValue.parse_with("NaN", { non_finite: True, max_number_digits: 3 }).is_ok() and error_of("[NaN]", { non_finite: True, max_number_digits: 2 }) == Ok({ line: 1, column: 2, message: "number exceeds the limit of 2 characters" })
+expect JsonValue.parse_with("NaN", { non_finite: True, max_number_digits: 3 }).is_ok() and error_of("[NaN]", { non_finite: True, max_number_digits: 2 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: NumberCharacters, max: 2 }) })
 expect message_of("Infinity", { non_finite: True, max_number_digits: 7 }) == "number exceeds the limit of 7 characters"
 
 # Raw control characters inside strings and keys.
@@ -2190,14 +2251,14 @@ expect {
 
 # The top-level shape.
 expect JsonValue.parse_with("{}", { top_level: Object }).is_ok() and JsonValue.parse_with("[]", { top_level: ObjectOrArray }).is_ok() and JsonValue.parse_with("{}", { top_level: ObjectOrArray }).is_ok()
-expect error_of("[]", { top_level: Object }) == Ok({ line: 1, column: 1, message: "top-level value must be an object" })
-expect error_of(" null", { top_level: Object }) == Ok({ line: 1, column: 2, message: "top-level value must be an object" })
-expect error_of("\"s\"", { top_level: ObjectOrArray }) == Ok({ line: 1, column: 1, message: "top-level value must be an object or an array" })
-expect error_of("NaN", { top_level: ObjectOrArray, non_finite: True }) == Ok({ line: 1, column: 1, message: "top-level value must be an object or an array" })
-expect Utf8.parse_str(JsonValue.parser_with({ top_level: Object }), " [1]") == Err(ParseError({ message: "top-level value must be an object", offset: 1 }))
-expect Utf8.parse_str(JsonValue.parser_with({ top_level: ObjectOrArray }), "1") == Err(ParseError({ message: "top-level value must be an object or an array", offset: 0 }))
+expect error_of("[]", { top_level: Object }) == Ok({ line: 1, column: 1, problem: TopLevelRequired(Object) })
+expect error_of(" null", { top_level: Object }) == Ok({ line: 1, column: 2, problem: TopLevelRequired(Object) })
+expect error_of("\"s\"", { top_level: ObjectOrArray }) == Ok({ line: 1, column: 1, problem: TopLevelRequired(ObjectOrArray) })
+expect error_of("NaN", { top_level: ObjectOrArray, non_finite: True }) == Ok({ line: 1, column: 1, problem: TopLevelRequired(ObjectOrArray) })
+expect Utf8.parse_str(JsonValue.parser_with({ top_level: Object }), " [1]") == Err(ParseError({ problem: TopLevelRequired(Object), offset: 1 }))
+expect Utf8.parse_str(JsonValue.parser_with({ top_level: ObjectOrArray }), "1") == Err(ParseError({ problem: TopLevelRequired(ObjectOrArray), offset: 0 }))
 expect Utf8.parse_str(JsonValue.parser_with({ top_level: Object, bom: True }), "\u(FEFF){}") == Ok(Object([]))
-expect error_of("@", { top_level: Object }) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
+expect error_of("@", { top_level: Object }) == Ok({ line: 1, column: 1, problem: ExpectedValue })
 
 # I-JSON numbers: integers within ±(2^53−1), at most 17 significant digits,
 # and no overflow or underflow.
@@ -2207,12 +2268,22 @@ expect
 expect
 	["9007199254740992", "-9007199254740992", Str.repeat("9", 400), "1.23456789012345678", "1e400", "-1e400", "1e-400", "1.7976931348623159e308"]
 		.all(|text| message_of(text, { interoperable_numbers: True }).starts_with("number "))
-expect error_of("[9007199254740992]", { interoperable_numbers: True }) == Ok({ line: 1, column: 2, message: "number 9007199254740992 is not interoperable: it is an integer beyond 2^53-1 in magnitude" })
+expect error_of("[9007199254740992]", { interoperable_numbers: True }) == Ok({ line: 1, column: 2, problem: NonInteroperableNumber({ text: "9007199254740992", reason: UnsafeInteger }) })
 expect message_of("1.23456789012345678", { interoperable_numbers: True }) == "number 1.23456789012345678 is not interoperable: it has more than 17 significant digits"
 expect message_of("1e400", { interoperable_numbers: True }) == "number 1e400 is not interoperable: it is too large for a double"
 expect message_of("1e-400", { interoperable_numbers: True }) == "number 1e-400 is not interoperable: it underflows to zero as a double"
 expect message_of("-Infinity", { interoperable_numbers: True, non_finite: True }) == "number -Infinity is not interoperable: it is not a finite number"
 expect JsonValue.parse_with("[NaN]", { non_finite: True }).is_ok() and message_of("[NaN]", { non_finite: True, interoperable_numbers: True }) == "number NaN is not interoperable: it is not a finite number"
+
+# Number diagnostics preserve the complete lexeme and a matchable reason.
+expect
+	[
+		{ text: "9007199254740992", reason: UnsafeInteger },
+		{ text: "1.23456789012345678", reason: SignificantDigits },
+		{ text: "1e400", reason: DoubleOverflow },
+		{ text: "1e-400", reason: DoubleUnderflow },
+		{ text: "-Infinity", reason: NotFinite },
+	].all(|detail| error_of(detail.text, { interoperable_numbers: True, non_finite: True }) == Ok({ line: 1, column: 1, problem: NonInteroperableNumber(detail) }))
 
 # --- Accessors.
 
@@ -2357,10 +2428,10 @@ expect {
 }
 expect JsonValue.from_quote("{\"a\": 1, \"a\": 1}") == Err(BadQuotedBytes("<literal>:1:10: JSON: duplicate key \"a\""))
 expect JsonValue.parse_str("{\"a\": [true, null]}") == Ok(Object([{ key: "a", value: Array([Bool(True), Null]) }]))
-expect JsonValue.parse_str("[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, message: "trailing comma is not allowed" }))
+expect JsonValue.parse_str("[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, problem: TrailingComma }))
 expect JsonValue.parse_with("{\"a\": 1, \"a\": 2}", { duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
 expect Utf8.parse_str_partial(JsonValue.parser, "[1] rest").map_ok(|{ rest, .. }| rest) == Ok("rest")
-expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ message: "expected ',' or ']' after an array item", offset: 3 }))
+expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ problem: ExpectedArrayDelimiter, offset: 3 }))
 expect Utf8.parse_str(JsonValue.parser_with({ comments: True }), "1 // one") == Ok(Number("1"))
 expect JsonValue.parse_str("{\"a\": 1}").map_ok(|doc| doc.get("a")) == Ok(Ok(Number("1")))
 expect JsonValue.parse_str("[10, 20]").map_ok(|doc| doc.at(1)) == Ok(Ok(Number("20")))
@@ -2385,7 +2456,7 @@ expect JsonValue.to_str_with(Array([Number("1"), String("two")]), { indent: 4 })
 
 # Bounded documents retain strict grammar, caller rules and exact number text.
 expect JsonValue.parse_with("null", { max_bytes: 4 }) == Ok(Null)
-expect JsonValue.parse_with("null ", { max_bytes: 4 }) == Err(InvalidJsonValue({ line: 1, column: 5, message: "document exceeds the limit of 4 bytes" }))
+expect JsonValue.parse_with("null ", { max_bytes: 4 }) == Err(InvalidJsonValue({ line: 1, column: 5, problem: LimitExceeded({ limit: DocumentBytes, max: 4 }) }))
 expect JsonValue.parse_with("\"é\"", { max_bytes: 4 }) == Ok(String("é"))
 expect JsonValue.parse_with("\"é\"", { max_bytes: 3 }).is_err()
 expect JsonValue.parse_with("\u(FEFF)null", { bom: True, max_bytes: 7 }) == Ok(Null)
@@ -2448,7 +2519,7 @@ expect {
 
 # The same input byte limit applies to combinators and compile-time validation.
 expect Utf8.parse_str(JsonValue.parser_with({ max_bytes: 4 }), "null") == Ok(Null)
-expect Utf8.parse_str_partial(JsonValue.parser_with({ max_bytes: 4 }), "null next") == Err(ParseError({ message: "document exceeds the limit of 4 bytes", offset: 4 }))
+expect Utf8.parse_str_partial(JsonValue.parser_with({ max_bytes: 4 }), "null next") == Err(ParseError({ problem: LimitExceeded({ limit: DocumentBytes, max: 4 }), offset: 4 }))
 expect Utf8.parse_str_partial(JsonValue.parser_with({ max_bytes: 9 }), "null next").map_ok(|{ rest, .. }| rest) == Ok("next")
 expect JsonValue.validate({ source: "null", options: { max_bytes: 4 } }) == Ok(Null)
 expect JsonValue.validate({ source: "null ", options: { max_bytes: 4 } }) == Err(BadQuotedBytes("<literal>:1:5: JSON: document exceeds the limit of 4 bytes"))

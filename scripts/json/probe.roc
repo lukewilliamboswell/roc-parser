@@ -173,17 +173,17 @@ run = |bytes, flags| {
 				}
 				Err(InvalidJsonValue(error)) => {
 					location = "\"line\":${error.line.to_str()},\"column\":${error.column.to_str()}"
-					"{\"status\":\"error\",${location},\"message\":${json_string(error.message)},\"parser_agrees\":${boolean(combinator.is_err())}}"
+					"{\"status\":\"error\",${location},\"message\":${json_string(JsonValue.describe_problem(error.problem))},\"parser_agrees\":${boolean(combinator.is_err())}}"
 				}
 			}
 		}
 		Err(_) => {
 			match Utf8.parse_bytes(JsonValue.parser_with(options), bytes) {
 				Ok(value) => accepted(value, encode(value), flags, True)
-				Err(ParseError({ message, offset })) => {
+				Err(ParseError({ problem, offset })) => {
 					at = position(bytes, offset)
 					location = "\"line\":${at.line.to_str()},\"column\":${at.column.to_str()},\"offset\":${offset.to_str()}"
-					"{\"status\":\"error\",${location},\"message\":${json_string(message)},\"parser_agrees\":true}"
+					"{\"status\":\"error\",${location},\"message\":${json_string(JsonValue.describe_problem(problem))},\"parser_agrees\":true}"
 				}
 			}
 		}

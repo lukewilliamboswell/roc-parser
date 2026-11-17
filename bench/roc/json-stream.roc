@@ -6,6 +6,7 @@ app [main!] {
 import cli.OsStr
 import parser.JsonValue
 import parser.JsonStream
+import parser.Streaming
 import Bench
 
 ## Parse-only driver: json-stream array|ndjson CHUNK_BYTES ITERATIONS.
@@ -35,7 +36,7 @@ parse = |input, format, width| {
 		},
 	)
 	var $checksum = if (format == Array) 6.U64 else 0
-	for result in JsonStream.parse_iter(chunks, { format: format }) {
+	for result in Streaming.read_iter(chunks, JsonStream.decoder({ format: format })) {
 		match result {
 			Ok(Value(value)) => {
 				$checksum = $checksum + consume(value)

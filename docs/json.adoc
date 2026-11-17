@@ -139,7 +139,11 @@ include::examples/json-guide.expected[lines=4..5]
 == Show where an error is
 
 `InvalidJsonValue` carries a `JsonValue.Error` record: a one-based `line` and
-`column` and a message. Columns count bytes from the start of the line, and
+`column` and a structured `problem`. Match `JsonValue.Problem` tags such as
+`DuplicateKey(key)` or
+`LimitExceeded({ limit, max })` for program decisions.
+`JsonValue.describe_problem(problem)` formats display text.
+Columns count bytes from the start of the line, and
 a line ends at LF, CR or CRLF. The position is the start of the problem: the
 first character of a bad number or literal, the comma before a closing
 bracket, the slash of a comment, or the opening quote of a repeated key.
@@ -573,12 +577,12 @@ reports with the name, line and column.
 [#json-compose]
 == Combine with other parsers
 
-`JsonValue.parser` is a `Parser(Utf8.Bytes, JsonValue)` for use with the
+`JsonValue.parser` is a `Parser(Utf8.Bytes, JsonValue, JsonValue.Problem)` for use with the
 combinators. It reads the whitespace before a value, one strict JSON value,
 and the whitespace after it, and leaves the rest of the input for the next
 parser. `JsonValue.parser_with(options)` takes the same options as
-`parse_with`. Failures are `ParseError({ message, offset })`, with the same
-message as `parse_str` and the byte offset of the problem.
+`parse_with`. Failures are `ParseError({ problem, offset })`, with the same
+structured problem as `parse_str` and the byte offset of the problem.
 
 JSON Lines (newline-delimited JSON) logs hold one value per line, which
 `Parser.many` reads:
@@ -607,8 +611,10 @@ its own.
 == Read and write records in chunks
 
 Use `JsonStream` when NDJSON logs or a top-level JSON array are too large to
-hold in memory. `parse_iter(chunks, props)` takes an `Iter(List(U8))`;
-`parse_stream(chunks, props)` takes a `Stream(Try(List(U8), source_error))`.
+hold in memory. Create a reader with `JsonStream.decoder(props)` and pass it
+to `Streaming.read_iter(chunks, reader)` for an `Iter(List(U8))`, or
+`Streaming.read_stream(chunks, reader)` for a
+`Stream(Try(List(U8), source_error))`.
 Both produce `Value(JsonValue)` events and a final `Finished(report)` inside
 `Try`. Chunk boundaries may split UTF-8, escapes, numbers or nested values.
 Empty chunks do not signal EOF. Consume through `Finished` to validate the
@@ -637,14 +643,17 @@ number may share its record's bytes, but does not retain preceding records.
 Use a pull loop to process and discard values instead of collecting the
 whole stream.
 
-`errors` takes the shared <<streaming,error policy>>. NDJSON can report or
+Configure the shared <<streaming,error policy>> with
+`reader.with_errors({ error_policy: ReportInvalidRecords })`. NDJSON can report or
 skip a rejected line because its framing is independent. Array syntax
 errors, invalid encoding, resource limits and source failures are terminal.
 Diagnostics identify the record and its original one-based line and byte
 column. Source failures remain `SourceErr` and never produce `Finished`.
 
-`write_iter(values, props, chunk_bytes)` and
-`write_stream(values, props, chunk_bytes)` write compact NDJSON by default;
+Create a writer with `JsonStream.encoder(props)` and set its output bound
+with `writer.with_chunk_bytes(chunk_bytes)`. Pass it to
+`Streaming.write_iter(values, writer)` or
+`Streaming.write_stream(values, writer)`. Writers emit compact NDJSON by default;
 `format: Array` writes an enclosing array. Writers validate each complete
 value before its first bytes, retain one encoded record, and emit chunks no
 larger than `chunk_bytes`. Their `max_record_bytes` bounds encoded JSON for
@@ -655,8 +664,8 @@ only after successful source exhaustion.
 
 The complete link:{src}/examples/json-streaming.roc[`json-streaming.roc`]
 example reads NDJSON from stdin and writes one compact JSON array to stdout.
-It connects `parse_stream` through `Streaming.values_stream` to
-`write_stream`, so rejected records and missing completion remain errors.
+It connects `Streaming.read_stream` through `Streaming.values_stream` to
+`Streaming.write_stream`, so rejected records and missing completion remain errors.
 
 [#json-unsupported]
 == What is not supported

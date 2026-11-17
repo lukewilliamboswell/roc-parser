@@ -11,8 +11,8 @@ import parser.Streaming
 ## Read NDJSON from stdin and write one compact JSON array to stdout.
 ## Retain only one record; success requires the parser's Finished event.
 main! = |_| {
-	parsed = JsonStream.parse_stream(Stdin.chunks(), {})
-	for! chunk in JsonStream.write_stream(Streaming.values_stream(parsed), { format: Array }, 65_536) {
+	parsed = Streaming.read_stream(Stdin.chunks(), JsonStream.decoder({}))
+	for! chunk in Streaming.write_stream(Streaming.values_stream(parsed), JsonStream.encoder({ format: Array }).with_chunk_bytes(65_536)) {
 		Stdout.write_bytes!(chunk?)?
 	}
 	Ok({})

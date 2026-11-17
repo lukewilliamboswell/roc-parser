@@ -5,13 +5,14 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.JsonValue
+import parser.Parser
 import parser.Utf8
 
 ## Arbitrary bytes under the default, strict RFC 8259 options.
 ##
 ## Bytes that are not UTF-8 go to JsonValue.parser, which must not crash and
 ## must stay inside the input. For UTF-8 input:
-## - errors point at a real one-based line and byte column with a message;
+## - errors point at a real one-based line and byte column with a typed problem;
 ## - JsonValue.parser agrees with JsonValue.parse_str: content after the value
 ##   is the parser's unconsumed rest, and other errors match exactly;
 ## - an accepted value writes back out (compact, indented and sorted) to text
@@ -116,7 +117,7 @@ check_location = |bytes, result| {
 			if error.line == 0 or error.column == 0 {
 				crash "JSON error locations must be one-based: ${show_result(result)}"
 			}
-			if error.message.is_empty() {
+			if JsonValue.describe_problem(error.problem).is_empty() {
 				crash "JSON errors must explain the problem"
 			}
 			lengths = line_lengths(bytes)
@@ -143,15 +144,15 @@ check_bytes = |bytes| {
 			if rest.len() > bytes.len() {
 				crash "JsonValue.parser returned more input than it was given"
 			}
-		Err(ParseError({ message, offset })) =>
-			if offset > bytes.len() or message.is_empty() {
-				crash "JsonValue.parser failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${message}"
+		Err(ParseError({ problem, offset })) =>
+			if offset > bytes.len() or JsonValue.describe_problem(problem).is_empty() {
+				crash "JsonValue.parser failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}"
 			}
 	}
 }
 
-unexpected_content : Str
-unexpected_content = "unexpected content after the JSON value"
+unexpected_content : Parser.Problem(JsonValue.Problem)
+unexpected_content = UnexpectedContent
 
 check_combinator : List(U8), Parsed -> {}
 check_combinator = |bytes, result| {
@@ -164,11 +165,11 @@ check_combinator = |bytes, result| {
 				location = line_column(bytes, consumed)
 				same_place = location.line == error.line and location.column == error.column
 				prefix = Str.from_utf8(bytes.sublist({ start: 0, len: consumed })) ?? ""
-				!rest.is_empty() and same_place and error.message == unexpected_content and JsonValue.parse_str(prefix) == Ok(other)
+				!rest.is_empty() and same_place and error.problem == unexpected_content and JsonValue.parse_str(prefix) == Ok(other)
 			}
-			(Err(InvalidJsonValue(error)), Err(ParseError({ message, offset }))) => {
+			(Err(InvalidJsonValue(error)), Err(ParseError({ problem, offset }))) => {
 				location = line_column(bytes, offset)
-				location.line == error.line and location.column == error.column and message == error.message
+				location.line == error.line and location.column == error.column and problem == error.problem
 			}
 			_ => False
 		}
@@ -186,7 +187,7 @@ check_leading_newline = |input, result| {
 		match (result, shifted) {
 			(Ok(plain), Ok(with_newline)) => plain == with_newline
 			(Err(InvalidJsonValue(plain)), Err(InvalidJsonValue(with_newline))) =>
-				plain.line + 1 == with_newline.line and plain.column == with_newline.column and plain.message == with_newline.message
+				plain.line + 1 == with_newline.line and plain.column == with_newline.column and plain.problem == with_newline.problem
 			_ => False
 		}
 	if !consistent {
@@ -215,7 +216,7 @@ check_wrapping = |input, value| {
 is_nesting_error : Parsed, U64 -> Bool
 is_nesting_error = |result, limit| {
 	match result {
-		Err(InvalidJsonValue(error)) => Str.starts_with(error.message, "nesting exceeds the limit of ${limit.to_str()} level")
+		Err(InvalidJsonValue(error)) => error.problem == LimitExceeded({ limit: Nesting, max: limit })
 		Ok(_) => False
 	}
 }
@@ -455,11 +456,11 @@ items_boundary = |limit, choice| {
 	# The first excess item starts after the first `limit` items and their separators.
 	before_excess = if (limit == 0) open else "${open}${Str.join_with(indexes_below(limit).map(item), separator)}${separator}"
 	column = Str.count_utf8_bytes(before_excess) + 1
-	message = if (arrays) "array has more than ${limit.to_str()} item" else "object has more than ${limit.to_str()} member"
+	expected_problem = LimitExceeded({ limit: if (arrays) ArrayItems else ObjectMembers, max: limit })
 	past_limit = JsonValue.parse_with(text_of(limit + 1), { max_items: limit })
 	match past_limit {
-		Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and Str.starts_with(error.message, message) => {}
-		_ => crash "${(limit + 1).to_str()} items with max_items ${limit.to_str()} must fail at 1:${column.to_str()} with \"${message}...\", but gave ${show_result(past_limit)}"
+		Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.problem == expected_problem => {}
+		_ => crash "${(limit + 1).to_str()} items with max_items ${limit.to_str()} must fail at 1:${column.to_str()} with ${Str.inspect(expected_problem)}, but gave ${show_result(past_limit)}"
 	}
 }
 
@@ -482,10 +483,10 @@ duplicate_after_keys = |count, choice| {
 	first = Object(members)
 	last = Object(members.map(|member| if (member.key == key) { key, value: repeat_value } else member))
 
-	expect_error = |result, message, mode| {
+	expect_error = |result, expected_problem, mode| {
 		match result {
-			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.message == message => {}
-			_ => crash "a repeated key with ${mode} must fail at 1:${column.to_str()} with ${Str.inspect(message)}, but gave ${show_result(result)}\n${Str.inspect(text)}"
+			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.problem == expected_problem => {}
+			_ => crash "a repeated key with ${mode} must fail at 1:${column.to_str()} with ${Str.inspect(expected_problem)}, but gave ${show_result(result)}\n${Str.inspect(text)}"
 		}
 	}
 	expect_value = |result, expected, mode| {
@@ -494,12 +495,12 @@ duplicate_after_keys = |count, choice| {
 		}
 	}
 
-	expect_error(JsonValue.parse_str(text), "duplicate key \"${key}\"", "the default options")
+	expect_error(JsonValue.parse_str(text), DuplicateKey(key), "the default options")
 	collapsed = JsonValue.parse_with(text, { duplicates: CollapseIdentical })
 	if same_value {
 		expect_value(collapsed, first, "CollapseIdentical and an equal value")
 	} else {
-		expect_error(collapsed, "duplicate key \"${key}\" with a different value", "CollapseIdentical")
+		expect_error(collapsed, ConflictingDuplicateKey(key), "CollapseIdentical")
 	}
 	expect_value(JsonValue.parse_with(text, { duplicates: KeepFirst }), first, "KeepFirst")
 	expect_value(JsonValue.parse_with(text, { duplicates: KeepLast }), last, "KeepLast")
@@ -553,7 +554,7 @@ unclosed = |count, arrays| {
 	if count <= default_depth {
 		column = count * width + 1
 		match result {
-			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and Str.starts_with(error.message, "expected a JSON value") => {}
+			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.problem == ExpectedValue => {}
 			_ => crash "${count.to_str()} unclosed ${open} must fail at 1:${column.to_str()} with \"expected a JSON value\", but gave ${show_result(result)}"
 		}
 	} else {
@@ -571,7 +572,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${JsonValue.describe_problem(error.problem)}"
 	}
 }
 

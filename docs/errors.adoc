@@ -45,7 +45,7 @@ preserve source failures and expose recoverable record diagnostics; see <<stream
 |Where the problem is and what it is. Columns count bytes.
 
 |`JsonValue.parse_str`, `JsonValue.parse_with`
-|`InvalidJsonValue({ line, column, message })`
+|`InvalidJsonValue({ line, column, problem })`
 |Where the problem is and what it is, including a limit or check that an
 option enabled. Columns count bytes.
 

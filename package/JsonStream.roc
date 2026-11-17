@@ -1,4 +1,5 @@
 import JsonValue
+import Parser
 import Utf8
 import Streaming
 
@@ -13,10 +14,34 @@ JsonStream :: [].{
 	## JSON options apply to each emitted value, including top_level and limits.
 	## Array wrapper comments, a BOM and trailing commas follow those options.
 	## max_record_bytes bounds encoded unfinished values before JSON decoding.
-	Props := { format : Format ?? Ndjson, json : JsonValue.Options ?? {}, errors : Streaming.ReadProps ?? {}, max_record_bytes : U64 ?? 4_194_304 }
+	Props := { format : Format ?? Ndjson, json : JsonValue.Options ?? {}, max_record_bytes : U64 ?? 4_194_304 }
 
 	## Original one-based line/byte column and one-based record number.
-	Error : { record : U64, line : U64, column : U64, message : Str }
+	Error : { record : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
+
+	## Record framing failures and the underlying structured JSON problem.
+	Problem : [Json(Parser.Problem(JsonValue.Problem)), InvalidUtf8, IncompleteUtf8, RecordByteLimitExceeded(U64), InvalidBom, ExpectedComment, TrailingComma, ExpectedArray, UnexpectedContent, ExpectedArrayItem, IncompleteArray, MismatchedDelimiter, NestingLimitExceeded(U64)]
+
+	## Human-readable display text; match Problem tags for program decisions.
+	describe_problem : Parser.Problem(Problem) -> Str
+	describe_problem = |detail| match detail {
+		Json(inner) => JsonValue.describe_problem(inner)
+		InvalidUtf8 => "invalid UTF-8"
+		IncompleteUtf8 => "incomplete UTF-8 character"
+		InvalidBom => "invalid byte order mark"
+		ExpectedComment => "expected a JSON comment"
+		TrailingComma => "trailing comma is not allowed"
+		ExpectedArray => "expected a top-level JSON array"
+		UnexpectedContent => "unexpected content after the array"
+		ExpectedArrayItem => "expected an array item"
+		IncompleteArray => "incomplete JSON array"
+		MismatchedDelimiter => "mismatched closing delimiter"
+		RecordByteLimitExceeded(_) => "record byte limit exceeded"
+		NestingLimitExceeded(_) => "nesting limit exceeded"
+		UnexpectedInput => "unexpected input"
+		NoAlternatives => "no alternatives"
+		CharacterNotFound => "character not found"
+	}
 
 	## Writers validate a complete value before emitting it. Memory includes one
 	## encoded record, bounded by max_record_bytes before rendering.
@@ -25,33 +50,20 @@ JsonStream :: [].{
 	## A value cannot be represented as strict JSON within the writer limits.
 	WriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)]
 
-	## Persistent framing state. Keep only its latest version to release records.
-	Decoder : State
+	## Configure a shared streaming reader. Error handling belongs to the
+	## returned descriptor's with_errors method.
+	decoder : Props -> Streaming.Decoder(State, JsonValue, Error)
+	decoder = |props| Streaming.decoder(new_state(props), advance)
 
-	## Start a decoder without pulling input.
-	decoder : Props -> Decoder
-	decoder = |props| { props, phase: Start, record: [], workspace: Box.box(JsonValue.Workspace.empty()), number: 1, line: 1, column: 1, record_line: 1, record_column: 1, previous_cr: False, string: False, escape: False, stack: [], comment: Normal, bom: 0, utf8_remaining: 0, utf8_low: 0x80, utf8_high: 0xBF }
+	## Configure compact NDJSON or array output. Set output chunk size with
+	## the returned descriptor's with_chunk_bytes method.
+	encoder : WriteProps -> Streaming.Encoder(Writer, JsonValue, WriteError)
+	encoder = |props| Streaming.encoder({ props, started: False }, write, finish)
 
-	## Consume at most one value. Only Final establishes document completion.
-	step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, JsonValue, Error)
-	step = advance
-
-	## Pull pure chunks lazily, including a final Finished validation event.
-	parse_iter : Iter(List(U8)), Props -> _
-	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), step, props.errors)
-
-	## Pull effectful chunks. Source failures stop without finalizing JSON.
-	parse_stream : Stream(Try(List(U8), source_error)), Props -> _
-	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), step, props.errors)
-
-	## Write compact values separated by LF or enclosed in one JSON array.
-	write_iter : Iter(JsonValue), WriteProps, U64 -> _
-	write_iter = |values, props, chunk_bytes| Streaming.encode_state_iter(values, { props, started: False }, write, finish, chunk_bytes)
-
-	## Source failure never emits the closing array bracket.
-	write_stream : Stream(Try(JsonValue, source_error)), WriteProps, U64 -> _
-	write_stream = |values, props, chunk_bytes| Streaming.encode_state_stream(values, { props, started: False }, write, finish, chunk_bytes)
 }
+
+new_state : JsonStream.Props -> State
+new_state = |props| { props, phase: Start, record: [], workspace: Box.box(JsonValue.Workspace.empty()), number: 1, line: 1, column: 1, record_line: 1, record_column: 1, previous_cr: False, string: False, escape: False, stack: [], comment: Normal, bom: 0, utf8_remaining: 0, utf8_low: 0x80, utf8_high: 0xBF }
 
 State : {
 	props : JsonStream.Props,
@@ -74,8 +86,8 @@ State : {
 	utf8_high : U8,
 }
 
-problem : State, Str -> JsonStream.Error
-problem = |state, message| { record: state.number, line: state.line, column: state.column, message }
+problem : State, Parser.Problem(JsonStream.Problem) -> JsonStream.Error
+problem = |state, detail| { record: state.number, line: state.line, column: state.column, problem: detail }
 
 move : State, U8 -> State
 move = |state, byte| {
@@ -116,7 +128,7 @@ utf8_next = |remaining, low, high, byte| {
 
 utf8 : State, U8 -> Try(State, JsonStream.Error)
 utf8 = |state, byte| match utf8_next(state.utf8_remaining, state.utf8_low, state.utf8_high, byte) {
-	Err(_) => Err(problem(state, "invalid UTF-8"))
+	Err(_) => Err(problem(state, InvalidUtf8))
 	Ok(validated) => Ok({ ..state, utf8_remaining: validated.remaining, utf8_low: validated.low, utf8_high: validated.high })
 }
 
@@ -126,10 +138,12 @@ whitespace = |byte| byte == ' ' or byte == '\t' or byte == '\r' or byte == '\n'
 reset : State -> State
 reset = |state| { ..state, record: [], number: state.number + 1, stack: [], string: False, escape: False, comment: Normal, record_line: state.line, record_column: state.column }
 
-# JsonValue currently reports limits through its public error message. Keep its
-# six resource diagnostics terminal even when NDJSON recovery is requested.
-limit_error : Str -> Bool
-limit_error = |message| ["document exceeds the limit of ", "nesting exceeds the limit of ", "string exceeds the limit of ", "number exceeds the limit of ", "array has more than ", "object has more than "].any(|prefix| message.starts_with(prefix))
+# Recovery decisions depend on typed resource failures, never display prose.
+limit_error : Parser.Problem(JsonValue.Problem) -> Bool
+limit_error = |detail| match detail {
+	LimitExceeded(_) => True
+	_ => False
+}
 
 record_result : State, U64 -> Streaming.Step(State, JsonValue, JsonStream.Error)
 record_result = |state, consumed| {
@@ -144,8 +158,8 @@ record_result = |state, consumed| {
 	match parsed.result {
 		Ok(value) => { state: next, consumed, outcome: Item(value) }
 		Err(InvalidJsonValue(error)) => {
-			located = { record: base.number, line: base.record_line + error.line - 1, column: error.column + if (error.line == 1) base.record_column - 1 else 0, message: error.message }
-			{ state: next, consumed, outcome: if (base.props.format == Ndjson and !limit_error(error.message)) RecordError(located) else Failed(located) }
+			located = { record: base.number, line: base.record_line + error.line - 1, column: error.column + if (error.line == 1) base.record_column - 1 else 0, problem: Json(error.problem) }
+			{ state: next, consumed, outcome: if (base.props.format == Ndjson and !limit_error(error.problem)) RecordError(located) else Failed(located) }
 		}
 	}
 }
@@ -204,7 +218,7 @@ ndjson_step = |initial, bytes, end| {
 			$state = { ..$state, record: $state.record.append_sublist(bytes, { start: $index, len }), column: $state.column + len, previous_cr: False }
 			$index = $index + len
 			if $index < run_end {
-				return { state: $state, consumed: $index, outcome: Failed(problem($state, "record byte limit exceeded")) }
+				return { state: $state, consumed: $index, outcome: Failed(problem($state, RecordByteLimitExceeded($state.props.max_record_bytes))) }
 			}
 		} else {
 			if byte >= 0x80 or $state.utf8_remaining > 0 {
@@ -224,7 +238,7 @@ ndjson_step = |initial, bytes, end| {
 				$state = { ..$state, record: [], record_line: $state.line, record_column: $state.column }
 			} else {
 				if $state.record.len() >= $state.props.max_record_bytes {
-					return { state: $state, consumed: $index, outcome: Failed(problem($state, "record byte limit exceeded")) }
+					return { state: $state, consumed: $index, outcome: Failed(problem($state, RecordByteLimitExceeded($state.props.max_record_bytes))) }
 				}
 				$state = move({ ..$state, record: $state.record.append(byte) }, byte)
 				$index = $index + 1
@@ -235,7 +249,7 @@ ndjson_step = |initial, bytes, end| {
 		return { state: $state, consumed: $index, outcome: NeedInput }
 	}
 	if $state.utf8_remaining != 0 {
-		return { state: $state, consumed: $index, outcome: Failed(problem($state, "incomplete UTF-8 character")) }
+		return { state: $state, consumed: $index, outcome: Failed(problem($state, IncompleteUtf8)) }
 	}
 	if !$state.record.all(whitespace) {
 		return record_result($state, $index)
@@ -276,8 +290,8 @@ ArrayScan : {
 pack_array : State, ArrayScan, List(U8) -> State
 pack_array = |base, scanner, record| { ..base, record, phase: scanner.phase, line: scanner.line, column: scanner.column, record_line: scanner.record_line, record_column: scanner.record_column, previous_cr: scanner.previous_cr, string: scanner.string, escape: scanner.escape, stack: scanner.stack, comment: scanner.comment, bom: scanner.bom, utf8_remaining: scanner.utf8_remaining, utf8_low: scanner.utf8_low, utf8_high: scanner.utf8_high }
 
-array_problem : State, ArrayScan, Str -> JsonStream.Error
-array_problem = |base, scanner, message| { record: base.number, line: scanner.line, column: scanner.column, message }
+array_problem : State, ArrayScan, Parser.Problem(JsonStream.Problem) -> JsonStream.Error
+array_problem = |base, scanner, detail| { record: base.number, line: scanner.line, column: scanner.column, problem: detail }
 
 array_step : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, JsonValue, JsonStream.Error)
 array_step = |initial, bytes, end| {
@@ -313,19 +327,19 @@ array_step = |initial, bytes, end| {
 			$index = $index + len
 			$record_bytes = $record_bytes + len
 			if $index < run_end {
-				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, RecordByteLimitExceeded(props.max_record_bytes))) }
 			}
 		} else if $scan.string and $scan.comment == Normal {
 			if byte >= 0x80 or $scan.utf8_remaining > 0 {
 				match utf8_next($scan.utf8_remaining, $scan.utf8_low, $scan.utf8_high, byte) {
-					Err(_) => return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "invalid UTF-8")) }
+					Err(_) => return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, InvalidUtf8)) }
 					Ok(validated) => {
 						$scan = { ..$scan, utf8_remaining: validated.remaining, utf8_low: validated.low, utf8_high: validated.high }
 					}
 				}
 			}
 			if $record_bytes >= props.max_record_bytes {
-				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, RecordByteLimitExceeded(props.max_record_bytes))) }
 			}
 			if $scan.escape {
 				$scan = { ..$scan, escape: False }
@@ -354,12 +368,12 @@ array_step = |initial, bytes, end| {
 			$index = $index + len
 			$record_bytes = $record_bytes + len
 			if $index < run_end {
-				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, RecordByteLimitExceeded(props.max_record_bytes))) }
 			}
 		} else {
 			if byte >= 0x80 or $scan.utf8_remaining > 0 {
 				match utf8_next($scan.utf8_remaining, $scan.utf8_low, $scan.utf8_high, byte) {
-					Err(_) => return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "invalid UTF-8")) }
+					Err(_) => return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, InvalidUtf8)) }
 					Ok(validated) => {
 						$scan = { ..$scan, utf8_remaining: validated.remaining, utf8_low: validated.low, utf8_high: validated.high }
 					}
@@ -368,13 +382,13 @@ array_step = |initial, bytes, end| {
 			var $scan_byte = False
 			if $scan.phase == Bom {
 				if ($scan.bom == 1 and byte != 0xBB) or ($scan.bom == 2 and byte != 0xBF) {
-					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "invalid byte order mark")) }
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, InvalidBom)) }
 				}
 				$scan = { ..$scan, bom: $scan.bom + 1, phase: if ($scan.bom == 2) Start else Bom }
 			} else if $scan.comment != Normal {
 				if $collecting {
 					if $record_bytes >= props.max_record_bytes {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, RecordByteLimitExceeded(props.max_record_bytes))) }
 					}
 				}
 				match $scan.comment {
@@ -386,7 +400,7 @@ array_step = |initial, bytes, end| {
 							$scan = { ..$scan, comment: BlockComment }
 						}
 						else {
-							return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "expected a JSON comment")) }
+							return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, ExpectedComment)) }
 						}
 					}
 					LineComment => {
@@ -418,14 +432,14 @@ array_step = |initial, bytes, end| {
 				}
 				else if ($scan.phase == First or $scan.phase == Next) and byte == ']' {
 					if $scan.phase == Next and !props.json.trailing_commas {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "trailing comma is not allowed")) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, TrailingComma)) }
 					}
 					$scan = { ..$scan, phase: End }
 				} else if $scan.phase == Start or $scan.phase == End or byte == ',' {
-					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, if ($scan.phase == Start) "expected a top-level JSON array" else if ($scan.phase == End) "unexpected content after the array" else "expected an array item")) }
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, if ($scan.phase == Start) ExpectedArray else if ($scan.phase == End) UnexpectedContent else ExpectedArrayItem)) }
 				} else {
 					if props.max_record_bytes == 0 {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, RecordByteLimitExceeded(props.max_record_bytes))) }
 					}
 					$scan = { ..$scan, record_line: $scan.line, record_column: $scan.column }
 					$collecting = True
@@ -440,7 +454,7 @@ array_step = |initial, bytes, end| {
 			}
 			if $scan_byte {
 				if $record_bytes >= props.max_record_bytes {
-					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, RecordByteLimitExceeded(props.max_record_bytes))) }
 				}
 				if byte == '"' {
 					$scan = { ..$scan, string: True }
@@ -450,12 +464,12 @@ array_step = |initial, bytes, end| {
 				}
 				else if byte == '[' or byte == '{' {
 					if $scan.stack.len() >= props.json.max_depth {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "nesting limit exceeded")) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, NestingLimitExceeded(props.json.max_depth))) }
 					}
 					$scan = { ..$scan, stack: $scan.stack.append(if (byte == '[') ']' else '}') }
 				} else if byte == ']' or byte == '}' {
 					if ($scan.stack.last() ?? 0) != byte {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "mismatched closing delimiter")) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, MismatchedDelimiter)) }
 					}
 					$scan = { ..$scan, stack: $scan.stack.drop_last(1) }
 				}
@@ -480,10 +494,10 @@ array_step = |initial, bytes, end| {
 		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: NeedInput }
 	}
 	if $scan.utf8_remaining != 0 {
-		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "incomplete UTF-8 character")) }
+		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, IncompleteUtf8)) }
 	}
 	if $scan.phase != End or !$record.is_empty() or ($scan.comment != Normal and $scan.comment != LineComment) {
-		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "incomplete JSON array")) }
+		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, IncompleteArray)) }
 	}
 	{ state: pack_array(base, $scan, $record), consumed: $index, outcome: Done }
 }
@@ -504,59 +518,59 @@ write = |state, value| {
 finish : Writer -> Try(List(U8), JsonStream.WriteError)
 finish = |state| Ok(if (state.props.format == Ndjson) [] else if (state.started) "]".to_utf8() else "[]".to_utf8())
 
-expect Streaming.collect(JsonStream.parse_iter(["1\n{\"x\":".to_utf8(), "true}\n\n\"é\"".to_utf8()].iter(), {})) == Ok([Number("1"), Object([{ key: "x", value: Bool(True) }]), String("é")])
-expect Streaming.collect(JsonStream.parse_iter(["[1,{\"x\":".to_utf8(), "[true]},\"é\"]".to_utf8()].iter(), { format: Array })) == Ok([Number("1"), Object([{ key: "x", value: Array([Bool(True)]) }]), String("é")])
+expect Streaming.collect(Streaming.read_iter(["1\n{\"x\":".to_utf8(), "true}\n\n\"é\"".to_utf8()].iter(), JsonStream.decoder({}))) == Ok([Number("1"), Object([{ key: "x", value: Bool(True) }]), String("é")])
+expect Streaming.collect(Streaming.read_iter(["[1,{\"x\":".to_utf8(), "[true]},\"é\"]".to_utf8()].iter(), JsonStream.decoder({ format: Array }))) == Ok([Number("1"), Object([{ key: "x", value: Array([Bool(True)]) }]), String("é")])
 
 # Every two-piece split and every byte boundary must preserve values and errors.
 splits_agree : Str, JsonStream.Props -> Bool
 splits_agree = |text, props| {
 	bytes = text.to_utf8()
-	want = List.from_iter(JsonStream.parse_iter([bytes].iter(), props))
-	List.from_iter((0.U64).to(bytes.len() + 1)).all(|split| List.from_iter(JsonStream.parse_iter([[], bytes.take_first(split), [], bytes.drop_first(split), []].iter(), props)) == want)
-		and List.from_iter(JsonStream.parse_iter(bytes.map(|byte| [byte]).iter(), props)) == want
+	want = List.from_iter(Streaming.read_iter([bytes].iter(), JsonStream.decoder(props)))
+	List.from_iter((0.U64).to(bytes.len() + 1)).all(|split| List.from_iter(Streaming.read_iter([[], bytes.take_first(split), [], bytes.drop_first(split), []].iter(), JsonStream.decoder(props))) == want)
+		and List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), JsonStream.decoder(props))) == want
 }
 
 expect {
 	text = "\u(FEFF) /* wrapper ],{ */ [ /* item */ {\"é\":\"\\ud83d\\ude00\",\"q\":\"ends\\\\\"}, -1.2e+30, true /* ], */ , ] // final"
 	props : JsonStream.Props
 	props = { format: Array, json: { bom: True, comments: True, trailing_commas: True } }
-	splits_agree(text, props) and Streaming.collect(JsonStream.parse_iter([text.to_utf8()].iter(), props)) == Ok([Object([{ key: "é", value: String("😀") }, { key: "q", value: String("ends\\") }]), Number("-1.2e+30"), Bool(True)])
+	splits_agree(text, props) and Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), JsonStream.decoder(props))) == Ok([Object([{ key: "é", value: String("😀") }, { key: "q", value: String("ends\\") }]), Number("-1.2e+30"), Bool(True)])
 }
 expect ["", "\n\r\n \t\r\n", "null\n42\r\n", "\"é😀\"\n{\"a\":[1,2]}\n", "tru\nfalse\n", "\"unterminated\n1\n"].all(|text| splits_agree(text, {}))
 expect ["[]", " [ ] \r\n", "[1,2]", "[1,]", "[,1]", "[1 2]", "[trueX]", "[\"a\\\"b\"]suffix", "[{\"a\":]", "[1", "[", "[] []", "[\"\\uD800\"]"].all(|text| splits_agree(text, { format: Array }))
-expect ["[1,]", "[1 2]", "[trueX]", "[1", "[{\"a\":]", "[]x", "null", "", "[/*unfinished]"].all(|text| Streaming.collect(JsonStream.parse_iter([text.to_utf8()].iter(), { format: Array, json: { comments: True } })).is_err())
-expect Streaming.collect(JsonStream.parse_iter(["[ 1 , 2 ]".to_utf8()].iter(), { format: Array })) == Ok([Number("1"), Number("2")])
+expect ["[1,]", "[1 2]", "[trueX]", "[1", "[{\"a\":]", "[]x", "null", "", "[/*unfinished]"].all(|text| Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), JsonStream.decoder({ format: Array, json: { comments: True } }))).is_err())
+expect Streaming.collect(Streaming.read_iter(["[ 1 , 2 ]".to_utf8()].iter(), JsonStream.decoder({ format: Array }))) == Ok([Number("1"), Number("2")])
 expect {
-	props : JsonStream.Props
-	props = { errors: { error_policy: ReportInvalidRecords } }
-	match Streaming.collect_report(JsonStream.parse_iter(["1\nno\ntrue\n".to_utf8()].iter(), props)) {
+	props : Streaming.ReadProps
+	props = { error_policy: ReportInvalidRecords }
+	match Streaming.collect_report(Streaming.read_iter(["1\nno\ntrue\n".to_utf8()].iter(), JsonStream.decoder({}).with_errors(props))) {
 		Ok(report) => report.values == [Number("1"), Bool(True)] and report.errors.len() == 1 and report.errors.all(|error| error.record == 2 and error.line == 2 and error.column > 0) and report.report == { emitted_items: 2, rejected_records: 1 }
 		Err(_) => False
 	}
 }
 expect {
-	items = List.from_iter(JsonStream.parse_iter(["bad\n1\nbad\n".to_utf8()].iter(), { errors: { error_policy: SkipInvalidRecords, max_errors: 1 } }))
+	items = List.from_iter(Streaming.read_iter(["bad\n1\nbad\n".to_utf8()].iter(), JsonStream.decoder({}).with_errors({ error_policy: SkipInvalidRecords, max_errors: 1 })))
 	match items {
 		[Ok(Value(Number("1"))), Err(ErrorLimitExceeded({ max: 1, .. }))] => True
 		_ => False
 	}
 }
 expect {
-	items = List.from_iter(JsonStream.parse_iter(["[bad,1]".to_utf8()].iter(), { format: Array, errors: { error_policy: ReportInvalidRecords } }))
+	items = List.from_iter(Streaming.read_iter(["[bad,1]".to_utf8()].iter(), JsonStream.decoder({ format: Array }).with_errors({ error_policy: ReportInvalidRecords })))
 	match items {
 		[Err(ParseErr(_))] => True
 		_ => False
 	}
 }
-expect Streaming.collect(JsonStream.parse_iter(["[123]".to_utf8()].iter(), { format: Array, max_record_bytes: 3 })) == Ok([Number("123")])
-expect Streaming.collect(JsonStream.parse_iter(["123\n".to_utf8()].iter(), { max_record_bytes: 3 })) == Ok([Number("123")])
-expect Streaming.collect(JsonStream.parse_iter(["[1234]".to_utf8()].iter(), { format: Array, max_record_bytes: 3 })).is_err()
-expect Streaming.collect(JsonStream.parse_iter(["1234\n".to_utf8()].iter(), { max_record_bytes: 3, errors: { error_policy: SkipInvalidRecords } })).is_err()
-expect Streaming.collect(JsonStream.parse_iter(["[]".to_utf8()].iter(), { format: Array, max_record_bytes: 0 })) == Ok([])
-expect Streaming.collect(JsonStream.parse_iter(["[1]".to_utf8()].iter(), { format: Array, max_record_bytes: 0 })).is_err()
-expect Streaming.collect(JsonStream.parse_iter(["[[],{}]".to_utf8()].iter(), { format: Array, json: { max_depth: 1, max_items: 0 } })) == Ok([Array([]), Object([])])
-expect Streaming.collect(JsonStream.parse_iter(["[1,2]".to_utf8()].iter(), { format: Array, json: { max_depth: 0, max_items: 0 } })) == Ok([Number("1"), Number("2")])
-expect Streaming.collect(JsonStream.parse_iter(["[[[]]]".to_utf8()].iter(), { format: Array, json: { max_depth: 1 } })).is_err()
+expect Streaming.collect(Streaming.read_iter(["[123]".to_utf8()].iter(), JsonStream.decoder({ format: Array, max_record_bytes: 3 }))) == Ok([Number("123")])
+expect Streaming.collect(Streaming.read_iter(["123\n".to_utf8()].iter(), JsonStream.decoder({ max_record_bytes: 3 }))) == Ok([Number("123")])
+expect Streaming.collect(Streaming.read_iter(["[1234]".to_utf8()].iter(), JsonStream.decoder({ format: Array, max_record_bytes: 3 }))).is_err()
+expect Streaming.collect(Streaming.read_iter(["1234\n".to_utf8()].iter(), JsonStream.decoder({ max_record_bytes: 3 }).with_errors({ error_policy: SkipInvalidRecords }))).is_err()
+expect Streaming.collect(Streaming.read_iter(["[]".to_utf8()].iter(), JsonStream.decoder({ format: Array, max_record_bytes: 0 }))) == Ok([])
+expect Streaming.collect(Streaming.read_iter(["[1]".to_utf8()].iter(), JsonStream.decoder({ format: Array, max_record_bytes: 0 }))).is_err()
+expect Streaming.collect(Streaming.read_iter(["[[],{}]".to_utf8()].iter(), JsonStream.decoder({ format: Array, json: { max_depth: 1, max_items: 0 } }))) == Ok([Array([]), Object([])])
+expect Streaming.collect(Streaming.read_iter(["[1,2]".to_utf8()].iter(), JsonStream.decoder({ format: Array, json: { max_depth: 0, max_items: 0 } }))) == Ok([Number("1"), Number("2")])
+expect Streaming.collect(Streaming.read_iter(["[[[]]]".to_utf8()].iter(), JsonStream.decoder({ format: Array, json: { max_depth: 1 } }))).is_err()
 expect {
 	options : List(JsonValue.Options)
 	options = [{ max_depth: 0 }, { max_items: 0 }, { max_string_bytes: 0 }, { max_number_digits: 0 }, { max_bytes: 0 }]
@@ -564,7 +578,7 @@ expect {
 	List.from_iter(options.iter().with_index()).all(
 		|pair| {
 			text = inputs.get(pair.0) ?? ""
-			items = List.from_iter(JsonStream.parse_iter(["${text}\ntrue\n".to_utf8()].iter(), { json: pair.1, errors: { error_policy: ReportInvalidRecords } }))
+			items = List.from_iter(Streaming.read_iter(["${text}\ntrue\n".to_utf8()].iter(), JsonStream.decoder({ json: pair.1 }).with_errors({ error_policy: ReportInvalidRecords })))
 			match items {
 				[Err(ParseErr(_))] => True
 				_ => False
@@ -574,13 +588,13 @@ expect {
 }
 expect {
 	bad = ["[/*".to_utf8().concat([0xFF]).concat("*/1]".to_utf8()), "[] //".to_utf8().concat([0xED, 0xA0, 0x80]), [0xF0.U8, 0x90], [0xC0.U8, 0x80], [0xF4.U8, 0x90, 0x80, 0x80]]
-	bad.all(|bytes| Streaming.collect(JsonStream.parse_iter(bytes.map(|byte| [byte]).iter(), { format: Array, json: { comments: True }, errors: { error_policy: SkipInvalidRecords } })).is_err())
+	bad.all(|bytes| Streaming.collect(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), JsonStream.decoder({ format: Array, json: { comments: True } }).with_errors({ error_policy: SkipInvalidRecords }))).is_err())
 }
 expect {
 	values = [Number("1"), Object([{ key: "é", value: String("\n") }]), Array([Bool(True), Null])]
 	[Ndjson, Array].all(
 		|format| {
-			parts = List.from_iter(JsonStream.write_iter(values.iter(), { format: format }, 1))
+			parts = List.from_iter(Streaming.write_iter(values.iter(), JsonStream.encoder({ format: format }).with_chunk_bytes(1)))
 			var $bytes = []
 			for part in parts {
 				match part {
@@ -590,15 +604,15 @@ expect {
 					Err(_) => return False
 				}
 			}
-			Streaming.collect(JsonStream.parse_iter($bytes.map(|byte| [byte]).iter(), { format: format })) == Ok(values)
+			Streaming.collect(Streaming.read_iter($bytes.map(|byte| [byte]).iter(), JsonStream.decoder({ format: format }))) == Ok(values)
 		},
 	)
 }
-expect List.from_iter(JsonStream.write_iter([].iter(), { format: Array }, 1)) == [Ok("[".to_utf8()), Ok("]".to_utf8())]
-expect List.from_iter(JsonStream.write_iter([].iter(), {}, 1)) == []
-expect List.from_iter(JsonStream.write_iter([Number("NaN")].iter(), { format: Array }, 1)) == [Err(EncodeErr(InvalidNumber("NaN")))]
-expect List.from_iter(JsonStream.write_iter([String("x")].iter(), { max_record_bytes: 2 }, 1)) == [Err(EncodeErr(TooLarge(2)))]
-expect List.from_iter(JsonStream.write_iter([Number("1")].iter(), {}, 0)) == [Err(InvalidChunkSize)]
+expect List.from_iter(Streaming.write_iter([].iter(), JsonStream.encoder({ format: Array }).with_chunk_bytes(1))) == [Ok("[".to_utf8()), Ok("]".to_utf8())]
+expect List.from_iter(Streaming.write_iter([].iter(), JsonStream.encoder({}).with_chunk_bytes(1))) == []
+expect List.from_iter(Streaming.write_iter([Number("NaN")].iter(), JsonStream.encoder({ format: Array }).with_chunk_bytes(1))) == [Err(EncodeErr(InvalidNumber("NaN")))]
+expect List.from_iter(Streaming.write_iter([String("x")].iter(), JsonStream.encoder({ max_record_bytes: 2 }).with_chunk_bytes(1))) == [Err(EncodeErr(TooLarge(2)))]
+expect List.from_iter(Streaming.write_iter([Number("1")].iter(), JsonStream.encoder({}).with_chunk_bytes(0))) == [Err(InvalidChunkSize)]
 expect {
 	chunks = Iter.custom(
 		0.U64,
@@ -609,13 +623,13 @@ expect {
 			crash "read beyond the first requested value"
 		},
 	)
-	match JsonStream.parse_iter(chunks, { format: Array }).next() {
+	match Streaming.read_iter(chunks, JsonStream.decoder({ format: Array })).next() {
 		One({ item: Ok(Value(Number("1"))), .. }) => True
 		_ => False
 	}
 }
 
-expect Streaming.collect(JsonStream.parse_iter(["[\u(FEFF)1]".to_utf8()].iter(), { format: Array, json: { bom: True } })).is_err()
+expect Streaming.collect(Streaming.read_iter(["[\u(FEFF)1]".to_utf8()].iter(), JsonStream.decoder({ format: Array, json: { bom: True } }))).is_err()
 
 # The outer array is framing. Its depth and item count are not charged to
 # the individual records' JsonValue options.
@@ -626,7 +640,7 @@ expect {
 			options : JsonValue.Options
 			options = { max_depth: depth, max_items: items }
 			for record in ["null", "1", "[]", "{}", "[1]", "[[1]]", "{\"a\":[1,2]}", "{\"a\":1,\"b\":2}"] {
-				actual = Streaming.collect(JsonStream.parse_iter("[${record}]".to_utf8().map(|byte| [byte]).iter(), { format: Array, json: options }))
+				actual = Streaming.collect(Streaming.read_iter("[${record}]".to_utf8().map(|byte| [byte]).iter(), JsonStream.decoder({ format: Array, json: options })))
 				match (JsonValue.parse_with(record, options), actual) {
 					(Ok(want), Ok([found])) => {
 						if want != found {
@@ -647,8 +661,8 @@ expect {
 # ReportInvalidRecords must not turn an invalid encoding into a skipped line.
 expect {
 	bytes = "1\n".to_utf8().concat([0xFF]).concat("\n2\n".to_utf8())
-	match List.from_iter(JsonStream.parse_iter(bytes.map(|byte| [byte]).iter(), { errors: { error_policy: ReportInvalidRecords } })) {
-		[Ok(Value(Number("1"))), Err(ParseErr({ record: 2, line: 2, column: 1, message: "invalid UTF-8" }))] => True
+	match List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), JsonStream.decoder({}).with_errors({ error_policy: ReportInvalidRecords }))) {
+		[Ok(Value(Number("1"))), Err(ParseErr({ record: 2, line: 2, column: 1, problem: InvalidUtf8 }))] => True
 		_ => False
 	}
 }
@@ -657,7 +671,7 @@ expect {
 	text = "[\"x\u(0)\r\ny\", NaN, {\"x\":1,\"x\":2}, \"\\ud800\"]"
 	props : JsonStream.Props
 	props = { format: Array, json: { control_characters: True, non_finite: True, duplicates: KeepLast, lone_surrogates: Replace } }
-	splits_agree(text, props) and Streaming.collect(JsonStream.parse_iter([text.to_utf8()].iter(), props)) == Ok([String("x\u(0)\r\ny"), Number("NaN"), Object([{ key: "x", value: Number("2") }]), String("�")])
+	splits_agree(text, props) and Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), JsonStream.decoder(props))) == Ok([String("x\u(0)\r\ny"), Number("NaN"), Object([{ key: "x", value: Number("2") }]), String("�")])
 }
 
 # The complete-string shortcut may consume a colon or a nested comma, but must

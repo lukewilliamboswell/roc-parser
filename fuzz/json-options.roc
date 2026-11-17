@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.JsonValue
+import parser.Parser
 import parser.Utf8
 
 ## Arbitrary documents under every JsonValue.Options field.
@@ -33,6 +34,12 @@ import parser.Utf8
 ##   or fails with a duplicate key;
 ## - every error is located inside the document, and JsonValue.parser_with
 ##   agrees with JsonValue.parse_with under S.
+
+is_duplicate : Parser.Problem(JsonValue.Problem) -> Bool
+is_duplicate = |problem| match problem {
+	DuplicateKey(_) => True
+	_ => False
+}
 
 Parsed : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
 
@@ -227,7 +234,7 @@ test = |input| {
 				if chosen.duplicates == CollapseIdentical {
 					match (result, rejecting_result) {
 						(Ok(value), Ok(other)) if value != other => crash "CollapseIdentical changed a document without repeated keys\n${Str.inspect(text)}"
-						(Ok(_), Err(InvalidJsonValue(error))) if !Str.starts_with(error.message, "duplicate key \"") => crash "CollapseIdentical accepted a document that Reject refuses for another reason: ${error.message}\n${Str.inspect(text)}\n${show_choice(chosen)}"
+						(Ok(_), Err(InvalidJsonValue(error))) if !is_duplicate(error.problem) => crash "CollapseIdentical accepted a document that Reject refuses for another reason: ${JsonValue.describe_problem(error.problem)}\n${Str.inspect(text)}\n${show_choice(chosen)}"
 						_ => {}
 					}
 				}
@@ -292,7 +299,7 @@ check_location = |input, choice, result| {
 			if error.line == 0 or error.column == 0 {
 				crash "JSON error locations must be one-based: ${context}"
 			}
-			if error.message.is_empty() {
+			if JsonValue.describe_problem(error.problem).is_empty() {
 				crash "JSON errors must explain the problem: ${context}"
 			}
 			lengths = line_lengths(input.document)
@@ -319,15 +326,15 @@ check_bytes = |input| {
 			if rest.len() > bytes.len() {
 				crash "JsonValue.parser_with returned more input than it was given\n${show_choice(input.choice)}"
 			}
-		Err(ParseError({ message, offset })) =>
-			if offset > bytes.len() or message.is_empty() {
-				crash "JsonValue.parser_with failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${message}\n${show_choice(input.choice)}"
+		Err(ParseError({ problem, offset })) =>
+			if offset > bytes.len() or JsonValue.describe_problem(problem).is_empty() {
+				crash "JsonValue.parser_with failed outside the input (offset ${offset.to_str()} of ${bytes.len().to_str()}): ${Str.inspect(problem)}\n${show_choice(input.choice)}"
 			}
 	}
 }
 
-unexpected_content : Str
-unexpected_content = "unexpected content after the JSON value"
+unexpected_content : Parser.Problem(JsonValue.Problem)
+unexpected_content = UnexpectedContent
 
 check_combinator : Input, Parsed -> {}
 check_combinator = |input, result| {
@@ -342,11 +349,11 @@ check_combinator = |input, result| {
 				location = line_column(bytes, consumed)
 				same_place = location.line == error.line and location.column == error.column
 				prefix = Str.from_utf8(bytes.sublist({ start: 0, len: consumed })) ?? ""
-				!rest.is_empty() and same_place and error.message == unexpected_content and JsonValue.parse_with(prefix, options) == Ok(other)
+				!rest.is_empty() and same_place and error.problem == unexpected_content and JsonValue.parse_with(prefix, options) == Ok(other)
 			}
-			(Err(InvalidJsonValue(error)), Err(ParseError({ message, offset }))) => {
+			(Err(InvalidJsonValue(error)), Err(ParseError({ problem, offset }))) => {
 				location = line_column(bytes, offset)
-				location.line == error.line and location.column == error.column and message == error.message
+				location.line == error.line and location.column == error.column and problem == error.problem
 			}
 			_ => False
 		}
@@ -361,7 +368,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${JsonValue.describe_problem(error.problem)}"
 	}
 }
 
