@@ -120,6 +120,33 @@ MarkupCore :: [].{
 			} else start
 			source.bytes.drop_first(start).take_first(end - start)
 		}
+
+		## Locate a byte offset using the common one-based UTF-8 position convention.
+		position : Source, U64 -> { line : U64, column : U64 }
+		position = |source, offset| {
+			end = if (offset < source.bytes.len()) offset else source.bytes.len()
+			var $index = 0
+			var $line = 1
+			var $column = 1
+			while $index < end {
+				byte = source.bytes.get($index) ?? 0
+				if byte == '\r' {
+					$line = $line + 1
+					$column = 1
+					if $index + 1 < end and source.bytes.get($index + 1) == Ok('\n') {
+						$index = $index + 1
+					}
+				} else if byte == '\n' {
+					$line = $line + 1
+					$column = 1
+				} else {
+					$column = $column + 1
+				}
+				$index = $index + 1
+			}
+			{ line: $line, column: $column }
+		}
+
 	}
 
 	## Typed attribute grammars shared by validators and interpolation slots.
@@ -185,7 +212,58 @@ MarkupCore :: [].{
 	}
 
 	## Indexed nodes with document/fragment roots in authored order.
-	Tree : { nodes : List(Node), roots : List(U64) }
+	Tree := { nodes : List(Node), roots : List(U64) }.{
+		is_eq : _
+		to_hash : _
+
+		## The only element root, ignoring comments and processing instructions.
+		single_root : Tree -> Try(U64, [RootCount(U64)])
+		single_root = |tree| {
+			roots = tree.roots.keep_if(
+				|index| match tree.nodes.get(index) {
+					Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) | Ok({ kind: Doctype(_), .. }) => False
+					Ok({ kind: Text(node_text), .. }) => !whitespace(node_text)
+					Ok(_) => True
+					Err(_) => False
+				},
+			)
+			if roots.len() == 1 {
+				index = roots.first() ?? 0
+				match tree.nodes.get(index) {
+					Ok({ kind: Element(_), .. }) => Ok(index)
+					_ => Err(RootCount(1))
+				}
+			} else {
+				Err(RootCount(roots.len()))
+			}
+		}
+
+		## All descendant character data in document order, without recursive calls.
+		text : Tree, U64 -> Str
+		text = |tree, root| {
+			var $pending = [root]
+			var $out = []
+			while !$pending.is_empty() {
+				index = $pending.last() ?? 0
+				$pending = $pending.drop_last(1)
+				match tree.nodes.get(index) {
+					Ok({ kind: Text(value), .. }) => {
+						$out = $out.concat(value.to_utf8())
+					}
+					Ok(node) => {
+						var $i = node.children.len()
+						while $i > 0 {
+							$i = $i - 1
+							$pending = $pending.append(node.children.get($i) ?? 0)
+						}
+					}
+					Err(_) => {}
+				}
+			}
+			Str.from_utf8_lossy($out)
+		}
+
+	}
 
 	## Exact input, namespace-aware structure, and accepted recovery diagnostics.
 	Parsed : { source : Source, tree : Tree, diagnostics : List(Error) }
@@ -218,32 +296,6 @@ MarkupCore :: [].{
 		}
 	}
 
-	## Locate a byte offset using the common one-based UTF-8 position convention.
-	position : Source, U64 -> { line : U64, column : U64 }
-	position = |source, offset| {
-		end = if (offset < source.bytes.len()) offset else source.bytes.len()
-		var $index = 0
-		var $line = 1
-		var $column = 1
-		while $index < end {
-			byte = source.bytes.get($index) ?? 0
-			if byte == '\r' {
-				$line = $line + 1
-				$column = 1
-				if $index + 1 < end and source.bytes.get($index + 1) == Ok('\n') {
-					$index = $index + 1
-				}
-			} else if byte == '\n' {
-				$line = $line + 1
-				$column = 1
-			} else {
-				$column = $column + 1
-			}
-			$index = $index + 1
-		}
-		{ line: $line, column: $column }
-	}
-
 	## MarkupCore whitespace is ASCII, including HTML's form feed, not Unicode spaces.
 	whitespace : Str -> Bool
 	whitespace = |source_text| {
@@ -257,53 +309,6 @@ MarkupCore :: [].{
 			$index = $index + 1
 		}
 		True
-	}
-
-	## The only element root, ignoring comments and processing instructions.
-	single_root : Tree -> Try(U64, [RootCount(U64)])
-	single_root = |tree| {
-		roots = tree.roots.keep_if(
-			|index| match tree.nodes.get(index) {
-				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) | Ok({ kind: Doctype(_), .. }) => False
-				Ok({ kind: Text(node_text), .. }) => !whitespace(node_text)
-				Ok(_) => True
-				Err(_) => False
-			},
-		)
-		if roots.len() == 1 {
-			index = roots.first() ?? 0
-			match tree.nodes.get(index) {
-				Ok({ kind: Element(_), .. }) => Ok(index)
-				_ => Err(RootCount(1))
-			}
-		} else {
-			Err(RootCount(roots.len()))
-		}
-	}
-
-	## All descendant character data in document order, without recursive calls.
-	text : Tree, U64 -> Str
-	text = |tree, root| {
-		var $pending = [root]
-		var $out = []
-		while !$pending.is_empty() {
-			index = $pending.last() ?? 0
-			$pending = $pending.drop_last(1)
-			match tree.nodes.get(index) {
-				Ok({ kind: Text(value), .. }) => {
-					$out = $out.concat(value.to_utf8())
-				}
-				Ok(node) => {
-					var $i = node.children.len()
-					while $i > 0 {
-						$i = $i - 1
-						$pending = $pending.append(node.children.get($i) ?? 0)
-					}
-				}
-				Err(_) => {}
-			}
-		}
-		Str.from_utf8_lossy($out)
 	}
 
 	## Render a structured failure for a compiler quotation diagnostic.
@@ -571,7 +576,7 @@ empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) 
 
 error_at : MarkupCore.Source, U64, MarkupCore.Problem -> [InvalidMarkup(MarkupCore.Error)]
 error_at = |source, offset, problem| {
-	at = MarkupCore.position(source, offset)
+	at = (source).position(offset)
 	InvalidMarkup(Diagnostic.{ problem: problem, location: Text({ offset, line: at.line, column: at.column }), path: [] })
 }
 
@@ -651,13 +656,13 @@ source_attributes = |source, span, start| {
 
 expect {
 	parsed = MarkupCore.parse_xml("<?p q?><svg xmlns='http://www.w3.org/2000/svg' x='a&amp;b'><!--hi--><![CDATA[<x>]]><g/></svg>", {})?
-	root = MarkupCore.single_root(parsed.tree)?
+	root = (parsed.tree).single_root()?
 	node = parsed.tree.nodes.get(root)?
 	name_ok = match node.kind {
 		Element(name) => name.namespace == Uri(MarkupCore.svg_namespace) and name.local == "svg"
 		_ => False
 	}
-	name_ok and node.attributes.len() == 2 and node.children.len() == 3 and MarkupCore.text(parsed.tree, root) == "<x>" and node.origin == Authored({ start: 7, end: 93 })
+	name_ok and node.attributes.len() == 2 and node.children.len() == 3 and (parsed.tree).text(root) == "<x>" and node.origin == Authored({ start: 7, end: 93 })
 }
 expect {
 	input = "a<g xmlns='urn:x' a='1'/><!--x--><path/>b"
@@ -685,12 +690,12 @@ expect {
 }
 expect {
 	parsed = MarkupCore.parse_xml("<x xmlns:p='urn:p' a='v' p:a='w'/>", {})?
-	root = parsed.tree.nodes.get(MarkupCore.single_root(parsed.tree)?)?
+	root = parsed.tree.nodes.get((parsed.tree).single_root()?)?
 	root.attributes.map(|a| a.name.local) == ["p", "a", "a"] and root.attributes.map(|a| Str.from_utf8_lossy(parsed.source.slice(a.span))) == ["xmlns:p='urn:p'", "a='v'", "p:a='w'"]
 }
 
-expect MarkupCore.parse_xml_fragment("<path/>oops", MarkupCore.svg_namespace, {}).map_ok(|parsed| MarkupCore.single_root(parsed.tree)) == Ok(Err(RootCount(2)))
-expect MarkupCore.parse_xml_fragment(" <!--c--><path/><?p q?> ", MarkupCore.svg_namespace, {}).map_ok(|parsed| MarkupCore.single_root(parsed.tree).is_ok()) == Ok(True)
+expect MarkupCore.parse_xml_fragment("<path/>oops", MarkupCore.svg_namespace, {}).map_ok(|parsed| (parsed.tree).single_root()) == Ok(Err(RootCount(2)))
+expect MarkupCore.parse_xml_fragment(" <!--c--><path/><?p q?> ", MarkupCore.svg_namespace, {}).map_ok(|parsed| (parsed.tree).single_root().is_ok()) == Ok(True)
 
 expect MarkupCore.parse_xml("<a><!--c-->text<?p q?></a>", { max_nodes: 3 }).is_err()
 expect MarkupCore.parse_xml("<a><!--c-->text<?p q?></a>", { max_nodes: 4 }).is_ok()
@@ -700,29 +705,29 @@ expect MarkupCore.parse_xml_fragment("<a/>", "", { max_depth: 18_446_744_073_709
 
 expect {
 	parsed = MarkupCore.parse_xml_fragment("<text a=\"x\t y\">a\r\nb<![CDATA[<&]]><!-- comment -->c</text>", MarkupCore.svg_namespace, {})?
-	root = parsed.tree.nodes.get(MarkupCore.single_root(parsed.tree)?)?
+	root = parsed.tree.nodes.get((parsed.tree).single_root()?)?
 	root.children.map(|index| parsed.tree.nodes.get(index).map_ok(|node| node.kind)) == [Ok(Text("a\nb<&")), Ok(Comment(" comment ")), Ok(Text("c"))]
 }
 
 expect {
 	input = "<x>é\rα<![CDATA[&amp;\r\nβ]]>&#13;&amp;</x>"
 	parsed = MarkupCore.parse_xml(input, {})?
-	root = parsed.tree.nodes.get(MarkupCore.single_root(parsed.tree)?)?
+	root = parsed.tree.nodes.get((parsed.tree).single_root()?)?
 	child = parsed.tree.nodes.get(root.children.first()?)?
 	child.kind == Text("é\nα&amp;\nβ\r&") and child.origin == Authored({ start: 3, end: input.count_utf8_bytes() - 4 })
 }
 
 expect MarkupCore.Source.from_str("abc").slice({ start: 9, end: 1 }) == []
 expect MarkupCore.Source.from_str("abc").slice({ start: 1, end: 9 }) == ['b', 'c']
-expect MarkupCore.parse_xml_fragment("<path/>\u(A0)", MarkupCore.svg_namespace, {}).map_ok(|parsed| MarkupCore.single_root(parsed.tree)) == Ok(Err(RootCount(2)))
+expect MarkupCore.parse_xml_fragment("<path/>\u(A0)", MarkupCore.svg_namespace, {}).map_ok(|parsed| (parsed.tree).single_root()) == Ok(Err(RootCount(2)))
 
 expect MarkupCore.parse_xml("<a/>", { max_work_per_byte: 0 }).is_err()
 expect MarkupCore.parse_xml_fragment("", "", { max_work_per_byte: 0 }).is_err()
 expect MarkupCore.parse_xml_fragment("<a/>", "", { max_work_per_byte: 8 }).is_ok()
 expect MarkupCore.parse_xml_fragment("<a/>", "", { max_work_per_byte: 18_446_744_073_709_551_615 }).is_ok()
 
-expect MarkupCore.position(MarkupCore.Source.from_bytes([255, 13, 10, 65]), 3) == { line: 2, column: 1 }
-expect MarkupCore.position(MarkupCore.Source.from_bytes([255, 13, 10, 65]), 999) == { line: 2, column: 2 }
+expect (MarkupCore.Source.from_bytes([255, 13, 10, 65])).position(3) == { line: 2, column: 1 }
+expect (MarkupCore.Source.from_bytes([255, 13, 10, 65])).position(999) == { line: 2, column: 2 }
 
 expect MarkupCore.Source.from_tokens([], []).partition_valid()
 expect MarkupCore.Source.from_tokens(['a'], [{ kind: Text, span: { start: 0, end: 1 } }]).partition_valid()

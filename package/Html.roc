@@ -31,8 +31,11 @@ Html := { parsed : MarkupCore.Parsed }.{
 	## Parse and validate a document, retaining recovery diagnostics when enabled.
 	parse_str : Str, Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
 	parse_str = |text, props| {
-		{ parsed, domain } = authored_syntax(text, props, False)?
-		root = MarkupCore.single_root(parsed.tree).map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+		authored = authored_syntax(text, props, False)?
+		parsed : MarkupCore.Parsed
+		parsed = authored.parsed
+		domain = authored.domain
+		root = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
 		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		match node.kind {
 			Element(n) if n.namespace == Uri(MarkupCore.html_namespace) and n.local == "html" => {}
@@ -145,7 +148,7 @@ HtmlFragment := { parsed : MarkupCore.Parsed }.{
 	## Require exactly one element root, ignoring comments/whitespace.
 	single_element : Html.Fragment -> Try(MarkupCore.Node, [RootCount(U64)])
 	single_element = |fragment| {
-		root = MarkupCore.single_root(fragment.parsed.tree)?
+		root = (fragment.parsed.tree).single_root()?
 		Ok(fragment.parsed.tree.nodes.get(root) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }
@@ -177,7 +180,7 @@ expect {
 			root = parsed.tree.roots.first()?
 			node = parsed.tree.nodes.get(root)?
 			attribute = node.attributes.first()?
-			MarkupCore.text(parsed.tree, root) == "a\rb" and attribute.value == "a\rb" and parsed.source.bytes == source.to_utf8() and parsed.source.partition_valid() and parsed.diagnostics == [
+			(parsed.tree).text(root) == "a\rb" and attribute.value == "a\rb" and parsed.source.bytes == source.to_utf8() and parsed.source.partition_valid() and parsed.diagnostics == [
 				Diagnostic.{ problem: HtmlSyntax(InvalidCharacterReference), location: Text({ offset: 11, line: 1, column: 12 }), path: [] },
 				Diagnostic.{ problem: HtmlSyntax(InvalidCharacterReference), location: Text({ offset: 20, line: 1, column: 21 }), path: [] },
 			]
@@ -199,7 +202,7 @@ expect {
 			root = parsed.tree.roots.first()?
 			node = parsed.tree.nodes.get(root)?
 			attribute = node.attributes.first()?
-			MarkupCore.text(parsed.tree, root) == "a\nb\nc" and attribute.value == "a\nb\nc" and parsed.source.bytes == source.to_utf8() and parsed.diagnostics.is_empty()
+			(parsed.tree).text(root) == "a\nb\nc" and attribute.value == "a\nb\nc" and parsed.source.bytes == source.to_utf8() and parsed.diagnostics.is_empty()
 		}
 		Err(_) => False
 	}
@@ -209,7 +212,7 @@ expect {
 	match (Html.parse_fragment(source, {}), Html.parse_fragment(source, { recovery: Browser, exact_structure: True })) {
 		(Err(InvalidMarkup(Diagnostic.{ problem: HtmlSyntax(ControlCharacterInInputStream), location: Text({ offset: 3, line: 1, column: 4 }), path: [] })), Ok(fragment)) => {
 			root = fragment.parsed.tree.roots.first()?
-			MarkupCore.text(fragment.parsed.tree, root) == "\u(000B)" and fragment.parsed.diagnostics == [Diagnostic.{ problem: HtmlSyntax(ControlCharacterInInputStream), location: Text({ offset: 3, line: 1, column: 4 }), path: [] }]
+			(fragment.parsed.tree).text(root) == "\u(000B)" and fragment.parsed.diagnostics == [Diagnostic.{ problem: HtmlSyntax(ControlCharacterInInputStream), location: Text({ offset: 3, line: 1, column: 4 }), path: [] }]
 		}
 		_ => False
 	}
@@ -272,7 +275,7 @@ expect Html.parse_fragment("<button><input type='hidden'></button>", {}).is_ok()
 expect Html.parse_segments(["<table>", "</table>"], {}).is_err()
 expect {
 	plan = Html.parse_segments(["<textarea>\nA", "B</textarea>"], {})?
-	MarkupCore.text(plan.metadata().parsed.tree, MarkupCore.single_root(plan.metadata().parsed.tree)?) == "AB"
+	(plan.metadata().parsed.tree).text((plan.metadata().parsed.tree).single_root()?) == "AB"
 }
 
 expect Html.parse_segments(["<script>if(a<b)x()</script><p>", "</p>"], {}).is_ok()
@@ -294,6 +297,7 @@ expect {
 	p.metadata().slots.len() == 2 and p.metadata().slots.all(|slot| slot.index == 0)
 }
 
+authored_syntax : Str, Html.Props, Bool -> Try({ parsed : MarkupCore.Parsed, domain : [General, PureHtmlNoProjection] }, [InvalidMarkup(MarkupCore.Error)])
 authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
 	HtmlTree.parse_classified(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting, defer_projection: True }, shared(props))
 } else {

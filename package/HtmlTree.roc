@@ -56,7 +56,7 @@ HtmlTree :: [].{
 		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, context_class: HtmlNamespace, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		projected = project_selectedcontent(state, props).map_err(
 			|InvalidMarkup(e)| {
-				at = MarkupCore.position(parsed.source, (Diagnostic.byte_offset(e.location) ?? 0))
+				at = (parsed.source).position((Diagnostic.byte_offset(e.location) ?? 0))
 				InvalidMarkup({ ..e, location: Text({ offset: Diagnostic.byte_offset(e.location) ?? 0, line: at.line, column: at.column }) })
 			},
 		)?
@@ -3305,12 +3305,12 @@ expect {
 expect {
 	p = HtmlTree.parse("<table><div>x</div><tr><td>y</table>", True, {}, { recovery: Browser })?
 	div = p.tree.nodes.get(p.tree.roots.first()?)?
-	div.children.len() == 1 and MarkupCore.text(p.tree, p.tree.roots.first()?) == "x"
+	div.children.len() == 1 and (p.tree).text(p.tree.roots.first()?) == "x"
 }
 
 expect {
 	p = HtmlTree.parse("<g></path>X", True, { namespace: MarkupCore.svg_namespace, name: "path" }, { recovery: Browser })?
-	MarkupCore.text(p.tree, p.tree.roots.first()?) == "X"
+	(p.tree).text(p.tree.roots.first()?) == "X"
 }
 expect HtmlTree.parse("</path>X", True, { namespace: MarkupCore.svg_namespace, name: "path" }, { recovery: Browser }).is_ok()
 expect HtmlTree.parse("</foreignObject>X", True, { namespace: MarkupCore.svg_namespace, name: "foreignObject" }, { recovery: Browser }).is_ok()
@@ -3410,7 +3410,7 @@ expect {
 
 expect {
 	p = HtmlTree.parse("<table><a>1<p>2</a>3</p>", True, {}, { recovery: Browser })?
-	p.tree.roots.len() == 3 and MarkupCore.text(p.tree, p.tree.roots.get(1)?) == "23"
+	p.tree.roots.len() == 3 and (p.tree).text(p.tree.roots.get(1)?) == "23"
 }
 
 expect {
@@ -3484,7 +3484,7 @@ flush_table_text = |s| {
 }
 expect {
 	p = HtmlTree.parse("<table> x </table>", True, {}, { recovery: Browser })?
-	MarkupCore.text(p.tree, p.tree.roots.first()?) == " x "
+	(p.tree).text(p.tree.roots.first()?) == " x "
 }
 expect {
 	p = HtmlTree.parse("<html a=b><template><col></col><html b=c><col></col></template>", False, {}, { recovery: Browser })?
@@ -3524,7 +3524,7 @@ expect {
 }
 expect {
 	p = HtmlTree.parse("<div><svg><path><foreignObject><math></div>a", True, {}, { recovery: Browser })?
-	p.tree.roots.len() == 1 and MarkupCore.text(p.tree, p.tree.roots.first()?) == "a"
+	p.tree.roots.len() == 1 and (p.tree).text(p.tree.roots.first()?) == "a"
 }
 
 # The standard selectedcontent element reflects the selected option's subtree.
@@ -3756,7 +3756,7 @@ expect {
 	root = p.tree.nodes.get(p.tree.roots.first()?)?
 	button = p.tree.nodes.get(root.children.first()?)?
 	selectedcontent = p.tree.nodes.get(button.children.first()?)?
-	MarkupCore.text(p.tree, selectedcontent.children.first()?) == "Y" and (p.tree.nodes.get(selectedcontent.children.first()?)?).origin == Cloned({ source: { start: 86, end: 87 }, at: 16 })
+	(p.tree).text(selectedcontent.children.first()?) == "Y" and (p.tree.nodes.get(selectedcontent.children.first()?)?).origin == Cloned({ source: { start: 86, end: 87 }, at: 16 })
 }
 
 reverse_ids : List(U64) -> List(U64)
@@ -3798,20 +3798,20 @@ expect {
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	div = p.tree.nodes.get(select.children.first()?)?
 	content = p.tree.nodes.get(div.children.first()?)?
-	MarkupCore.text(p.tree, content.children.first()?) == "A"
+	(p.tree).text(content.children.first()?) == "A"
 }
 expect {
 	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<script>x</script><object>y</object><svg><script>z</script><text>B</text></svg></option></select>", True, {}, {})?
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	content = p.tree.nodes.get(select.children.first()?)?
-	content.children.len() == 2 and MarkupCore.text(p.tree, content.children.get(0)?) == "A" and MarkupCore.text(p.tree, content.children.get(1)?) == "B"
+	content.children.len() == 2 and (p.tree).text(content.children.get(0)?) == "A" and (p.tree).text(content.children.get(1)?) == "B"
 }
 expect {
 	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<selectedcontent>original</selectedcontent></option></select>", True, {}, {})?
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	option = p.tree.nodes.get(select.children.get(1)?)?
 	inside = p.tree.nodes.get(option.children.get(1)?)?
-	MarkupCore.text(p.tree, inside.children.first()?) == "original"
+	(p.tree).text(inside.children.first()?) == "original"
 }
 
 expect [
@@ -3842,7 +3842,7 @@ expect {
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	button = p.tree.nodes.get(select.children.first()?)?
 	content = p.tree.nodes.get(button.children.first()?)?
-	MarkupCore.text(p.tree, content.children.first()?) == "B"
+	(p.tree).text(content.children.first()?) == "B"
 }
 
 expect ["2junk", " +2", "000000000000000000000000000000000000002"].all(
@@ -3863,7 +3863,7 @@ expect {
 	tr = p.tree.nodes.get(tbody.children.first()?)?
 	td = p.tree.nodes.get(tr.children.first()?)?
 	fostered = p.tree.nodes.get(p.tree.roots.get(1)?)?
-	p.tree.roots.len() == 2 and tr.children.len() == 1 and td.kind == Element({ namespace: Uri(MarkupCore.html_namespace), local: "td", prefix: Unprefixed }) and MarkupCore.text(p.tree, td.children.first()?) == "y" and fostered.kind == Element({ namespace: Uri(MarkupCore.html_namespace), local: "td'", prefix: Unprefixed }) and MarkupCore.text(p.tree, fostered.children.first()?) == "x"
+	p.tree.roots.len() == 2 and tr.children.len() == 1 and td.kind == Element({ namespace: Uri(MarkupCore.html_namespace), local: "td", prefix: Unprefixed }) and (p.tree).text(td.children.first()?) == "y" and fostered.kind == Element({ namespace: Uri(MarkupCore.html_namespace), local: "td'", prefix: Unprefixed }) and (p.tree).text(fostered.children.first()?) == "x"
 }
 expect {
 	p = HtmlTree.parse("<tr>x y<td>z", True, { name: "table" }, { recovery: Browser })?

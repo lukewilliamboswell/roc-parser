@@ -32,7 +32,7 @@ Svg := { parsed : MarkupCore.Parsed }.{
 		} else {
 			MarkupCore.parse_xml(source, props)?
 		}
-		index = MarkupCore.single_root(parsed.tree).map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+		index = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.svg_namespace), local: "svg" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
 		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		match node.kind {
 			Element(name) if name.namespace == Uri(MarkupCore.svg_namespace) and name.local == "svg" => {}
@@ -139,7 +139,7 @@ SvgFragment := { parsed : MarkupCore.Parsed }.{
 	## Require a single element root for downstream row/component templates.
 	single_element : Svg.Fragment -> Try(MarkupCore.Node, [RootCount(U64)])
 	single_element = |fragment| {
-		index = MarkupCore.single_root(fragment.parsed.tree)?
+		index = (fragment.parsed.tree).single_root()?
 		Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }

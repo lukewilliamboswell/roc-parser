@@ -47,14 +47,8 @@ Markup :: [].{
 	parse_xml = MarkupCore.parse_xml
 	parse_xml_fragment : _
 	parse_xml_fragment = MarkupCore.parse_xml_fragment
-	position : _
-	position = MarkupCore.position
 	whitespace : _
 	whitespace = MarkupCore.whitespace
-	single_root : _
-	single_root = MarkupCore.single_root
-	text : _
-	text = MarkupCore.text
 	html_namespace : Str
 	html_namespace = MarkupCore.html_namespace
 	svg_namespace : Str

@@ -47,7 +47,7 @@ MarkupValidate :: [].{
 								Cloned(copy) => copy.source.start
 								Implied(at) => at
 							}
-							at = MarkupCore.position(parsed.source, offset)
+							at = (parsed.source).position(offset)
 							$diagnostics = $diagnostics.append(Diagnostic.{ problem: UnknownElement(name.local.release_excess_capacity()), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 						}
 						var $attr_index = 0
@@ -62,7 +62,7 @@ MarkupValidate :: [].{
 									if $diagnostics.len() >= props.max_diagnostics {
 										return fail(parsed, node, LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }))
 									}
-									at = MarkupCore.position(parsed.source, attr.span.start)
+									at = (parsed.source).position(attr.span.start)
 									$diagnostics = $diagnostics.append(Diagnostic.{ problem: problem, location: LineColumn({ line: at.line, column: at.column }), path: [] })
 								}
 								if props.check_values and allowed and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $attr_index)) {
@@ -118,7 +118,7 @@ MarkupValidate :: [].{
 									html_nothing = member(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr", "selectedcontent"], name.local) or (name.local == "option" and node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "label") and node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "value"))
 									allowed = copied or if (name.namespace == Uri(MarkupCore.svg_namespace)) !svg_elements(name.local) or member(["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"], name.local) else if (name.namespace == Uri(MarkupCore.mathml_namespace)) !math_elements(name.local) or member(["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"], name.local) else if (name.namespace == Uri(MarkupCore.html_namespace)) !html_nothing and !member(["selectedcontent", "html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"], name.local) else True
 									if !allowed {
-										at = MarkupCore.position(plan.metadata().parsed.source, slot.location.start)
+										at = (plan.metadata().parsed.source).position(slot.location.start)
 										return Err(InvalidMarkup(Diagnostic.{ problem: Interpolation({ index: slot.index, reason: TextHoleForbidden(name.local) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 									}
 								}
@@ -298,13 +298,13 @@ fail = |parsed, node, problem| {
 		Cloned(copy) => copy.source.start
 		Implied(at) => at
 	}
-	at = MarkupCore.position(parsed.source, offset)
+	at = (parsed.source).position(offset)
 	Err(InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 }
 
 attr_fail : MarkupCore.Parsed, MarkupCore.Attribute, MarkupCore.Problem -> Try(a, [InvalidMarkup(MarkupCore.Error)])
 attr_fail = |parsed, attr, problem| {
-	at = MarkupCore.position(parsed.source, attr.span.start)
+	at = (parsed.source).position(attr.span.start)
 	Err(InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 }
 

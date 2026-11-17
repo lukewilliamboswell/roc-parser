@@ -593,7 +593,7 @@ tag_name = |bytes| {
 
 template_error : MarkupCore.Source, U64, U64, MarkupCore.InterpolationProblem -> [InvalidMarkup(MarkupCore.Error)]
 template_error = |source, offset, index, reason| {
-	at = MarkupCore.position(source, offset)
+	at = (source).position(offset)
 	InvalidMarkup(Diagnostic.{ problem: Interpolation({ index, reason }), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 }
 
@@ -609,12 +609,12 @@ expect {
 }
 expect {
 	plan = xml_plan(["<g>a", "b", "c</g>"])?
-	root = plan.parsed.tree.nodes.get(MarkupCore.single_root(plan.parsed.tree)?)?
+	root = plan.parsed.tree.nodes.get((plan.parsed.tree).single_root()?)?
 	root.children.map(|index| plan.parsed.tree.nodes.get(index).map_ok(|node| node.kind)) == [Ok(Text("a")), Ok(Text("")), Ok(Text("b")), Ok(Text("")), Ok(Text("c"))]
 }
 expect {
 	plan = xml_plan(["<g>", "", "</g>"])?
-	root = plan.parsed.tree.nodes.get(MarkupCore.single_root(plan.parsed.tree)?)?
+	root = plan.parsed.tree.nodes.get((plan.parsed.tree).single_root()?)?
 	root.children == plan.slots.map(
 		|slot| match slot.target {
 			TextSlot(target) => target.node
@@ -636,7 +636,7 @@ expect xml_plan(["<style>", "</style>"]).is_err()
 expect xml_plan(["<g a='", "", "'/>"]).is_err()
 expect {
 	plan = xml_plan(["<g>__hole_0__&amp;", "&lt;__hole_0__</g>"])?
-	MarkupCore.text(plan.parsed.tree, MarkupCore.single_root(plan.parsed.tree)?) == "__hole_0__&<__hole_0__" and plan.slots.len() == 1
+	(plan.parsed.tree).text((plan.parsed.tree).single_root()?) == "__hole_0__&<__hole_0__" and plan.slots.len() == 1
 }
 expect {
 	plan = xml_plan(["<g>", "</g>"])?
@@ -669,7 +669,7 @@ normalize_lines = |text| Str.join_with(Str.join_with(text.split_on("\r\n"), "\n"
 
 expect {
 	plan = xml_plan(["<g><![CDATA[a&", "b<]]></g>"])?
-	MarkupCore.text(plan.parsed.tree, MarkupCore.single_root(plan.parsed.tree)?) == "a&b<" and plan.slots.len() == 1
+	(plan.parsed.tree).text((plan.parsed.tree).single_root()?) == "a&b<" and plan.slots.len() == 1
 }
 expect xml_plan(["<s:script xmlns:s='http://www.w3.org/2000/svg'>", "</s:script>"]).is_err()
 expect xml_plan(["<g XMLNS='", "'/>"]).is_ok()
@@ -713,7 +713,7 @@ decode_source_region = |source, start, end, cdata_markup, decode| {
 
 expect {
 	plan = xml_plan(["<g>a<![CDATA[b&", "<c]]>d</g>"])?
-	MarkupCore.text(plan.parsed.tree, MarkupCore.single_root(plan.parsed.tree)?) == "ab&<cd" and plan.slots.len() == 1
+	(plan.parsed.tree).text((plan.parsed.tree).single_root()?) == "ab&<cd" and plan.slots.len() == 1
 }
 
 CheckedTemplate(a) := { bound : MarkupTemplate.Bound(a) }.{
