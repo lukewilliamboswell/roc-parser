@@ -154,8 +154,8 @@ def _writer_uncached(data):
         tree.parse(io.BytesIO(oracle_bytes(data)))
         converted = tree.convert()
         serialized = (str(make_header(203)) + ET.tostring(converted.to_etree(), encoding="unicode")).encode()
-        before = _oracle_uncached(data)
-        after = _oracle_uncached(serialized)
+        before = oracle(data)
+        after = oracle(serialized)
         return {"status": "ok", "bytes": serialized, "expected": after,
                 "original_semantics": semantic_projection(before), "written_semantics": semantic_projection(after),
                 "known_loss": known_writer_loss(data, before, after)}
