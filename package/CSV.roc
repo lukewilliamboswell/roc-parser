@@ -132,7 +132,7 @@ CSV := { records : List(CSV.Record) }.{
 	parse_string_records = |text| {
 		bytes = text.to_utf8()
 		len = bytes.len()
-		match scan_table_as(bytes, |field, start, next, quoted| string_field(text, len, field, start, next, quoted)) {
+		match scan_table_as(bytes, |field_bytes, start, next, quoted| string_field(text, len, field_bytes, start, next, quoted)) {
 			Ok(records) => Ok(records)
 			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
 		}
