@@ -571,6 +571,9 @@ consume_token = |state| {
 		return Err(token_failure(state, "DTDs and external entities are unsupported"))
 	}
 	if text.starts_with("<!--") or text.starts_with("<![CDATA[") {
+		if text.starts_with("<![CDATA[") and text.count_utf8_bytes() < 12 {
+			return Err(token_failure(state, "malformed XML comment or CDATA"))
+		}
 		if text.starts_with("<![CDATA[") and ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(state.stack.last().map_ok(|frame| frame.name) ?? "") {
 			content = Str.from_utf8_lossy(text.to_utf8().sublist({ start: 9, len: text.count_utf8_bytes() - 12 }))
 			if content != content.trim() {
@@ -615,6 +618,9 @@ consume_token = |state| {
 				return Err(token_failure(state, "encoding override contradicts XML declaration"))
 			}
 		} else if text.starts_with("<?OFX ") {
+			if state.token.len() < 8 {
+				return Err(token_failure(state, "malformed OFX processing instruction"))
+			}
 			attrs = Str.from_utf8_lossy(state.token.sublist({ start: 6, len: state.token.len() - 8 }))
 			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| token_failure(state, "malformed OFX processing instruction"))?.root
 			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
@@ -631,8 +637,14 @@ consume_token = |state| {
 	}
 	closing = text.starts_with("</")
 	self_closed = text.ends_with("/>")
+	if closing and self_closed {
+		return Err(token_failure(state, "OFX closing tags cannot be self-closing"))
+	}
 	start = if (closing) 2 else 1
 	end = text.count_utf8_bytes() - (if (self_closed) 2 else 1)
+	if end < start {
+		return Err(token_failure(state, "empty OFX tag name"))
+	}
 	name = Str.from_utf8_lossy(state.token.sublist({ start, len: end - start })).trim()
 	if !valid_name(name) {
 		return Err(token_failure(state, "OFX tag names must be uppercase without attributes"))
@@ -1455,4 +1467,11 @@ expect {
 		}
 		_ => False
 	}
+}
+
+expect ["</>", "<OFX></>", "<OFX></OFX/>", "<OFX></ />", "<OFX><//>", "<OFX><>", "<?OFX?>", "<?OFX ?>", "<?xml?>", "<?xml ?>", "<![CDATA[>", "<![CDATA[]]>", "<OFX><![CDATA[]]></OFX>"].all(|source| OFX.parse_str(source).is_err())
+
+expect {
+	source = sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[]]></MEMO>")
+	OFX.parse_str(source)?.statements.first()?.transactions.first()?.memo == ""
 }
