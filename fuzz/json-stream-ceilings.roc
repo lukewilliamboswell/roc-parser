@@ -144,6 +144,78 @@ expected = |count, format, operation| {
 	count * (19 + 512 + 1) + $digits + if (format == Array) 1 else 0
 }
 
+# A retained 32-byte string must keep only its own framed record, even when
+# it was read from a much larger source chunk that has since been drained.
+retain_sample : JsonStream.Format, U64 -> Str
+retain_sample = |format, salt| {
+	chunks = Iter.custom(
+		0.U64,
+		Err(Unknown),
+		|index| {
+			if index > 0 {
+				return Err(NoMore)
+			}
+			# The runtime prefix forces a heap-backed source chunk; a static
+			# constant would make source-retention accounting vacuous.
+			value = "${salt.to_str()}${Str.repeat("t", 30)}"
+			padding = Str.repeat(" ", 262_144)
+			wire = if (format == Ndjson) "\"${value}\"\n${padding}\n" else "[\"${value}\",${padding}null]"
+			Ok((wire.to_utf8(), 1))
+		},
+	)
+	var $retained = ""
+	var $finished = False
+	for result in JsonStream.parse_iter(chunks, { format: format }) {
+		match result {
+			Ok(Value(String(text))) => {
+				$retained = text
+			}
+			Ok(Value(Null)) => {}
+			Ok(Finished(_)) => {
+				$finished = True
+			}
+			_ => crash "retained JSON sample failed"
+		}
+	}
+	if !$finished {
+		crash "retained JSON sample omitted completion"
+	}
+	$retained
+}
+
+# One-byte chunks must grow a single record buffer, rather than copy the
+# unfinished record on every pull.
+fragmented_sample : U64 -> U64
+fragmented_sample = |size| {
+	bytes = "[\"${Str.repeat("x", size)}\"]".to_utf8()
+	chunks = Iter.custom(
+		0.U64,
+		Err(Unknown),
+		|index| if index < bytes.len() {
+			Ok(([bytes.get(index) ?? 0], index + 1))
+		} else {
+			Err(NoMore)
+		},
+	)
+	var $length = 0.U64
+	var $finished = False
+	for result in JsonStream.parse_iter(chunks, { format: Array }) {
+		match result {
+			Ok(Value(String(text))) => {
+				$length = $length + text.count_utf8_bytes()
+			}
+			Ok(Finished(_)) => {
+				$finished = True
+			}
+			_ => crash "fragmented JSON sample failed"
+		}
+	}
+	if !$finished {
+		crash "fragmented JSON sample omitted completion"
+	}
+	$length
+}
+
 test! = |bytes| {
 	choice = (bytes.first() ?? 0).to_u64()
 	count = [1.U64, 32, 64, 2048].get(choice // 6 % 4) ?? 1
@@ -168,12 +240,30 @@ test! = |bytes| {
 	if large.stats.requested_bytes > 65_536 + count * 32_768 {
 		crash "JSON allocation traffic exceeded its linear ceiling"
 	}
+	if choice == 24 or choice == 25 {
+		retained = Fuzz.measure!("json-retained-source", || retain_sample(format, choice))
+		if retained.value != "${choice.to_str()}${Str.repeat("t", 30)}" {
+			crash "retained JSON value changed"
+		}
+		if retained.stats.exit_live_bytes > retained.stats.entry_live_bytes + 2048 {
+			crash "small JSON value pinned a completed source chunk"
+		}
+	}
+	if choice == 26 {
+		size = 4096 + choice
+		# Keep the size dependent on runtime input so the pure pipeline is
+		# measured rather than evaluated as a compile-time constant.
+		fragmented = Fuzz.measure!("json-one-byte-record", || fragmented_sample(size))
+		if fragmented.value != size or fragmented.stats.requested_bytes > 65_536 + 64 * size {
+			crash "fragmented JSON record allocation grew quadratically"
+		}
+	}
 	Fuzz.keep
 }
 
 target = Fuzz.target_with!({
 	name: "json-stream-ceilings",
-	examples: [0.U8, 1, 2, 3, 4, 5, 18, 19, 20, 21, 22, 23].map(
+	examples: [0.U8, 1, 2, 3, 4, 5, 18, 19, 20, 21, 22, 23, 24, 25, 26].map(
 		|byte| {
 			operation = match byte.to_u64() // 2 % 3 {
 				0 => "reader"
@@ -181,8 +271,8 @@ target = Fuzz.target_with!({
 				_ => "pipeline"
 			}
 			format = if (byte % 2 == 0) "ndjson" else "array"
-			size = if (byte < 18) "small" else "2048-records"
-			Fuzz.example({ name: "${size}-${format}-${operation}", revision: "1", make: || [byte] })
+			size = if (byte == 26) "one-byte-record" else if (byte >= 24) "retained-source" else if (byte < 18) "small" else "2048-records"
+			Fuzz.example({ name: if (byte == 26) "one-byte-record-array-reader" else "${size}-${format}-${operation}", revision: "1", make: || [byte] })
 		},
 	),
 	# Coverage-generated entropy selects at most 64 records. Named examples

@@ -535,6 +535,9 @@ scan = |src, bytes, options| {
 
 				InArray => {
 					$items = $items.append($value)
+					# Transfer the completed subtree without retaining a second local
+					# reference while the scanner starts the next value.
+					$value = Null
 					after = skip_ws(bytes, $pos, comments, check)?
 					byte = bytes.get(after) ?? 0
 					var $close = after
@@ -576,6 +579,7 @@ scan = |src, bytes, options| {
 
 				InObject => {
 					$members = $members.append({ key: $key, value: $value })
+					$value = Null
 					$key_ats = $key_ats.append($key_at)
 					after = skip_ws(bytes, $pos, comments, check)?
 					byte = bytes.get(after) ?? 0
@@ -776,7 +780,8 @@ close_members = |members, key_ats, first, duplicates| {
 		while $index < members.len() {
 			match members.get($index) {
 				Ok(member) => {
-					match $out.find_first_index(|kept| kept.key == member.key) {
+					member_key = member.key
+					match member_key_index($out, member_key) {
 						Err(_) => {
 							$out = $out.append(member)
 						}
@@ -830,6 +835,24 @@ close_members = |members, key_ats, first, duplicates| {
 		}
 	}
 	Ok($out)
+}
+
+# Search only key strings; the compared members' nested values are unrelated
+# to duplicate detection and must not be retained for each comparison.
+member_key_index : List(Member), Str -> Try(U64, [NotFound])
+member_key_index = |members, key| {
+	var $index = 0.U64
+	while $index < members.len() {
+		found_key = match members.get($index) {
+			Ok({ key: present, .. }) => present
+			_ => ""
+		}
+		if found_key == key {
+			return Ok($index)
+		}
+		$index = $index + 1
+	}
+	Err(NotFound)
 }
 
 ## The most members an object may have for its keys to be compared one by one.
@@ -971,11 +994,44 @@ slice_checked = |src, bytes, start, end| {
 	}
 }
 
+# JSON strings have only three stop conditions. Direct vector comparisons
+# avoid the generic byte-class lookup tables on this frequent short-token path.
+plain_string_end : List(U8), U64 -> U64
+plain_string_end = |bytes, start| {
+	quote_vector = U8x16.splat('"')
+	backslash = U8x16.splat('\\')
+	high = U8x16.splat(0xE0)
+	zero = U8x16.splat(0)
+	var $pos = start
+	while True {
+		match U8x16.load(bytes, $pos) {
+			Ok(vector) => {
+				control = U8x16.eq_lanes(U8x16.bitwise_and(vector, high), zero)
+				mask = U8x16.to_bitmask(U8x16.bitwise_or(control, U8x16.bitwise_or(U8x16.eq_lanes(vector, quote_vector), U8x16.eq_lanes(vector, backslash))))
+				if mask != 0 {
+					return $pos + U16.count_trailing_zero_bits(mask).to_u64()
+				}
+				$pos = $pos + 16
+			}
+			Err(_) => {
+				while $pos < bytes.len() {
+					byte = bytes.get($pos) ?? 0
+					if byte < 0x20 or byte == '"' or byte == '\\' {
+						return $pos
+					}
+					$pos = $pos + 1
+				}
+				return $pos
+			}
+		}
+	}
+}
+
 ## The string whose opening quote is at `start`, decoded, and the position
 ## after its closing quote. A string without escapes is cut from the input.
 scan_string : Str, List(U8), U64, JsonValue.Options -> Try({ str : Str, end : U64 }, [JsonFail(Failure)])
 scan_string = |src, bytes, start, options| {
-	run_end = Utf8.skip_class(bytes, start + 1, plain_string_class)
+	run_end = plain_string_end(bytes, start + 1)
 	if bytes.get(run_end) == Ok('"') {
 		if run_end - start - 1 > options.max_string_bytes {
 			return fail(start, "string exceeds the limit of ${options.max_string_bytes.to_str()} bytes")
@@ -1083,7 +1139,7 @@ scan_escaped_string = |bytes, start, run_end, options| {
 			$out = $out.append(byte)
 			$pos = $pos + 1
 		} else {
-			run = Utf8.skip_class(bytes, $pos + 1, plain_string_class)
+			run = plain_string_end(bytes, $pos + 1)
 			$out = $out.append_sublist(bytes, { start: $pos, len: run - $pos })
 			$pos = run
 		}
@@ -1560,7 +1616,7 @@ write_string = |buf, text| {
 	var $out = buf.append('"')
 	var $pos = 0
 	while $pos < len {
-		run = Utf8.skip_class(bytes, $pos, plain_string_class)
+		run = plain_string_end(bytes, $pos)
 		$out = $out.append_sublist(bytes, { start: $pos, len: run - $pos })
 		if run < len {
 			$out = append_escape($out, bytes.get(run) ?? 0)
@@ -2372,3 +2428,18 @@ expect Utf8.parse_str_partial(JsonValue.parser_with({ max_bytes: 9 }), "null nex
 expect JsonValue.validate({ source: "null", options: { max_bytes: 4 } }) == Ok(Null)
 expect JsonValue.validate({ source: "null ", options: { max_bytes: 4 } }) == Err(BadQuotedBytes("<literal>:1:5: JSON: document exceeds the limit of 4 bytes"))
 expect JsonValue.to_str_with(Array([Null]), { indent: U64.highest }) == Err(TooLarge(U64.highest))
+
+# The specialized vector stop mask agrees with the generic JSON byte class at
+# every byte value, including controls, escapes and high UTF-8 bytes, across
+# vector loads and scalar tails.
+expect {
+	var $same = True
+	for prefix in (0.U64).to(32) {
+		for stop in (0.U16).to(255) {
+			bytes = List.repeat('a', prefix).append(stop.to_u8_wrap()).concat(List.repeat('b', 32)).append('"')
+			$same = $same and plain_string_end(bytes, 0) == Utf8.skip_class(bytes, 0, plain_string_class)
+			$same = $same and plain_string_end(bytes, U64.min(3, bytes.len())) == Utf8.skip_class(bytes, U64.min(3, bytes.len()), plain_string_class)
+		}
+	}
+	$same
+}

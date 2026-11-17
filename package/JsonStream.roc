@@ -1,4 +1,5 @@
 import JsonValue
+import Utf8
 import Streaming
 
 ## Incremental UTF-8 JSON record streams. Each value owns at most its record's
@@ -87,27 +88,35 @@ move = |state, byte| {
 }
 
 # Validate every byte, including discarded wrapper comments, without retaining it.
-utf8 : State, U8 -> Try(State, JsonStream.Error)
-utf8 = |state, byte| {
-	if state.utf8_remaining > 0 {
-		if byte < state.utf8_low or byte > state.utf8_high {
-			return Err(problem(state, "invalid UTF-8"))
+Utf8State : { remaining : U8, low : U8, high : U8 }
+
+utf8_next : U8, U8, U8, U8 -> Try(Utf8State, [InvalidUtf8])
+utf8_next = |remaining, low, high, byte| {
+	if remaining > 0 {
+		if byte < low or byte > high {
+			return Err(InvalidUtf8)
 		}
-		return Ok({ ..state, utf8_remaining: state.utf8_remaining - 1, utf8_low: 0x80, utf8_high: 0xBF })
+		return Ok({ remaining: remaining - 1, low: 0x80, high: 0xBF })
 	}
 	if byte < 0x80 {
-		return Ok(state)
+		return Ok({ remaining: 0, low: 0x80, high: 0xBF })
 	}
 	if byte >= 0xC2 and byte <= 0xDF {
-		return Ok({ ..state, utf8_remaining: 1 })
+		return Ok({ remaining: 1, low: 0x80, high: 0xBF })
 	}
 	if byte >= 0xE0 and byte <= 0xEF {
-		return Ok({ ..state, utf8_remaining: 2, utf8_low: if (byte == 0xE0) 0xA0 else 0x80, utf8_high: if (byte == 0xED) 0x9F else 0xBF })
+		return Ok({ remaining: 2, low: if (byte == 0xE0) 0xA0 else 0x80, high: if (byte == 0xED) 0x9F else 0xBF })
 	}
 	if byte >= 0xF0 and byte <= 0xF4 {
-		return Ok({ ..state, utf8_remaining: 3, utf8_low: if (byte == 0xF0) 0x90 else 0x80, utf8_high: if (byte == 0xF4) 0x8F else 0xBF })
+		return Ok({ remaining: 3, low: if (byte == 0xF0) 0x90 else 0x80, high: if (byte == 0xF4) 0x8F else 0xBF })
 	}
-	Err(problem(state, "invalid UTF-8"))
+	Err(InvalidUtf8)
+}
+
+utf8 : State, U8 -> Try(State, JsonStream.Error)
+utf8 = |state, byte| match utf8_next(state.utf8_remaining, state.utf8_low, state.utf8_high, byte) {
+	Err(_) => Err(problem(state, "invalid UTF-8"))
+	Ok(validated) => Ok({ ..state, utf8_remaining: validated.remaining, utf8_low: validated.low, utf8_high: validated.high })
 }
 
 whitespace : U8 -> Bool
@@ -135,19 +144,71 @@ record_result = |state, consumed| {
 	}
 }
 
-advance : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, JsonValue, JsonStream.Error)
-advance = |initial, bytes, end| {
-	var $state = initial
-	var $index = 0
-	while $index < bytes.len() {
-		byte = bytes.get($index) ?? 0
-		match utf8($state, byte) {
-			Err(error) => return { state: $state, consumed: $index, outcome: Failed(error) }
-			Ok(validated) => {
-				$state = validated
+# Framing NDJSON does not inspect JSON punctuation. Within an array string,
+# only quotes and backslashes change scanner state. Bulk-copy ASCII runs while
+# the exceptional-byte path maintains UTF-8 and physical-line diagnostics.
+ascii_run_end : List(U8), U64, Bool -> U64
+ascii_run_end = |bytes, start, string| {
+	cr = U8x16.splat('\r')
+	lf = U8x16.splat('\n')
+	quote_vector = U8x16.splat('"')
+	backslash = U8x16.splat('\\')
+	var $pos = start
+	while True {
+		match U8x16.load(bytes, $pos) {
+			Ok(vector) => {
+				lines = U8x16.bitwise_or(U8x16.eq_lanes(vector, cr), U8x16.eq_lanes(vector, lf))
+				stops = if (string) U8x16.bitwise_or(lines, U8x16.bitwise_or(U8x16.eq_lanes(vector, quote_vector), U8x16.eq_lanes(vector, backslash))) else lines
+				mask = U8x16.to_bitmask(U8x16.bitwise_or(vector, stops))
+				if mask != 0 {
+					return $pos + U16.count_trailing_zero_bits(mask).to_u64()
+				}
+				$pos = $pos + 16
+			}
+			Err(_) => {
+				while $pos < bytes.len() {
+					byte = bytes.get($pos) ?? 0
+					if byte >= 0x80 or byte == '\r' or byte == '\n' or (string and (byte == '"' or byte == '\\')) {
+						return $pos
+					}
+					$pos = $pos + 1
+				}
+				return $pos
 			}
 		}
-		if $state.props.format == Ndjson {
+	}
+}
+
+advance : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, JsonValue, JsonStream.Error)
+advance = |state, bytes, end| if (state.props.format == Ndjson) ndjson_step(state, bytes, end) else array_step(state, bytes, end)
+
+# Separate framing loops keep format selection outside the byte hot path.
+ndjson_step : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, JsonValue, JsonStream.Error)
+ndjson_step = |initial, bytes, end| {
+	var $state = initial
+	var $index = 0.U64
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		if $state.utf8_remaining == 0 and byte < 0x80 and byte != '\r' and byte != '\n' {
+			run_end = ascii_run_end(bytes, $index, False)
+			len = U64.min(run_end - $index, $state.props.max_record_bytes - U64.min($state.record.len(), $state.props.max_record_bytes))
+			if $state.record.is_empty() and len > 0 {
+				$state = { ..$state, record: List.with_capacity(U64.min($state.props.max_record_bytes, U64.max(32, len))) }
+			}
+			$state = { ..$state, record: $state.record.append_sublist(bytes, { start: $index, len }), column: $state.column + len, previous_cr: False }
+			$index = $index + len
+			if $index < run_end {
+				return { state: $state, consumed: $index, outcome: Failed(problem($state, "record byte limit exceeded")) }
+			}
+		} else {
+			if byte >= 0x80 or $state.utf8_remaining > 0 {
+				match utf8($state, byte) {
+					Err(error) => return { state: $state, consumed: $index, outcome: Failed(error) }
+					Ok(validated) => {
+						$state = validated
+					}
+				}
+			}
 			if byte == '\n' {
 				$state = move($state, byte)
 				$index = $index + 1
@@ -162,91 +223,6 @@ advance = |initial, bytes, end| {
 				$state = move({ ..$state, record: $state.record.append(byte) }, byte)
 				$index = $index + 1
 			}
-		} else {
-			collecting = !$state.record.is_empty()
-			if $state.phase == Bom {
-				if ($state.bom == 1 and byte != 0xBB) or ($state.bom == 2 and byte != 0xBF) {
-					return { state: $state, consumed: $index, outcome: Failed(problem($state, "invalid byte order mark")) }
-				}
-				$state = { ..$state, bom: $state.bom + 1, phase: if ($state.bom == 2) Start else Bom }
-			} else if $state.comment != Normal {
-				if collecting {
-					if $state.record.len() >= $state.props.max_record_bytes {
-						return { state: $state, consumed: $index, outcome: Failed(problem($state, "record byte limit exceeded")) }
-					}
-					$state = { ..$state, record: $state.record.append(byte) }
-				}
-				match $state.comment {
-					Slash => {
-						if byte == '/' {
-							$state = { ..$state, comment: LineComment }
-						}
-						else if byte == '*' {
-							$state = { ..$state, comment: BlockComment }
-						}
-						else {
-							return { state: $state, consumed: $index, outcome: Failed(problem($state, "expected a JSON comment")) }
-						}
-					}
-					LineComment => {
-						if byte == '\r' or byte == '\n' {
-							$state = { ..$state, comment: Normal }
-						}
-					}
-					BlockComment => {
-						if byte == '*' {
-							$state = { ..$state, comment: BlockStar }
-						}
-					}
-					BlockStar => {
-						$state = { ..$state, comment: if (byte == '/') Normal else if (byte == '*') BlockStar else BlockComment }
-					}
-					Normal => {}
-				}
-			} else if !collecting {
-				if $state.line == 1 and $state.column == 1 and byte == 0xEF and $state.props.json.bom {
-					$state = { ..$state, phase: Bom, bom: 1 }
-				} else if whitespace(byte) {
-					{}
-				}
-				else if byte == '/' and $state.props.json.comments {
-					$state = { ..$state, comment: Slash }
-				}
-				else if $state.phase == Start and byte == '[' {
-					$state = { ..$state, phase: First }
-				}
-				else if ($state.phase == First or $state.phase == Next) and byte == ']' {
-					if $state.phase == Next and !$state.props.json.trailing_commas {
-						return { state: $state, consumed: $index, outcome: Failed(problem($state, "trailing comma is not allowed")) }
-					}
-					$state = { ..$state, phase: End }
-				} else if $state.phase == Start or $state.phase == End or byte == ',' {
-					return { state: $state, consumed: $index, outcome: Failed(problem($state, if ($state.phase == Start) "expected a top-level JSON array" else if ($state.phase == End) "unexpected content after the array" else "expected an array item")) }
-				} else {
-					if $state.props.max_record_bytes == 0 {
-						return { state: $state, consumed: $index, outcome: Failed(problem($state, "record byte limit exceeded")) }
-					}
-					$state = { ..$state, record_line: $state.line, record_column: $state.column }
-					scanned = scan($state, byte)
-					$state = scanned.state
-					match scanned.error {
-						Ok(_) => {}
-						Err(error) => return { state: $state, consumed: $index, outcome: Failed(error) }
-					}
-				}
-			} else if !$state.string and $state.stack.is_empty() and (byte == ',' or byte == ']') {
-				$state = move({ ..$state, phase: if (byte == ',') Next else End }, byte)
-				return record_result($state, $index + 1)
-			} else {
-				scanned = scan($state, byte)
-				$state = scanned.state
-				match scanned.error {
-					Ok(_) => {}
-					Err(error) => return { state: $state, consumed: $index, outcome: Failed(error) }
-				}
-			}
-			$state = move($state, byte)
-			$index = $index + 1
 		}
 	}
 	if end == More {
@@ -255,51 +231,240 @@ advance = |initial, bytes, end| {
 	if $state.utf8_remaining != 0 {
 		return { state: $state, consumed: $index, outcome: Failed(problem($state, "incomplete UTF-8 character")) }
 	}
-	if $state.props.format == Ndjson {
-		if !$state.record.all(whitespace) {
-			return record_result($state, $index)
-		}
-		return { state: $state, consumed: $index, outcome: Done }
-	}
-	if $state.phase != End or !$state.record.is_empty() or ($state.comment != Normal and $state.comment != LineComment) {
-		return { state: $state, consumed: $index, outcome: Failed(problem($state, "incomplete JSON array")) }
+	if !$state.record.all(whitespace) {
+		return record_result($state, $index)
 	}
 	{ state: $state, consumed: $index, outcome: Done }
 }
 
-# Return the state on both success and failure so the caller can transfer its
-# record buffer into this scan. Retaining the old state for an Err branch would
-# make append copy the growing record for every byte.
-scan : State, U8 -> { state : State, error : Try({}, JsonStream.Error) }
-scan = |state, byte| {
-	if state.record.len() >= state.props.max_record_bytes {
-		return { state, error: Err(problem(state, "record byte limit exceeded")) }
+# Copy each contiguous source span only when yielding or crossing a chunk.
+# Owning this small buffer prevents retained values from pinning source chunks.
+capture_record : State, List(U8), U64, U64 -> State
+capture_record = |state, bytes, start, end| {
+	len = end - start
+	record = if (state.record.is_empty() and len > 0) List.with_capacity(len) else state.record
+	{ ..state, record: record.append_sublist(bytes, { start, len }) }
+}
+
+# Outside strings these bytes affect framing or physical source positions.
+framing_stop : Utf8.ByteClass
+framing_stop = Utf8.ByteClass.from_predicate(|byte| byte >= 0x80 or byte == '"' or byte == '{' or byte == '}' or byte == '[' or byte == ']' or byte == ',' or byte == '/' or byte == '\r' or byte == '\n')
+
+ArrayScan : {
+	phase : [Start, First, Next, End, Bom],
+	line : U64,
+	column : U64,
+	record_line : U64,
+	record_column : U64,
+	previous_cr : Bool,
+	string : Bool,
+	escape : Bool,
+	stack : List(U8),
+	comment : [Normal, Slash, LineComment, BlockComment, BlockStar],
+	bom : U8,
+	utf8_remaining : U8,
+	utf8_low : U8,
+	utf8_high : U8,
+}
+
+pack_array : State, ArrayScan, List(U8) -> State
+pack_array = |base, scanner, record| { ..base, record, phase: scanner.phase, line: scanner.line, column: scanner.column, record_line: scanner.record_line, record_column: scanner.record_column, previous_cr: scanner.previous_cr, string: scanner.string, escape: scanner.escape, stack: scanner.stack, comment: scanner.comment, bom: scanner.bom, utf8_remaining: scanner.utf8_remaining, utf8_low: scanner.utf8_low, utf8_high: scanner.utf8_high }
+
+array_problem : State, ArrayScan, Str -> JsonStream.Error
+array_problem = |base, scanner, message| { record: base.number, line: scanner.line, column: scanner.column, message }
+
+array_step : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, JsonValue, JsonStream.Error)
+array_step = |initial, bytes, end| {
+	base = { ..initial, record: [], stack: [] }
+	props = initial.props
+	var $record = initial.record
+	var $scan = { phase: initial.phase, line: initial.line, column: initial.column, record_line: initial.record_line, record_column: initial.record_column, previous_cr: initial.previous_cr, string: initial.string, escape: initial.escape, stack: initial.stack, comment: initial.comment, bom: initial.bom, utf8_remaining: initial.utf8_remaining, utf8_low: initial.utf8_low, utf8_high: initial.utf8_high }
+	var $index = 0
+	var $collecting = !$record.is_empty()
+	var $capture_start = 0.U64
+	var $record_bytes = $record.len()
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		if $scan.utf8_remaining == 0 and byte < 0x80 and byte != '\r' and byte != '\n' and $scan.string and !$scan.escape and $scan.comment == Normal and byte != '"' and byte != '\\' {
+			run_end = ascii_run_end(bytes, $index, True)
+			len = U64.min(run_end - $index, props.max_record_bytes - U64.min($record_bytes, props.max_record_bytes))
+			$scan = { ..$scan, column: $scan.column + len, previous_cr: False }
+			$index = $index + len
+			$record_bytes = $record_bytes + len
+			if $index < run_end {
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+			}
+		} else if $scan.string and $scan.comment == Normal {
+			if byte >= 0x80 or $scan.utf8_remaining > 0 {
+				match utf8_next($scan.utf8_remaining, $scan.utf8_low, $scan.utf8_high, byte) {
+					Err(_) => return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "invalid UTF-8")) }
+					Ok(validated) => {
+						$scan = { ..$scan, utf8_remaining: validated.remaining, utf8_low: validated.low, utf8_high: validated.high }
+					}
+				}
+			}
+			if $record_bytes >= props.max_record_bytes {
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+			}
+			if $scan.escape {
+				$scan = { ..$scan, escape: False }
+			}
+			else if byte == '\\' {
+				$scan = { ..$scan, escape: True }
+			}
+			else if byte == '"' {
+				$scan = { ..$scan, string: False }
+			}
+			$record_bytes = $record_bytes + 1
+			if byte == '\r' {
+				$scan = { ..$scan, line: $scan.line + 1, column: 1, previous_cr: True }
+			}
+			else if byte == '\n' {
+				$scan = { ..$scan, line: $scan.line + if ($scan.previous_cr) 0 else 1, column: 1, previous_cr: False }
+			}
+			else {
+				$scan = { ..$scan, column: $scan.column + 1, previous_cr: False }
+			}
+			$index = $index + 1
+		} else if $collecting and $scan.comment == Normal and $scan.utf8_remaining == 0 and !framing_stop.contains(byte) {
+			run_end = Utf8.find_any(bytes, $index, framing_stop)
+			len = U64.min(run_end - $index, props.max_record_bytes - U64.min($record_bytes, props.max_record_bytes))
+			$scan = { ..$scan, column: $scan.column + len, previous_cr: False }
+			$index = $index + len
+			$record_bytes = $record_bytes + len
+			if $index < run_end {
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+			}
+		} else {
+			if byte >= 0x80 or $scan.utf8_remaining > 0 {
+				match utf8_next($scan.utf8_remaining, $scan.utf8_low, $scan.utf8_high, byte) {
+					Err(_) => return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "invalid UTF-8")) }
+					Ok(validated) => {
+						$scan = { ..$scan, utf8_remaining: validated.remaining, utf8_low: validated.low, utf8_high: validated.high }
+					}
+				}
+			}
+			var $scan_byte = False
+			if $scan.phase == Bom {
+				if ($scan.bom == 1 and byte != 0xBB) or ($scan.bom == 2 and byte != 0xBF) {
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "invalid byte order mark")) }
+				}
+				$scan = { ..$scan, bom: $scan.bom + 1, phase: if ($scan.bom == 2) Start else Bom }
+			} else if $scan.comment != Normal {
+				if $collecting {
+					if $record_bytes >= props.max_record_bytes {
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+					}
+				}
+				match $scan.comment {
+					Slash => {
+						if byte == '/' {
+							$scan = { ..$scan, comment: LineComment }
+						}
+						else if byte == '*' {
+							$scan = { ..$scan, comment: BlockComment }
+						}
+						else {
+							return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "expected a JSON comment")) }
+						}
+					}
+					LineComment => {
+						if byte == '\r' or byte == '\n' {
+							$scan = { ..$scan, comment: Normal }
+						}
+					}
+					BlockComment => {
+						if byte == '*' {
+							$scan = { ..$scan, comment: BlockStar }
+						}
+					}
+					BlockStar => {
+						$scan = { ..$scan, comment: if (byte == '/') Normal else if (byte == '*') BlockStar else BlockComment }
+					}
+					Normal => {}
+				}
+			} else if !$collecting {
+				if $scan.line == 1 and $scan.column == 1 and byte == 0xEF and props.json.bom {
+					$scan = { ..$scan, phase: Bom, bom: 1 }
+				} else if whitespace(byte) {
+					{}
+				}
+				else if byte == '/' and props.json.comments {
+					$scan = { ..$scan, comment: Slash }
+				}
+				else if $scan.phase == Start and byte == '[' {
+					$scan = { ..$scan, phase: First }
+				}
+				else if ($scan.phase == First or $scan.phase == Next) and byte == ']' {
+					if $scan.phase == Next and !props.json.trailing_commas {
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "trailing comma is not allowed")) }
+					}
+					$scan = { ..$scan, phase: End }
+				} else if $scan.phase == Start or $scan.phase == End or byte == ',' {
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, if ($scan.phase == Start) "expected a top-level JSON array" else if ($scan.phase == End) "unexpected content after the array" else "expected an array item")) }
+				} else {
+					if props.max_record_bytes == 0 {
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+					}
+					$scan = { ..$scan, record_line: $scan.line, record_column: $scan.column }
+					$collecting = True
+					$capture_start = $index
+					$scan_byte = True
+				}
+			} else if !$scan.string and $scan.stack.is_empty() and (byte == ',' or byte == ']') {
+				$scan = { ..$scan, phase: if (byte == ',') Next else End, column: $scan.column + 1, previous_cr: False }
+				return record_result(capture_record(pack_array(base, $scan, $record), bytes, $capture_start, $index), $index + 1)
+			} else {
+				$scan_byte = True
+			}
+			if $scan_byte {
+				if $record_bytes >= props.max_record_bytes {
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "record byte limit exceeded")) }
+				}
+				if byte == '"' {
+					$scan = { ..$scan, string: True }
+				}
+				else if byte == '/' and props.json.comments {
+					$scan = { ..$scan, comment: Slash }
+				}
+				else if byte == '[' or byte == '{' {
+					if $scan.stack.len() >= props.json.max_depth {
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "nesting limit exceeded")) }
+					}
+					$scan = { ..$scan, stack: $scan.stack.append(if (byte == '[') ']' else '}') }
+				} else if byte == ']' or byte == '}' {
+					if ($scan.stack.last() ?? 0) != byte {
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "mismatched closing delimiter")) }
+					}
+					$scan = { ..$scan, stack: $scan.stack.drop_last(1) }
+				}
+			}
+			if $collecting {
+				$record_bytes = $record_bytes + 1
+			}
+			if byte == '\r' {
+				$scan = { ..$scan, line: $scan.line + 1, column: 1, previous_cr: True }
+			} else if byte == '\n' {
+				$scan = { ..$scan, line: $scan.line + if ($scan.previous_cr) 0 else 1, column: 1, previous_cr: False }
+			} else {
+				$scan = { ..$scan, column: $scan.column + 1, previous_cr: False }
+			}
+			$index = $index + 1
+		}
 	}
-	var $next = state
-	if $next.string {
-		if $next.escape {
-			$next = { ..$next, escape: False }
-		} else if byte == '\\' {
-			$next = { ..$next, escape: True }
-		} else if byte == '"' {
-			$next = { ..$next, string: False }
-		}
-	} else if byte == '"' {
-		$next = { ..$next, string: True }
-	} else if byte == '/' and $next.props.json.comments {
-		$next = { ..$next, comment: Slash }
-	} else if byte == '[' or byte == '{' {
-		if $next.stack.len() >= $next.props.json.max_depth {
-			return { state: $next, error: Err(problem($next, "nesting limit exceeded")) }
-		}
-		$next = { ..$next, stack: $next.stack.append(if (byte == '[') ']' else '}') }
-	} else if byte == ']' or byte == '}' {
-		if ($next.stack.last() ?? 0) != byte {
-			return { state: $next, error: Err(problem($next, "mismatched closing delimiter")) }
-		}
-		$next = { ..$next, stack: $next.stack.drop_last(1) }
+	if $collecting {
+		$record = capture_record(pack_array(base, $scan, $record), bytes, $capture_start, $index).record
 	}
-	{ state: { ..$next, record: $next.record.append(byte) }, error: Ok({}) }
+	if end == More {
+		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: NeedInput }
+	}
+	if $scan.utf8_remaining != 0 {
+		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "incomplete UTF-8 character")) }
+	}
+	if $scan.phase != End or !$record.is_empty() or ($scan.comment != Normal and $scan.comment != LineComment) {
+		return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, "incomplete JSON array")) }
+	}
+	{ state: pack_array(base, $scan, $record), consumed: $index, outcome: Done }
 }
 
 Writer : { props : JsonStream.WriteProps, started : Bool }
@@ -465,4 +630,11 @@ expect {
 		[Ok(Value(Number("1"))), Err(ParseErr({ record: 2, line: 2, column: 1, message: "invalid UTF-8" }))] => True
 		_ => False
 	}
+}
+
+expect {
+	text = "[\"x\u(0)\r\ny\", NaN, {\"x\":1,\"x\":2}, \"\\ud800\"]"
+	props : JsonStream.Props
+	props = { format: Array, json: { control_characters: True, non_finite: True, duplicates: KeepLast, lone_surrogates: Replace } }
+	splits_agree(text, props) and Streaming.collect(JsonStream.parse_iter([text.to_utf8()].iter(), props)) == Ok([String("x\u(0)\r\ny"), Number("NaN"), Object([{ key: "x", value: Number("2") }]), String("�")])
 }
