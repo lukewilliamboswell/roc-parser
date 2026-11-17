@@ -530,7 +530,10 @@ process_line = |s, bytes| {
 			return { state: s, result: Error(bad("QIF field count limit exceeded")) }
 		}
 		record_at = if (s.fields.is_empty()) at else s.record_at
-		fields = s.fields.append({ code, value })
+		# Most records have several fields. Reserve only after the first field
+		# validates, and never request more entries than the caller permits.
+		pending_fields = if (s.fields.is_empty()) List.with_capacity(U64.min(8, s.props.max_fields)) else s.fields
+		fields = pending_fields.append({ code, value })
 		return { state: { ..s, fields, record_at }, result: Continue }
 	}
 	text = match Streaming.decode_text(content, s.props.encoding) {
