@@ -27,7 +27,7 @@ main! = |args| {
 }
 
 encode_error : Str, AsciiDoc.Error -> Str
-encode_error = |status, error| "{\"status\":${json_string(status)},\"reason\":${json_string(error.message)},\"message\":${json_string(error.message)},\"offset\":${error.offset.to_str()},\"line\":${error.line.to_str()}}"
+encode_error = |status, error| "{\"status\":${json_string(status)},\"reason\":${json_string(Str.inspect(error.problem))},\"message\":${json_string(Str.inspect(error.problem))},\"offset\":${error.offset.to_str()},\"line\":${error.line.to_str()}}"
 
 encode_blocks : List(AsciiDoc.Block) -> Str
 encode_blocks = |blocks| "[${

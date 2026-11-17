@@ -34,7 +34,7 @@ test = |bytes| {
 					}
 				}
 				Err(Unsupported(error)) | Err(InvalidAsciiDoc(error)) => {
-					if error.offset > bytes.len() or error.line == 0 or error.message.is_empty() {
+					if error.offset > bytes.len() or error.line == 0 {
 						crash "invalid AsciiDoc error location: ${Str.inspect(source)}"
 					}
 					prefix = bytes.sublist({ start: 0, len: error.offset })

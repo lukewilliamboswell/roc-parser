@@ -22,13 +22,13 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 		parsed = parse_document_metadata(props.source, { includes: props.includes, attributes: props.attributes, max_depth: props.max_depth, expand_includes: props.expand_includes }).map_err(
 			|error| {
 				match error {
-					InvalidAsciiDoc(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: detail.message, line: detail.line })
-					Unsupported(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: "unsupported: ${detail.message}", line: detail.line })
+					InvalidAsciiDoc(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: Str.inspect(detail.problem), line: detail.line })
+					Unsupported(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: Str.inspect(detail.problem), line: detail.line })
 				}
 			},
 		)?
 		match parsed.unexpanded_includes.first() {
-			Ok(error) if props.lints.unexpanded_includes => Err(Quotation.error({ name: if (error.path == "") props.name else error.path, format: "AsciiDoc", message: error.message, line: error.line }))
+			Ok(error) if props.lints.unexpanded_includes => Err(Quotation.error({ name: if (error.path == "") props.name else error.path, format: "AsciiDoc", message: Str.inspect(error.problem), line: error.line }))
 			_ => Ok(parsed.value)
 		}
 	}
@@ -66,7 +66,8 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	}
 
 	## A located parse error: UTF-8 byte offset and one-based line.
-	Error : { offset : U64, line : U64, message : Str }
+	Problem : [SourceTooLarge(U64), Preprocessing(AsciiDocPreprocess.Problem), BlockNestingTooDeep(U64), ListNestingTooDeep(U64)]
+	Error : { offset : U64, line : U64, problem : Problem }
 
 	## Virtual sources and initial attributes for bounded preprocessing.
 	Options : { includes : List({ path : Str, source : Str }), attributes : List(Attribute), max_depth : U64, expand_includes : Bool }
@@ -238,11 +239,11 @@ import AsciiDocSource
 parse_document_metadata : Str, AsciiDoc.Options -> Try({ value : AsciiDoc.Document, unexpanded_includes : List(AsciiDocPreprocess.Error) }, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
 parse_document_metadata = |source, options| {
 	if source.to_utf8().len() > 262144 {
-		return Err(InvalidAsciiDoc({ offset: 0, line: 1, message: "AsciiDoc source exceeds 262144-byte limit" }))
+		return Err(InvalidAsciiDoc({ offset: 0, line: 1, problem: SourceTooLarge(262144) }))
 	}
 	checked = match AsciiDocPreprocess.run_scoped_checked(source, options) {
 		Ok(value) => value
-		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ offset: error.offset, line: error.line, message: error.message }))
+		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ offset: error.offset, line: error.line, problem: Preprocessing(error.problem) }))
 	}
 	value = parse_processed(checked.processed)?
 	Ok({ value, unexpanded_includes: checked.unexpanded_includes })
@@ -2005,7 +2006,7 @@ validate_nesting = |lines| {
 		}
 		else if kind != "" and !["listing", "literal", "pass", "comment", "table"].contains(delimiter(top)) {
 			if $stack.len() >= 64 {
-				return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, message: "AsciiDoc block nesting exceeds 64-level limit" }))
+				return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, problem: BlockNestingTooDeep(64) }))
 			}
 			$stack = $stack.append(text)
 		}
@@ -2022,7 +2023,7 @@ expect {
 		$n = $n + 1
 	}
 	match AsciiDoc.parse_str($source) {
-		Err(InvalidAsciiDoc(e)) => e.line == 65 and e.message == "AsciiDoc block nesting exceeds 64-level limit"
+		Err(InvalidAsciiDoc(e)) => e.line == 65 and e.problem == BlockNestingTooDeep(64)
 		_ => False
 	}
 }
@@ -2054,7 +2055,7 @@ validate_list_nesting = |lines| {
 				top = $frames.last() ?? { kind: "", level: 0 }
 				if top.kind != m.kind or top.level != m.level {
 					if $frames.len() >= 64 {
-						return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, message: "AsciiDoc list nesting exceeds 64-level limit" }))
+						return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, problem: ListNestingTooDeep(64) }))
 					}
 					$frames = $frames.append({ kind: m.kind, level: m.level })
 				}
@@ -2084,7 +2085,7 @@ expect {
 		$n = $n + 1
 	}
 	match AsciiDoc.parse_str($source) {
-		Err(InvalidAsciiDoc(e)) => e.line == 65 and e.message == "AsciiDoc list nesting exceeds 64-level limit"
+		Err(InvalidAsciiDoc(e)) => e.line == 65 and e.problem == ListNestingTooDeep(64)
 		_ => False
 	}
 }
@@ -2862,14 +2863,14 @@ expect {
 	document.title == "Checked" and document.blocks == [Paragraph("Text")]
 }
 expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", name: "book.adoc" }) {
-	Err(BadQuotedBytes(message)) => message.contains("book.adoc:1: AsciiDoc: unexpanded_includes")
+	Err(BadQuotedBytes(message)) => message.contains("book.adoc:1: AsciiDoc: UnexpandedInclude")
 	Ok(_) => False
 }
 expect AsciiDoc.validate({ source: "include::chapter.adoc[]", lints: { unexpanded_includes: False } }).is_ok()
 expect AsciiDoc.validate({ source: "\\include::chapter.adoc[]\n\nlink:chapter.adoc[role=include]" }).is_ok()
 expect AsciiDoc.validate({ source: "ifdef::missing[]\ninclude::chapter.adoc[]\nendif::[]" }).is_ok()
 expect match AsciiDoc.validate({ source: "ifdef::enabled[include::chapter.adoc[]]", attributes: [{ name: "enabled", value: "" }] }) {
-	Err(BadQuotedBytes(message)) => message.contains("unexpanded_includes")
+	Err(BadQuotedBytes(message)) => message.contains("UnexpandedInclude")
 	Ok(_) => False
 }
 expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", expand_includes: True, includes: [{ path: "chapter.adoc", source: "Expanded" }] }) {
@@ -2877,7 +2878,7 @@ expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", expand_inclu
 	Err(_) => False
 }
 expect match AsciiDoc.validate({ source: "include::missing.adoc[]", expand_includes: True }) {
-	Err(BadQuotedBytes(message)) => message.contains("virtual include not supplied") and !message.contains("unexpanded_includes")
+	Err(BadQuotedBytes(message)) => message.contains("MissingInclude") and !message.contains("UnexpandedInclude")
 	Ok(_) => False
 }
 expect {
@@ -2890,7 +2891,7 @@ expect {
 		$depth = $depth + 1
 	}
 	match AsciiDoc.validate({ source: $source }) {
-		Err(BadQuotedBytes(message)) => message.contains("block nesting exceeds") and !message.contains("unexpanded_includes")
+		Err(BadQuotedBytes(message)) => message.contains("BlockNestingTooDeep") and !message.contains("UnexpandedInclude")
 		Ok(_) => False
 	}
 }
