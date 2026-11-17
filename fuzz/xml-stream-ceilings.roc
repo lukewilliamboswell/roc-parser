@@ -80,13 +80,55 @@ drain = |n, shape| {
 	$count
 }
 
+## Retain only an early name from a much larger single input chunk. Its
+## owning tag must stay bounded after the document and source are dropped.
+retain_name : U64 -> Str
+retain_name = |n| {
+	name = "an_element_name_long_enough_to_require_shared_storage"
+	source_chunks = Iter.custom(
+		False,
+		Err(Unknown),
+		|used| {
+			if (used) Err(NoMore) else {
+				source = "<${name}>${Str.repeat("x", n * 1024)}</${name}>"
+				Ok((source.to_utf8(), True))
+			}
+		},
+	)
+	var $retained = ""
+	for event in Xml.parse_iter(source_chunks, { max_text_bytes: 1024 }) {
+		match event {
+			Ok(Value(Start(tag))) => {
+				$retained = tag.name
+			}
+			Ok(Value(_)) => {}
+			Ok(Finished(_)) => return $retained
+			_ => crash "generated owned-name document was rejected"
+		}
+	}
+	crash "owned-name stream omitted successful completion"
+}
+
 test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	choice = (bytes.first() ?? 0).to_u64()
-	shape = choice % 6
+	shape = choice % 7
 	# Smoke exploration uses one byte and stays below 64 KiB. Named examples
 	# use a second byte to check much larger documents without slowing every run.
-	n = if (bytes.get(1) == Ok(255)) 2048 else [1.U64, 8, 32, 64].get(choice // 6 % 4) ?? 1
+	n = if (bytes.get(1) == Ok(255)) 2048 else [1.U64, 8, 32, 64].get(choice // 7 % 4) ?? 1
+	if shape == 6 {
+		retained = Fuzz.measure!("xml-stream-owned-name", || retain_name(n))
+		if retained.value != "an_element_name_long_enough_to_require_shared_storage" {
+			crash "retained XML name changed"
+		}
+		if retained.stats.exit_live_bytes > retained.stats.entry_live_bytes + 1024 {
+			crash "a bounded XML name retained its much larger source chunk"
+		}
+		if retained.stats.requested_bytes > 8192 + n * 16_384 {
+			crash "owned-name stream exceeded linear allocation traffic"
+		}
+		return Fuzz.keep
+	}
 	name = ["xml-stream-elements", "xml-stream-namespaces", "xml-stream-text", "xml-stream-cdata", "xml-stream-comments", "xml-stream-attributes"].get(shape) ?? "xml-stream"
 	measured = Fuzz.measure!(name, || drain(n, shape))
 	expected = match shape {
@@ -124,6 +166,8 @@ target = Fuzz.target_with!({
 		Fuzz.example({ name: "large-comments", revision: "1", make: || [4.U8, 255] }),
 		Fuzz.example({ name: "small-attributes", revision: "1", make: || [5.U8] }),
 		Fuzz.example({ name: "large-attributes", revision: "1", make: || [5.U8, 255] }),
+		Fuzz.example({ name: "small-owned-name", revision: "1", make: || [6.U8] }),
+		Fuzz.example({ name: "large-owned-name", revision: "1", make: || [6.U8, 255] }),
 	],
 	generator: Fuzz.raw_bytes,
 	test!,

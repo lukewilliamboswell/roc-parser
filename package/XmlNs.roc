@@ -530,7 +530,20 @@ problem_of_names = |error| {
 Entry : { prefix : Str, namespace : XmlNs.Namespace, previous : U64 }
 
 has_declaration : List(Xml.Attribute) -> Bool
-has_declaration = |attributes| attributes.any(|attribute| is_declaration(attribute.name))
+has_declaration = |attributes| {
+	var $index = 0.U64
+	while $index < attributes.len() {
+		written = match attributes.get($index) {
+			Ok({ name, .. }) => name
+			_ => ""
+		}
+		if is_declaration(written) {
+			return True
+		}
+		$index = $index + 1
+	}
+	False
+}
 
 # Drops the bindings from `mark` on, restoring the ones they shadowed.
 unbind : List(Entry), Dict(Str, U64), U64 -> { entries : List(Entry), active : Dict(Str, U64) }
@@ -1974,3 +1987,5 @@ expect {
 		_ => False
 	}
 }
+
+expect XmlNs.parse_str("<r><p:a>text</wrong></r>") == Err(InvalidNamespace({ problem: UndeclaredPrefix("p"), line: 1, column: 4 }))
