@@ -454,71 +454,114 @@ incremental_step = |initial, bytes, end| {
 						}
 					}
 				}
-				byte = bytes.get($used) ?? 0
-				if $state.saw_cr and byte != '\n' {
-					return incremental_failed($state, $used, $state.offset - 1, "CR not followed by LF")
-				}
-				if byte == '\n' and !$state.saw_cr {
-					return incremental_failed($state, $used, $state.offset, "LF not preceded by CR")
-				}
-				section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
-				if $state.section_bytes >= section_limit {
-					return incremental_failed($state, $used, $state.offset, "HTTP head, chunk line, or trailer section exceeds its byte limit")
-				}
-				if byte != '\r' and byte != '\n' and $state.line_bytes >= $state.props.max_line_bytes {
-					return incremental_failed($state, $used, $state.offset, "HTTP line exceeds max_line_bytes")
-				}
-				$state = { ..$state, offset: $state.offset + 1, section_bytes: $state.section_bytes + 1, buffer: $state.buffer.append(byte) }
-				$used = $used + 1
-				if byte == '\r' {
-					$state = { ..$state, saw_cr: True }
-				} else if byte != '\n' {
-					$state = { ..$state, line_bytes: $state.line_bytes + 1 }
-				} else {
-					line_length = $state.line_bytes
-					$state = { ..$state, saw_cr: False, line_bytes: 0 }
-					match $state.phase {
-						Head => {
-							if line_length == 0 {
-								match incremental_head($state) {
-									Err(error) => return incremental_failure($state, $used, error)
-									Ok({ state, event }) => return { state, consumed: $used, outcome: Item(event) }
-								}
-							} else {
-								$state = { ..$state, lines: $state.lines + 1 }
-								if $state.lines - 1 > $state.props.max_headers {
-									return incremental_failed($state, $used, $state.offset - line_length - 2, "HTTP head exceeds max_headers")
-								}
-							}
-						}
-						ChunkSize => {
-							match shift(parse_chunk_header($state.buffer.drop_last(2)), $state.section_start) {
+				# A complete head already present in the caller's chunk needs no
+				# intermediate buffer or per-line decoder updates. The probe accepts
+				# only CRLF heads within every metadata budget; other input follows
+				# the general path so its exact framing diagnostics are preserved.
+				if $state.phase == Head and $state.buffer.is_empty() and !$state.saw_cr {
+					remaining = bytes.drop_first($used)
+					match complete_head_end(remaining, $state.props) {
+						Ok(length) => {
+							$state = { ..$state, buffer: remaining.take_first(length), offset: $state.offset + length }
+							$used = $used + length
+							match incremental_head($state) {
+								Ok({ state, event }) => return { state, consumed: $used, outcome: Item(event) }
 								Err(error) => return incremental_failure($state, $used, error)
-								Ok(size) => {
-									$state = { ..$state, phase: if (size == 0) Trailers else ChunkData(size), buffer: [], section_start: $state.offset, section_bytes: 0, lines: 0 }
-								}
 							}
 						}
-						Trailers => {
-							if line_length == 0 {
-								$state = { ..$state, phase: Complete, buffer: [] }
-							} else {
-								if $state.lines >= $state.props.max_trailers {
-									return incremental_failed($state, $used, $state.section_start, "HTTP trailer section exceeds max_trailers")
-								}
-								match shift(parse_field_line($state.buffer.drop_last(2)), $state.section_start) {
-									Err(error) => return incremental_failure($state, $used, error)
-									Ok(parsed) => {
-										if parsed.kind.is_ok() {
-											return incremental_failed($state, $used, $state.section_start, "Host and framing fields are forbidden in trailers")
-										}
-										$state = { ..$state, buffer: [], section_start: $state.offset, lines: $state.lines + 1 }
-										return { state: $state, consumed: $used, outcome: Item(Trailer(parsed.header)) }
+						Err(_) => {}
+					}
+				}
+				# Ordinary metadata bytes can be framed a whole span at a time.
+				# CRLF and every boundary/limit still pass through the same state
+				# transitions below; field validation occurs before head emission.
+				var $bulk = False
+				if !$state.saw_cr {
+					run_end = Utf8.find_line_end(bytes, $used)
+					count = run_end - $used
+					if count > 0 {
+						section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
+						line_room = $state.props.max_line_bytes - U64.min($state.line_bytes, $state.props.max_line_bytes)
+						section_room = section_limit - U64.min($state.section_bytes, section_limit)
+						accepted = U64.min(count, U64.min(line_room, section_room))
+						if accepted > 0 {
+							$state = { ..$state, offset: $state.offset + accepted, section_bytes: $state.section_bytes + accepted, line_bytes: $state.line_bytes + accepted, buffer: $state.buffer.concat(bytes.sublist({ start: $used, len: accepted })) }
+							$used = $used + accepted
+						}
+						if accepted < count {
+							message = if ($state.section_bytes >= section_limit) "HTTP head, chunk line, or trailer section exceeds its byte limit" else "HTTP line exceeds max_line_bytes"
+							return incremental_failed($state, $used, $state.offset, message)
+						}
+						$bulk = True
+					}
+				}
+				if !$bulk {
+					byte = bytes.get($used) ?? 0
+					if $state.saw_cr and byte != '\n' {
+						return incremental_failed($state, $used, $state.offset - 1, "CR not followed by LF")
+					}
+					if byte == '\n' and !$state.saw_cr {
+						return incremental_failed($state, $used, $state.offset, "LF not preceded by CR")
+					}
+					section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
+					if $state.section_bytes >= section_limit {
+						return incremental_failed($state, $used, $state.offset, "HTTP head, chunk line, or trailer section exceeds its byte limit")
+					}
+					if byte != '\r' and byte != '\n' and $state.line_bytes >= $state.props.max_line_bytes {
+						return incremental_failed($state, $used, $state.offset, "HTTP line exceeds max_line_bytes")
+					}
+					$state = { ..$state, offset: $state.offset + 1, section_bytes: $state.section_bytes + 1, buffer: $state.buffer.append(byte) }
+					$used = $used + 1
+					if byte == '\r' {
+						$state = { ..$state, saw_cr: True }
+					} else if byte != '\n' {
+						$state = { ..$state, line_bytes: $state.line_bytes + 1 }
+					} else {
+						line_length = $state.line_bytes
+						$state = { ..$state, saw_cr: False, line_bytes: 0 }
+						match $state.phase {
+							Head => {
+								if line_length == 0 {
+									match incremental_head($state) {
+										Err(error) => return incremental_failure($state, $used, error)
+										Ok({ state, event }) => return { state, consumed: $used, outcome: Item(event) }
+									}
+								} else {
+									$state = { ..$state, lines: $state.lines + 1 }
+									if $state.lines - 1 > $state.props.max_headers {
+										return incremental_failed($state, $used, $state.offset - line_length - 2, "HTTP head exceeds max_headers")
 									}
 								}
 							}
+							ChunkSize => {
+								match shift(parse_chunk_header($state.buffer.drop_last(2)), $state.section_start) {
+									Err(error) => return incremental_failure($state, $used, error)
+									Ok(size) => {
+										$state = { ..$state, phase: if (size == 0) Trailers else ChunkData(size), buffer: [], section_start: $state.offset, section_bytes: 0, lines: 0 }
+									}
+								}
+							}
+							Trailers => {
+								if line_length == 0 {
+									$state = { ..$state, phase: Complete, buffer: [] }
+								} else {
+									if $state.lines >= $state.props.max_trailers {
+										return incremental_failed($state, $used, $state.section_start, "HTTP trailer section exceeds max_trailers")
+									}
+									match shift(parse_field_line($state.buffer.drop_last(2)), $state.section_start) {
+										Err(error) => return incremental_failure($state, $used, error)
+										Ok(parsed) => {
+											if parsed.kind.is_ok() {
+												return incremental_failed($state, $used, $state.section_start, "Host and framing fields are forbidden in trailers")
+											}
+											$state = { ..$state, buffer: [], section_start: $state.offset, lines: $state.lines + 1 }
+											return { state: $state, consumed: $used, outcome: Item(Trailer(parsed.header)) }
+										}
+									}
+								}
+							}
+							_ => {}
 						}
-						_ => {}
 					}
 				}
 			}
@@ -526,19 +569,48 @@ incremental_step = |initial, bytes, end| {
 	}
 }
 
+# Probe only a complete bounded CRLF head; incomplete or exceptional input
+# retains the incremental byte driver's error positions and precedence.
+complete_head_end : Bytes, HTTP.ReadProps -> Try(U64, [Unavailable])
+complete_head_end = |bytes, props| {
+	bounded = bytes.take_first(props.max_head_bytes)
+	var $pos = 0.U64
+	var $lines = 0.U64
+	while $pos < bounded.len() {
+		remaining = bounded.drop_first($pos)
+		ordinary = U64.min(remaining.len(), props.max_line_bytes)
+		window = remaining.take_first(ordinary + U64.min(2, remaining.len() - ordinary))
+		end = Utf8.find_line_end(window, 0)
+		if end > props.max_line_bytes or end >= window.len() {
+			return Err(Unavailable)
+		}
+		if window.get(end) != Ok('\r') or window.get(end + 1) != Ok('\n') {
+			return Err(Unavailable)
+		}
+		line_end = $pos + end
+		next = line_end + 2
+		if next > props.max_head_bytes {
+			return Err(Unavailable)
+		}
+		if line_end == $pos {
+			return Ok(next)
+		}
+		$lines = $lines + 1
+		if $lines - 1 > props.max_headers {
+			return Err(Unavailable)
+		}
+		$pos = next
+	}
+	Err(Unavailable)
+}
+
 incremental_head : IncrementalState -> Try({ state : IncrementalState, event : HTTP.Event }, HTTP.Error)
 incremental_head = |state| {
 	{ line, rest } = shift(take_line(state.buffer), state.section_start)?
-	head = shift(parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] }), state.section_start)?
+	head = shift(parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] }), state.section_start)?
 	if state.mode == Requests {
 		start = shift(parse_request_line(line), state.section_start)?
-		hosts = values_named(head.fields, Host)
-		if hosts.len() > 1 {
-			return fail(state.section_start + (hosts.get(1) ?? { value: [], offset: 0 }).offset, "more than one Host field")
-		}
-		if hosts.is_empty() and at_least_1_1(start.version) {
-			return fail(state.section_start, "an HTTP/1.1 request needs a Host field")
-		}
+		_ = shift(check_host(head.fields, start.version), state.section_start)?
 		body_framing = shift(framing(head.fields, start.version), state.section_start)?
 		phase = match body_framing {
 			Length(n) => Fixed(n)
@@ -606,14 +678,10 @@ read_request_metadata : Bytes -> Try({ value : HTTP.Request, rest : Bytes, field
 read_request_metadata = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_request_line(line)?
-	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
+	head = parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] })?
 	version = start.version
-	hosts = values_named(head.fields, Host)
-	if hosts.len() > 1 {
-		fail((hosts.get(1) ?? { value: [], offset: 0 }).offset, "more than one Host field")
-	} else if hosts.is_empty() and at_least_1_1(version) {
-		fail(0, "an HTTP/1.1 request needs a Host field")
-	} else {
+	check_host(head.fields, version)?
+	{
 		body_start = input.len() - head.rest.len()
 		framed =
 			match framing(head.fields, version)? {
@@ -631,7 +699,7 @@ read_response_metadata : Bytes -> Try({ value : HTTP.Response, rest : Bytes, fie
 read_response_metadata = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_status_line(line)?
-	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
+	head = parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] })?
 	version = start.version
 	body_framing = framing(head.fields, version)?
 	code = start.status_code
@@ -669,6 +737,20 @@ validate_message = |props, rest, fields| {
 	Ok({})
 }
 
+check_host : List(Field), HTTP.Version -> Try({}, Failure)
+check_host = |fields, version| {
+	var $found = False
+	for field in fields {
+		if field.kind == Host {
+			if $found {
+				return fail(field.offset, "more than one Host field")
+			}
+			$found = True
+		}
+	}
+	if (!$found and at_least_1_1(version)) fail(0, "an HTTP/1.1 request needs a Host field") else Ok({})
+}
+
 at_least_1_1 : HTTP.Version -> Bool
 at_least_1_1 = |version| version.major > 1 or (version.major == 1 and version.minor >= 1)
 
@@ -700,7 +782,7 @@ take_line = |bytes| {
 # request-line = method SP request-target SP HTTP-version
 parse_request_line : Bytes -> Try({ method : HTTP.Method, target : Str, version : HTTP.Version }, Failure)
 parse_request_line = |line| {
-	method_len = Utf8.skip_class(line, 0, tchar_class)
+	method_len = skip_tchar(line)
 	method = to_method(line.sublist({ start: 0, len: method_len }))?
 	match line.drop_first(method_len) {
 		[' ', .. as target_onwards] => {
@@ -766,7 +848,7 @@ parse_status_line = |line| {
 					[' ', .. as text] => Ok(text)
 					_ => fail(12, "status code must be exactly three digits")
 				}?
-			valid_len = prefix_len(phrase, |byte| byte == '\t' or byte == ' ' or is_vchar(byte) or byte >= 0x80)
+			valid_len = skip_field_bytes(phrase)
 			if status_code < 100 {
 				fail(9, "status code must be at least 100")
 			} else if valid_len < phrase.len() {
@@ -785,7 +867,48 @@ parse_status_line = |line| {
 # Field lines up to and including the empty line that ends them. `base` is
 # the offset of `bytes` in the message, recorded with each field.
 parse_fields : Bytes, U64, Head -> Try(Head, Failure)
-parse_fields = |bytes, base, head| {
+parse_fields = |bytes, base, initial| {
+	var $pos = 0.U64
+	var $headers = initial.headers
+	var $fields = initial.fields
+	while True {
+		if bytes.get($pos) == Ok('\r') and bytes.get($pos + 1) == Ok('\n') {
+			return Ok({ headers: $headers, fields: $fields, rest: bytes.drop_first($pos + 2) })
+		}
+		name_end = skip_tchar_at(bytes, $pos)
+		if name_end == $pos or bytes.get(name_end) != Ok(':') {
+			return parse_fields_slow(bytes.drop_first($pos), base + $pos, { headers: $headers, fields: $fields, rest: [] })
+		}
+		var $start = name_end + 1
+		while $start < bytes.len() and is_ows(bytes.get($start) ?? 0) {
+			$start = $start + 1
+		}
+		value_end = skip_field_bytes_at(bytes, $start)
+		if bytes.get(value_end) != Ok('\r') or bytes.get(value_end + 1) != Ok('\n') {
+			return parse_fields_slow(bytes.drop_first($pos), base + $pos, { headers: $headers, fields: $fields, rest: [] })
+		}
+		var $trimmed_end = value_end
+		while $trimmed_end > $start and is_ows(bytes.get($trimmed_end - 1) ?? 0) {
+			$trimmed_end = $trimmed_end - 1
+		}
+		name_bytes = bytes.sublist({ start: $pos, len: name_end - $pos })
+		value = bytes.sublist({ start: $start, len: $trimmed_end - $start })
+		text = Str.from_utf8(value).map_err(|_| { offset: base + $start, message: "field value is not valid UTF-8" })?
+		name = Str.from_utf8(name_bytes) ?? ""
+		$headers = $headers.append({ name, value: text })
+		match field_kind(name_bytes) {
+			Ok(kind) => {
+				$fields = $fields.append({ kind, value, offset: base + $pos })
+			}
+			Err(_) => {}
+		}
+		$pos = value_end + 2
+	}
+}
+
+# Exceptional lines keep the complete parser's diagnostics and error ordering.
+parse_fields_slow : Bytes, U64, Head -> Try(Head, Failure)
+parse_fields_slow = |bytes, base, head| {
 	{ line, rest } = shift(take_line(bytes), base)?
 	if line.is_empty() {
 		Ok({ headers: head.headers, fields: head.fields, rest })
@@ -836,14 +959,14 @@ ascii_eq_lower = |bytes, wanted| {
 # field-line = field-name ":" OWS field-value OWS
 parse_field_line : Bytes -> Try({ header : HTTP.Header, kind : Try(FieldKind, [Other]), value : Bytes }, Failure)
 parse_field_line = |line| {
-	name_len = Utf8.skip_class(line, 0, tchar_class)
+	name_len = skip_tchar(line)
 	match line.drop_first(name_len) {
 		[' ', ..] | ['\t', ..] if name_len == 0 => fail(0, "obsolete line folding is not allowed")
 		[' ', ..] | ['\t', ..] => fail(name_len, "whitespace between a field name and its colon")
 		[':', .. as after_colon] if name_len > 0 => {
 			value_start = name_len + 1 + prefix_len(after_colon, is_ows)
 			value = trim_ows(after_colon)
-			valid_len = Utf8.skip_class(value, 0, field_byte_class)
+			valid_len = skip_field_bytes(value)
 			if valid_len == value.len() {
 				name = Str.from_utf8(line.sublist({ start: 0, len: name_len })) ?? ""
 				match Str.from_utf8(value) {
@@ -878,25 +1001,54 @@ values_named = |fields, wanted| {
 elements : Bytes -> List(Bytes)
 elements = |bytes| {
 	var $parts = []
-	var $current = []
-	var $index = 0
+	var $start = 0.U64
+	var $index = 0.U64
 	while $index < bytes.len() {
-		byte = bytes.get($index) ?? 0
-		if byte == ',' {
-			$parts = $parts.append(trim_ows($current))
-			$current = []
-		} else {
-			$current = $current.append(byte)
+		if bytes.get($index) == Ok(',') {
+			$parts = $parts.append(trim_ows(bytes.sublist({ start: $start, len: $index - $start })))
+			$start = $index + 1
 		}
 		$index = $index + 1
 	}
-	$parts.append(trim_ows($current))
+	$parts.append(trim_ows(bytes.drop_first($start)))
 }
 
 # How the body is delimited (RFC 9112 section 6.3), rejecting ambiguity.
 # Failures point at the field line responsible.
 framing : List(Field), HTTP.Version -> Try(Framing, Failure)
-framing = |fields, version| {
+framing = |fields, version| match fields {
+	[] => Ok(Unframed)
+	[field] => framing_single(field, version)
+	[first, second] if first.kind == Host => framing_single(second, version)
+	[first, second] if second.kind == Host => framing_single(first, version)
+	_ => framing_general(fields, version)
+}
+
+# A single framing field needs no filtered lists or comma-element allocations.
+framing_single : Field, HTTP.Version -> Try(Framing, Failure)
+framing_single = |field, version| match field.kind {
+	Host => Ok(Unframed)
+	TransferEncoding => {
+		if !at_least_1_1(version) {
+			return fail(field.offset, "Transfer-Encoding in an HTTP/1.0 message")
+		}
+		if (ascii_eq_lower(field.value, "chunked")) Ok(Chunked) else framing_general([field], version)
+	}
+	ContentLength => {
+		if field.value.is_empty() or !field.value.all(is_digit) {
+			return framing_general([field], version)
+		}
+		significant = field.value.drop_first(prefix_len(field.value, |byte| byte == '0'))
+		if significant.len() > 19 {
+			return fail(field.offset, "Content-Length is too large")
+		}
+		Ok(Length(significant.fold(0, |sum, digit| sum * 10 + (digit - '0').to_u64())))
+	}
+}
+
+# Repeated fields and comma lists retain the exact spelling and conflict checks.
+framing_general : List(Field), HTTP.Version -> Try(Framing, Failure)
+framing_general = |fields, version| {
 	transfer_encodings = values_named(fields, TransferEncoding)
 	content_lengths = values_named(fields, ContentLength)
 	match (transfer_encodings.first(), content_lengths.first()) {
@@ -906,13 +1058,17 @@ framing = |fields, version| {
 		# error"; llhttp rejects it by default, as does this parser.
 			fail(if (te.offset > cl.offset) te.offset else cl.offset, "both Transfer-Encoding and Content-Length")
 		(Ok(te), Err(_)) => {
+			if !at_least_1_1(version) {
+				return fail(te.offset, "Transfer-Encoding in an HTTP/1.0 message")
+			}
+			if transfer_encodings.len() == 1 and ascii_eq_lower(te.value, "chunked") {
+				return Ok(Chunked)
+			}
 			codings =
 				transfer_encodings
 					.fold([], |all, field| all.concat(elements(field.value)))
 					.map(|coding| coding.map(to_lower))
-			if !at_least_1_1(version) {
-				fail(te.offset, "Transfer-Encoding in an HTTP/1.0 message")
-			} else if codings == [['c', 'h', 'u', 'n', 'k', 'e', 'd']] {
+			if codings == [['c', 'h', 'u', 'n', 'k', 'e', 'd']] {
 				# Exactly one element: empty list elements (", chunked") are
 				# rejected like h11 does, since intermediaries disagree on them.
 				Ok(Chunked)
@@ -929,6 +1085,13 @@ framing = |fields, version| {
 # (RFC 9110 section 8.6), as h11 accepts.
 parse_content_length : List({ value : Bytes, offset : U64 }), { value : Bytes, offset : U64 } -> Try(Framing, Failure)
 parse_content_length = |fields, first| {
+	if fields.len() == 1 and !first.value.is_empty() and first.value.all(is_digit) {
+		significant = first.value.drop_first(prefix_len(first.value, |byte| byte == '0'))
+		if significant.len() > 19 {
+			return fail(first.offset, "Content-Length is too large")
+		}
+		return Ok(Length(significant.fold(0, |sum, digit| sum * 10 + (digit - '0').to_u64())))
+	}
 	wanted = elements(first.value).first() ?? []
 	match fields.find_first(|field| elements(field.value).any(|value| value != wanted)) {
 		Ok(field) => fail(field.offset, "conflicting Content-Length values")
@@ -969,7 +1132,7 @@ decode_chunked = |bytes, base, body| {
 	size = shift(parse_chunk_header(line), base)?
 	data_start = base + line.len() + 2
 	if size == 0 {
-		trailers = parse_fields(rest, data_start, { headers: [], fields: [], rest: [] })?
+		trailers = parse_fields(rest, data_start, { headers: List.with_capacity(16), fields: [], rest: [] })?
 		Ok({ body, rest: trailers.rest })
 	} else if size > rest.len() {
 		fail(data_start + rest.len(), "chunk is longer than the remaining input")
@@ -1007,7 +1170,7 @@ check_chunk_extensions = |bytes, line_len| {
 		[] => if (bytes.is_empty()) Ok({}) else fail(line_len - bytes.len(), "whitespace after chunk size")
 		[';', .. as after_semicolon] => {
 			name_onwards = trim_start_ows(after_semicolon)
-			name_len = Utf8.skip_class(name_onwards, 0, tchar_class)
+			name_len = skip_tchar(name_onwards)
 			if name_len == 0 {
 				fail(line_len - name_onwards.len(), "chunk extension needs a name")
 			} else {
@@ -1032,7 +1195,7 @@ chunk_ext_value_len = |bytes| {
 	match bytes {
 		['"', ..] => quoted_string_len(bytes)
 		_ => {
-			token_len = Utf8.skip_class(bytes, 0, tchar_class)
+			token_len = skip_tchar(bytes)
 			if (token_len == 0) fail(0, "chunk extension needs a value after =") else Ok(token_len)
 		}
 	}
@@ -1118,11 +1281,53 @@ is_field_byte = |byte| is_vchar(byte) or byte >= 0x80 or byte == ' ' or byte == 
 
 # tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
 #         "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
-tchar_class : Utf8.ByteClass
-tchar_class = Utf8.ByteClass.from_predicate(is_tchar)
+# Fixed HTTP classes avoid passing the generic scanner's membership table.
+# The nibble masks encode RFC 9110 tchar exactly; the scalar tail uses the
+# same predicate, checked exhaustively below.
+skip_tchar : Bytes -> U64
+skip_tchar = |bytes| skip_tchar_at(bytes, 0)
 
-field_byte_class : Utf8.ByteClass
-field_byte_class = Utf8.ByteClass.from_predicate(is_field_byte)
+skip_tchar_at : Bytes, U64 -> U64
+skip_tchar_at = |bytes, start| {
+	lo_table = U8x16.from_u128_bits(0x1C3D1534153D3E3E3F3F3F3F3F3E3F3A)
+	hi_table = U8x16.from_u128_bits(0x2010080402010000)
+	var $index = start
+	while $index + 16 <= bytes.len() {
+		v = U8x16.load(bytes, $index) ?? U8x16.splat(0)
+		lo = U8x16.table_lookup(lo_table, v.bitwise_and(U8x16.splat(15)))
+		hi = U8x16.table_lookup(hi_table, v.shr_zf_wrap(4))
+		outside = U8x16.eq_lanes(lo.bitwise_and(hi), U8x16.splat(0)).to_bitmask()
+		if outside != 0 {
+			return $index + outside.count_trailing_zero_bits().to_u64()
+		}
+		$index = $index + 16
+	}
+	while $index < bytes.len() and is_tchar(bytes.get($index) ?? 0) {
+		$index = $index + 1
+	}
+	$index
+}
+
+skip_field_bytes : Bytes -> U64
+skip_field_bytes = |bytes| skip_field_bytes_at(bytes, 0)
+
+skip_field_bytes_at : Bytes, U64 -> U64
+skip_field_bytes_at = |bytes, start| {
+	var $index = start
+	while $index + 16 <= bytes.len() {
+		v = U8x16.load(bytes, $index) ?? U8x16.splat(0)
+		control = U8x16.bitwise_or(U8x16.bitwise_and(U8x16.gt_lanes(U8x16.splat(32), v), U8x16.eq_lanes(v, U8x16.splat(9)).bitwise_not()), U8x16.eq_lanes(v, U8x16.splat(127)))
+		outside = control.to_bitmask()
+		if outside != 0 {
+			return $index + outside.count_trailing_zero_bits().to_u64()
+		}
+		$index = $index + 16
+	}
+	while $index < bytes.len() and is_field_byte(bytes.get($index) ?? 0) {
+		$index = $index + 1
+	}
+	$index
+}
 
 is_tchar : U8 -> Bool
 is_tchar = |byte| {
@@ -1588,4 +1793,42 @@ expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;abcdefghijklmnop=abcdefghijklmnop\r\nx\r\n0\r\n\r\n"
 	Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), { max_line_bytes: 35 })).is_ok()
 		and Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), { max_line_bytes: 34 })).is_err()
+}
+
+# Fixed SIMD masks must recognize the complete HTTP byte classes, including
+# invalid bytes placed after a full vector and in a final partial vector.
+expect {
+	var $valid = True
+	for value in (0.U64).to(255) {
+		byte = value.to_u8_wrap()
+		for prefix in [0.U64, 1, 15, 16, 31, 32] {
+			bytes = List.repeat('a', prefix).append(byte).concat(List.repeat('a', 32))
+			if skip_tchar(bytes) != (if (is_tchar(byte)) bytes.len() else prefix) {
+				$valid = False
+			}
+			if skip_field_bytes(bytes) != (if (is_field_byte(byte)) bytes.len() else prefix) {
+				$valid = False
+			}
+		}
+	}
+	$valid
+}
+
+expect {
+	prefix = "GET / HTTP/1.1\r\nHost: a\r\nX: ".to_utf8()
+	bad_values = [[0.U8], [1], [7], [11], [12], [31], [127], [0xFF], [0xC0, 0x80], [0xE0, 0x80, 0x80], [0xED, 0xA0, 0x80]]
+	bad_values.all(
+		|value| {
+			bytes = prefix.concat(List.repeat('a', 32)).concat(value).concat("\r\n\r\n".to_utf8())
+			HTTP.parse_request(bytes).is_err()
+				and Streaming.collect(HTTP.iter_requests([bytes].iter(), {})).is_err()
+				and Streaming.collect(HTTP.iter_requests(bytes.map(|byte| [byte]).iter(), {})).is_err()
+		},
+	)
+}
+
+expect {
+	text = "GET / HTTP/1.1\r\nHost: a\r\nX: ${Str.repeat("a", 15)}é${Str.repeat("b", 17)}😀\t \r\n\r\n"
+	request = HTTP.parse_request(text.to_utf8())?.request
+	HTTP.header(request.headers, "x") == Ok("${Str.repeat("a", 15)}é${Str.repeat("b", 17)}😀") and http_split_requests(text)
 }
