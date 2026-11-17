@@ -5,7 +5,6 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Xml
-import parser.XmlNs
 
 ## Allocation ceilings for reading XML. The first byte chooses a document
 ## shape and the second its size `n` (1-256 repetitions of a unit); each shape
@@ -16,7 +15,7 @@ import parser.XmlNs
 ##
 ## Other shapes pin the reader and namespaces: a loop over `next` that keeps
 ## no events holds a constant number of bytes plus a multiple of the depth
-## and its largest event, whatever the length, and XmlNs.parse_str holds and
+## and its largest event, whatever the length, and Xml.Namespaced.parse_str holds and
 ## requests at most three times what Xml.parse_str does, since only one tree
 ## is built.
 ##
@@ -123,7 +122,7 @@ test! = |bytes| {
 	n = U8.to_u64(bytes.get(1) ?? 0) + 1
 	input = document(shape, n)
 	size = input.count_utf8_bytes()
-	parsed = Fuzz.measure!("parse_str", || Xml.parse_str(input))
+	parsed = Fuzz.measure!("parse_str", || Xml.parse_str(input, {}))
 	if parsed.value.is_err() {
 		crash "shape ${shape.to_str()} did not parse: ${Str.inspect(parsed.value)}"
 	}
@@ -147,9 +146,9 @@ test! = |bytes| {
 	# One namespaced tree costs a bounded multiple of the plain tree: about
 	# twice, measured.
 	if shape == 10 {
-		namespaced = Fuzz.measure!("xmlns", || XmlNs.parse_str(input))
+		namespaced = Fuzz.measure!("xmlns", || Xml.Namespaced.parse_str(input, {}))
 		if namespaced.value.is_err() or held(namespaced.stats) > allowance + 3 * held(parsed.stats) or namespaced.stats.requested_bytes > allowance + 3 * parsed.stats.requested_bytes {
-			crash "XmlNs.parse_str held ${held(namespaced.stats).to_str()} bytes and requested ${namespaced.stats.requested_bytes.to_str()}; Xml.parse_str held ${held(parsed.stats).to_str()} and requested ${parsed.stats.requested_bytes.to_str()}"
+			crash "Xml.Namespaced.parse_str held ${held(namespaced.stats).to_str()} bytes and requested ${namespaced.stats.requested_bytes.to_str()}; Xml.parse_str held ${held(parsed.stats).to_str()} and requested ${parsed.stats.requested_bytes.to_str()}"
 		}
 	}
 	Fuzz.keep

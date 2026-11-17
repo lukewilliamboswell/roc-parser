@@ -5,7 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import cli.Stdout
-import parser.Utf8
+import parser.Parser
 import parser.Xml
 
 svg_input =
@@ -28,7 +28,7 @@ expected_html =
 main! : List(OsStr) => Try({}, _)
 main! = |_args| {
 	result =
-		Utf8.parse_str(Xml.parser, svg_input)
+		Xml.parser({}).parse_str(svg_input)
 			.map_ok(
 				|xml| {
 					html_to_roc_dsl(svg_to_html(xml.root), "", 0)

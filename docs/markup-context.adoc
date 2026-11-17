@@ -1,21 +1,20 @@
 [#markup-context]
 = Check authoring placement before constructing DOM
 
-Use `MarkupContext` for canonical source-authoring identities and HTML, SVG or
+Use `Markup.Context` for canonical source-authoring identities and HTML, SVG or
 MathML content rules when a renderer constructs nodes directly or changes one
 reactive child or text value. For bounded HTML repairs on already-resolved DOM
-names, use xref:dom-construction.adoc#dom-construction[`DomConstruction`].
+names, use xref:dom-construction.adoc#dom-construction[`Html.RepairContext`].
 A context records the enclosing placement rules;
 checking a new value needs no source string, parsed tree or ancestor walk.
 Names and attributes use explicit namespace identities, as in `Markup.Tree`.
 Pass canonical names from a parsed tree, or validate computed names with
-xref:dom-names.adoc#dom-names[`DomName`]. These queries check placement; vocabulary
-membership remains available through `MarkupFacts`.
+xref:dom-names.adoc#dom-names[`Markup.Name`]. These queries check placement; vocabulary
+membership remains available through `Markup.Name`.
 
-Seed a known enclosing boundary with `MarkupContext.seed(parent, attributes,
-options)`. Pass that context to `child` for each new element. Keep the returned
+Seed a known enclosing boundary with `Markup.Context.from_parent({ parent, attributes, syntax, scripting })`. Call `context.child({ name, attributes })` for each new element. Keep the returned
 context beside the child node and use it for that node's children and later text
-updates. `text(context, decoded_text)` checks text placement. Attribute values
+updates. `context.text(decoded_text)` checks text placement. Attribute values
 are decoded strings; a colon in a spelling does not supply a namespace.
 
 The complete runnable example is
@@ -49,6 +48,7 @@ serializer responsibilities.
 
 == Handle rejection and unsupported contexts
 
+Failures use `InvalidPlacement(diagnostic)`. Its `problem` tags
 `InvalidChild` and `InvalidText` identify a placement rejected by the content
 rules. `WouldRepair` identifies a browser repair that would change balanced
 construction. `UnexpectedNamespace` gives the required namespace.

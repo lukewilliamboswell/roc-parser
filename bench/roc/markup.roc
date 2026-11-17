@@ -10,7 +10,6 @@ import parser.Html
 import parser.Svg
 import parser.MathML
 import parser.Markup
-import parser.MarkupTemplate
 
 ## Local timing boundary. Preparation, stdin and output lie outside the timer.
 main! : List(OsStr) => Try({}, _)
@@ -22,7 +21,7 @@ main! = |arguments| {
 	# Binding measures already parsed structure, independently from plan creation.
 	segments = if (operation == "segments" or operation == "bind") input.split_on("\u(0)") else ["<text>", "</text>"]
 	prepared = Svg.parse_segments(segments, {}) ?? crash "invalid benchmark template"
-	values = List.repeat("<path/>", prepared.slots.len())
+	values = List.repeat("<path/>", prepared.metadata().slots.len())
 	start = Monotonic.now!()
 	var $checksum = 0.U64
 	var $successes = 0.U64
@@ -32,9 +31,9 @@ main! = |arguments| {
 			source = Markup.Source.from_str(input)
 			Ok(source.tokens.len() + source.bytes.len())
 		} else if operation == "bind" {
-			MarkupTemplate.bind(prepared, values.iter()).map_ok(|bound| bound.values.fold(bound.plan.parsed.tree.nodes.len(), |sum, value| sum + value.count_utf8_bytes())).map_err(|_| 1.U64)
+			prepared.bind(values.iter()).map_ok(|bound| bound.metadata().values.fold(bound.metadata().plan.metadata().parsed.tree.nodes.len(), |sum, value| sum + value.count_utf8_bytes())).map_err(|_| 1.U64)
 		} else if operation == "segments" {
-			Svg.parse_segments(segments, {}).map_ok(|plan| plan.slots.len() + plan.parsed.tree.nodes.len()).map_err(|_| 1.U64)
+			Svg.parse_segments(segments, {}).map_ok(|plan| plan.metadata().slots.len() + plan.metadata().parsed.tree.nodes.len()).map_err(|_| 1.U64)
 		} else {
 			parsed = if operation == "html" {
 				Html.parse_fragment(input, {}).map_ok(|value| value.parsed)

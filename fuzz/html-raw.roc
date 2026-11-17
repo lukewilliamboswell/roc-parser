@@ -3,6 +3,7 @@ app [target] {
 	parser: "../package/main.roc",
 }
 
+import parser.Parser
 import fuzz.Fuzz
 import parser.Html
 import MarkupCheck
@@ -20,7 +21,7 @@ test! = |bytes| {
 	match measured.value {
 		Ok(value) => MarkupCheck.check(value.parsed, input)
 		Err(InvalidMarkup(error)) => {
-			if error.line == 0 or error.column == 0 {
+			if source_position(error.location).line == 0 or source_position(error.location).column == 0 {
 				crash "error location is not one-based"
 			}
 		}
@@ -54,3 +55,10 @@ test! = |bytes| {
 }
 
 target = Fuzz.target_with!({ name: "html-raw", generator: Fuzz.raw_bytes, test!, show: |bytes| Str.inspect(Str.from_utf8(bytes)), examples: [] })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
+}

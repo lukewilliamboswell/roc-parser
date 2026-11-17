@@ -3,15 +3,15 @@ app [main!] {
 	parser: "../../package/main.roc",
 }
 
+import parser.Parser
+import parser.Xml
 import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Markup
-import parser.MarkupTemplate
 import parser.Html
 import parser.Svg
 import parser.MathML
-import parser.XmlNs
 import parser.JsonValue
 
 ## A subprocess boundary using only public parser APIs. Source comes from stdin.
@@ -52,27 +52,29 @@ main! = |arguments| {
 				Svg.parse_segments(["<svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {})
 			}
 		).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
-		bound = MarkupTemplate.bind(plan, ["12", caption].iter()).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
-		roots = Str.join_with(bound.plan.parsed.tree.roots.map(|index| encode_consumer_node(bound.plan.parsed.tree, index)), ",")
+		bound = plan.bind(["12", caption].iter()).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
+		plan_view = plan.metadata()
+		bindings_view = bound.metadata()
+		roots = Str.join_with(plan_view.parsed.tree.roots.map(|index| encode_consumer_node(plan_view.parsed.tree, index)), ",")
 		bindings = Str.join_with(
-			bound.plan.slots.map(
+			plan_view.slots.map(
 				|slot| {
 					(node, attribute) = match slot.target {
 						TextSlot(target) => (target.node, "null")
 						AttributeSlot(target) => {
-							owner = bound.plan.parsed.tree.nodes.get(target.node) ?? crash "invalid slot node"
+							owner = plan_view.parsed.tree.nodes.get(target.node) ?? crash "invalid slot node"
 							attr = owner.attributes.get(target.attribute) ?? crash "invalid slot attribute"
 							(target.node, encode_consumer_name(attr.name))
 						}
 					}
-					path = Str.join_with(node_path(bound.plan.parsed.tree, node).map(U64.to_str), ",")
-					value = bound.values.get(slot.index) ?? crash "missing bound value"
+					path = Str.join_with(node_path(plan_view.parsed.tree, node).map(U64.to_str), ",")
+					value = bindings_view.values.get(slot.index) ?? crash "missing bound value"
 					"{\"path\":[${path}],\"attribute\":${attribute},\"value\":${quote(value)}}"
 				},
 			),
 			",",
 		)
-		Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"bindings\":[${bindings}],\"binding_count\":${bound.values.len().to_str()},\"slot_count\":${plan.slots.len().to_str()},\"source_holes\":${(plan.segments.len() - 1).to_str()},\"diagnostics\":[]}")?
+		Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"bindings\":[${bindings}],\"binding_count\":${bindings_view.values.len().to_str()},\"slot_count\":${plan_view.slots.len().to_str()},\"source_holes\":${(plan_view.segments.len() - 1).to_str()},\"diagnostics\":[]}")?
 		return Ok({})
 	}
 	match Str.from_utf8(bytes) {
@@ -88,7 +90,7 @@ main! = |arguments| {
 				} else if fragment {
 					Html.parse_fragment(source, html_props).map_ok(|value| value.parsed)
 				} else {
-					Html.parse_with(source, html_props).map_ok(|value| value.parsed)
+					Html.parse_str(source, html_props).map_ok(|value| value.parsed)
 				}
 			} else if !validate and syntax == XmlSyntax {
 				if fragment {
@@ -100,13 +102,13 @@ main! = |arguments| {
 				if fragment {
 					Svg.parse_fragment(source, props).map_ok(|value| value.parsed)
 				} else {
-					Svg.parse_with(source, props).map_ok(|value| value.parsed)
+					Svg.parse_str(source, props).map_ok(|value| value.parsed)
 				}
 			} else {
 				if fragment {
 					MathML.parse_fragment(source, props).map_ok(|value| value.parsed)
 				} else {
-					MathML.parse_with(source, props).map_ok(|value| value.parsed)
+					MathML.parse_str(source, props).map_ok(|value| value.parsed)
 				}
 			}
 			match result {
@@ -131,14 +133,14 @@ main! = |arguments| {
 	Ok({})
 }
 
-quote = |value| JsonValue.to_str(JsonValue.String(value)) ?? "\"\""
+quote = |value| (JsonValue.String(value)).encode({}).map_ok(Str.from_utf8_lossy) ?? "\"\""
 
 namespace_uri = |namespace| match namespace {
 	Uri(uri) => uri
 	NoNamespace => ""
 }
 
-encode_error = |error| "{\"code\":${quote(Str.inspect(error.problem))},\"line\":${error.line.to_str()},\"column\":${error.column.to_str()}}"
+encode_error = |error| "{\"code\":${quote(Str.inspect(error.problem))},\"line\":${source_position(error.location).line.to_str()},\"column\":${source_position(error.location).column.to_str()}}"
 
 encode_node : Markup.Tree, U64, Bool -> Str
 encode_node = |tree, index, bindings| {
@@ -160,7 +162,7 @@ encode_node = |tree, index, bindings| {
 }
 
 ## Consumer projection retains explicit prefix, qualified spelling and all xmlns attributes.
-encode_consumer_name : XmlNs.Name -> Str
+encode_consumer_name : Xml.Namespaced.Name -> Str
 encode_consumer_name = |name| {
 	namespace = match name.namespace {
 		NoNamespace => "null"
@@ -211,4 +213,11 @@ node_path = |tree, target| {
 		}
 	}
 	crash "slot not reachable from roots"
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
 }

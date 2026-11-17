@@ -2,15 +2,15 @@ entry 2: Fish & Chips
 entry 1: <Hello> \u(1F600)
 Element({ attributes: [{ name: "class", value: "a b" }], children: [Text("x < y AB
 <raw>z"), Element({ attributes: [], children: [], name: "br" })], name: "p" })
-3:1: EndTagMismatch({ actual: "a", expected: "b" })
-1:4: UnknownEntity("nbsp")
-1:10: DuplicateAttribute("x")
-1:5: TrailingContent
-1:1: DoctypeUnsupported
+Text({ column: 1, line: 3, offset: 10 }): EndTagMismatch({ actual: "a", expected: "b" })
+Text({ column: 4, line: 1, offset: 3 }): UnknownEntity("nbsp")
+Text({ column: 10, line: 1, offset: 9 }): DuplicateAttribute("x")
+Text({ column: 5, line: 1, offset: 4 }): TrailingContent
+Text({ column: 1, line: 1, offset: 0 }): DoctypeUnsupported
 Ok(["One", "Two"])
 accepted
-2:9: more than 3 (Depth)
+Text({ column: 9, line: 2, offset: 12 }): more than 3 (Depth)
 Ok({ local: "feed", namespace: Uri("http://www.w3.org/2005/Atom"), prefix: Unprefixed }) ["News"]
 Ok({ local: "feed", namespace: Uri("http://www.w3.org/2005/Atom"), prefix: Prefix("a") }) ["News"]
-1:7: UndeclaredPrefix("x")
+Text({ column: 7, line: 1, offset: 6 }): UndeclaredPrefix("x")
 <feed xmlns="http://www.w3.org/2005/Atom"><title>Fish &amp; Chips</title></feed>

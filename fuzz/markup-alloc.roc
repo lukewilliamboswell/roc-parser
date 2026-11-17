@@ -4,7 +4,6 @@ app [target] {
 }
 import fuzz.Fuzz
 import parser.Markup
-import parser.MarkupTemplate
 import parser.Html
 import parser.Svg
 import parser.MathML
@@ -24,8 +23,8 @@ test! = |bytes| {
 		segments = input.split_on("\u(0)")
 		match Svg.parse_segments(segments, {}) {
 			Ok(plan) => {
-				values = List.repeat("<path/>", plan.slots.len())
-				_measured = Fuzz.measure!("parse", || MarkupTemplate.bind(plan, values.iter()))
+				values = List.repeat("<path/>", plan.metadata().slots.len())
+				_measured = Fuzz.measure!("parse", || plan.bind(values.iter()))
 			}
 			Err(_) => return Fuzz.reject
 		}

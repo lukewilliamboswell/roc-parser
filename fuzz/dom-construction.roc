@@ -4,7 +4,6 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.DomConstruction
 import parser.Html
 import parser.Markup
 import MarkupCheck
@@ -43,15 +42,15 @@ preserved = |source, model| {
 # The same explicit input name is preserved only with type=hidden. A name-only
 # API must return Unsupported for both attribute choices, never a false Repair.
 check_table_inputs = || {
-	var $context = DomConstruction.root({ parent: name("body") })
+	var $context = Html.RepairContext.from_parent({ parent: name("body") })
 	var $source = ""
 	var $chain = []
 	for local in ["table", "tbody", "tr"] {
-		$context = DomConstruction.enter($context, name(local)) ?? crash "legal table chain rejected"
+		$context = $context.child(name(local)) ?? crash "legal table chain rejected"
 		$source = "${$source}${opening(local, $chain.len())}"
 		$chain = $chain.append(local)
-		match DomConstruction.enter($context, name("input")) {
-			Err(Unsupported({ reason: AttributeDependentTableInput, .. })) => {}
+		match $context.child(name("input")) {
+			Err(InvalidConstruction({ problem: Unsupported({ reason: AttributeDependentTableInput, .. }), .. })) => {}
 			_ => crash "table input requires attributes"
 		}
 		for kind in ["hidden", "text"] {
@@ -72,7 +71,7 @@ test = |bytes| {
 	if (bytes.first() ?? 0) % 31 == 0 {
 		check_table_inputs()
 	}
-	var $context = DomConstruction.root({ parent: name("body") })
+	var $context = Html.RepairContext.from_parent({ parent: name("body") })
 	var $source = ""
 	var $chain = []
 	for byte in bytes.take_first(12) {
@@ -81,7 +80,7 @@ test = |bytes| {
 		if !(local == "select" and $chain.contains("select")) {
 			candidate = "${$source}${opening(local, $chain.len())}"
 			matches = preserved(candidate, expected($chain.append(local), []))
-			result = DomConstruction.enter($context, name(local))
+			result = $context.child(name(local))
 			if matches != result.is_ok() {
 				crash "element check disagrees with tree construction: ${Str.inspect($chain)} -> ${local}, result ${Str.inspect(result.map_ok(|_| {}))}"
 			}
@@ -98,7 +97,7 @@ test = |bytes| {
 		# escaping, initial-newline stripping and null preprocessing are separate.
 		for value in ["word", " \t", "é"] {
 			text_matches = preserved("${$source}${value}", expected($chain, [Text(value)]))
-			if text_matches != DomConstruction.text($context, value).is_ok() {
+			if text_matches != $context.text(value).is_ok() {
 				crash "text check disagrees with tree construction: ${Str.inspect($chain)} -> ${Str.inspect(value)}"
 			}
 		}

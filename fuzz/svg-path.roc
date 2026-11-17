@@ -3,8 +3,8 @@ app [target] {
 	parser: "../package/main.roc",
 }
 
+import parser.Svg
 import fuzz.Fuzz
-import parser.SvgPath
 
 ## Independent path-command models exercise all command families, relative and
 ## absolute spelling, implicit move-to groups and argument/flag rejection.
@@ -41,7 +41,7 @@ test = |bytes| {
 		$source = "${$source}${sample.source}"
 		$expected = $expected.append((sample.command, sample.arguments))
 	}
-	match SvgPath.parse_str($source) {
+	match Svg.Path.parse_str($source, {}) {
 		Ok(path) => {
 			if path.commands.map(|c| (c.command, c.arguments)) != $expected {
 				crash "path differs from independent command model: ${$source}"
@@ -49,11 +49,11 @@ test = |bytes| {
 		}
 		Err(error) => crash "generated path rejected: ${$source}: ${Str.inspect(error)}"
 	}
-	if SvgPath.validate($source).is_err() {
+	if Svg.Path.validate($source, {}).is_err() {
 		crash "valid path model rejected by validation: ${$source}"
 	}
 	for tail in ["L", "A1 2 3 2 0 1 2", "A-1 2 3 0 0 1 2", "Q1 2 3", "L1."] {
-		if SvgPath.parse_str("${$source}${tail}").is_ok() or SvgPath.validate("${$source}${tail}").is_ok() {
+		if Svg.Path.parse_str("${$source}${tail}", {}).is_ok() or Svg.Path.validate("${$source}${tail}", {}).is_ok() {
 			crash "malformed path accepted: ${$source}${tail}"
 		}
 	}

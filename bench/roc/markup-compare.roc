@@ -74,13 +74,13 @@ parse = |input, operation| match operation {
 	"xml-raw" => Markup.parse_xml(input, {})
 	"html-document-raw" => Html.parse_source(input, { recovery: Browser }, False)
 	"html-fragment-raw" => Html.parse_source(input, { recovery: Browser }, True)
-	"html-document-full" => Html.parse_with(input, {}).map_ok(|value| value.parsed)
+	"html-document-full" => Html.parse_str(input, {}).map_ok(|value| value.parsed)
 	"html-fragment-full" => Html.parse_fragment(input, {}).map_ok(|value| value.parsed)
-	"mathml-full" => MathML.parse_with(input, {}).map_ok(|value| value.parsed)
-	_ => Svg.parse_with(input, {}).map_ok(|value| value.parsed)
+	"mathml-full" => MathML.parse_str(input, {}).map_ok(|value| value.parsed)
+	_ => Svg.parse_str(input, {}).map_ok(|value| value.parsed)
 }
 
-quote = |value| JsonValue.to_str(JsonValue.String(value)) ?? "\"\""
+quote = |value| (JsonValue.String(value)).encode({}).map_ok(Str.from_utf8_lossy) ?? "\"\""
 
 namespace_uri = |namespace| match namespace {
 	Uri(uri) => uri

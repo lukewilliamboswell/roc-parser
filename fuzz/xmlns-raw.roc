@@ -3,12 +3,12 @@ app [target] {
 	parser: "../package/main.roc",
 }
 
+import parser.Parser
 import fuzz.Fuzz
 import parser.Xml
-import parser.XmlNs
 
-## XmlNs on arbitrary UTF-8:
-## - when Xml, processing namespaces, rejects the document, XmlNs fails with
+## Xml.Namespaced on arbitrary UTF-8:
+## - when Xml, processing namespaces, rejects the document, Xml.Namespaced fails with
 ##   the same error or with a namespace problem located no later;
 ## - otherwise its tree has Xml's shape: every prefix and local part joins
 ##   back to the name as written, `xmlns` attributes become the bindings in
@@ -20,7 +20,7 @@ import parser.XmlNs
 ## - writing it with a table of fresh prefixes and reading it back gives the
 ##   same tree up to prefixes and bindings.
 
-written : XmlNs.Name -> Str
+written : Xml.Namespaced.Name -> Str
 written = |name| {
 	match name.prefix {
 		Prefix(prefix) => "${prefix}:${name.local}"
@@ -33,7 +33,7 @@ is_declaration = |name| name == "xmlns" or name.starts_with("xmlns:")
 
 ## The namespace bound to `prefix` ("" for the default) in `scope`, innermost
 ## binding last.
-lookup : List({ prefix : Str, namespace : XmlNs.Namespace }), Str -> Try(XmlNs.Namespace, [Unbound])
+lookup : List({ prefix : Str, namespace : Xml.Namespaced.Namespace }), Str -> Try(Xml.Namespaced.Namespace, [Unbound])
 lookup = |scope, prefix| {
 	var $index = scope.len()
 	while $index > 0 {
@@ -53,7 +53,7 @@ lookup = |scope, prefix| {
 }
 
 ## Compares the namespaced tree with the plain one, element by element.
-check_shape : XmlNs.Node, Xml.Node -> {}
+check_shape : Xml.Namespaced.Node, Xml.Node -> {}
 check_shape = |ns_root, plain_root| {
 	var $pending = [{ ns: ns_root, plain: plain_root, scope: [] }]
 	while !$pending.is_empty() {
@@ -133,7 +133,7 @@ check_shape = |ns_root, plain_root| {
 }
 
 ## The tree with prefixes and bindings removed, for comparisons up to them.
-unprefixed : XmlNs.Node -> XmlNs.Node
+unprefixed : Xml.Namespaced.Node -> Xml.Namespaced.Node
 unprefixed = |root| {
 	strip = |name| { ..name, prefix: Unprefixed }
 	# Rebuilt bottom-up with an explicit stack, as trees may be deep.
@@ -144,7 +144,7 @@ unprefixed = |root| {
 		$work = $work.drop_last(1)
 		match item {
 			Visit(Text(text)) => {
-				$built = $built.append(XmlNs.Node.Text(text))
+				$built = $built.append(Xml.Namespaced.Node.Text(text))
 			}
 
 			Visit(Element(element)) => {
@@ -178,7 +178,7 @@ unprefixed = |root| {
 	$built.first() ?? root
 }
 
-namespaces_of : XmlNs.Node -> List(Str)
+namespaces_of : Xml.Namespaced.Node -> List(Str)
 namespaces_of = |root| {
 	var $found = []
 	var $pending = [root]
@@ -190,7 +190,7 @@ namespaces_of = |root| {
 				names = element.attributes.map(|attribute| attribute.name).append(element.name)
 				for name in names {
 					match name.namespace {
-						Uri(uri) if !$found.contains(uri) and uri != XmlNs.xml_namespace => {
+						Uri(uri) if !$found.contains(uri) and uri != Xml.Namespaced.xml_namespace => {
 							$found = $found.append(uri)
 						}
 
@@ -213,19 +213,19 @@ test = |bytes| {
 			Ok(text) => text
 			Err(_) => return Fuzz.reject
 		}
-	plain = Xml.parse(input, { namespaces: True })
-	namespaced = XmlNs.parse_str(input)
+	plain = Xml.parse_str(input, { limits: Bounded({ namespaces: True }) })
+	namespaced = Xml.Namespaced.parse_str(input, {})
 	match (plain, namespaced) {
 		(Err(InvalidXml(error)), Err(InvalidXml(other))) =>
 			if error != other {
-				crash "XmlNs reports ${Str.inspect(other)}, Xml ${Str.inspect(error)}"
+				crash "Xml.Namespaced reports ${Str.inspect(other)}, Xml ${Str.inspect(error)}"
 			}
 
 		(Ok(_), Err(InvalidNamespace(_))) => {}
 		# Problems are reported in document order, so a namespace problem can
 		# come before a later well-formedness error.
 		(Err(InvalidXml(error)), Err(InvalidNamespace(problem))) =>
-			if problem.line > error.line or (problem.line == error.line and problem.column > error.column) {
+			if source_position(problem.location).line > source_position(error.location).line or (source_position(problem.location).line == source_position(error.location).line and source_position(problem.location).column > source_position(error.location).column) {
 				crash "a namespace problem at ${Str.inspect(problem)} was reported for a document malformed earlier, at ${Str.inspect(error)}"
 			}
 
@@ -237,19 +237,19 @@ test = |bytes| {
 			check_render(doc)
 		}
 
-		_ => crash "Xml and XmlNs disagree: ${Str.inspect(plain)} and ${Str.inspect(namespaced)}"
+		_ => crash "Xml and Xml.Namespaced disagree: ${Str.inspect(plain)} and ${Str.inspect(namespaced)}"
 	}
 	Fuzz.keep
 }
 
-check_render : XmlNs -> {}
+check_render : Xml.Namespaced -> {}
 check_render = |doc| {
-	match XmlNs.render(doc, {}) {
+	match doc.encode({}).map_ok(Str.from_utf8_lossy) {
 		Ok(text) => {
-			if XmlNs.parse_str(text).map_ok(|again| again.root) != Ok(doc.root) {
+			if Xml.Namespaced.parse_str(text, {}).map_ok(|again| again.root) != Ok(doc.root) {
 				crash "writing with the tree's own prefixes does not read back:\n${text}"
 			}
-			if XmlNs.render(doc, {}) != Ok(text) {
+			if doc.encode({}).map_ok(Str.from_utf8_lossy) != Ok(text) {
 				crash "writing twice gives different text"
 			}
 		}
@@ -257,15 +257,15 @@ check_render = |doc| {
 		Err(Unrenderable(failure)) => crash "a parsed tree cannot be written: ${Str.inspect(failure)}"
 	}
 	table = namespaces_of(doc.root).map_with_index(|namespace, index| { prefix: "p${index.to_str()}", namespace })
-	match XmlNs.render(doc, { declaration: Omitted, prefixes: Table(table) }) {
+	match doc.encode({ declaration: Omitted, prefixes: Table(table) }).map_ok(Str.from_utf8_lossy) {
 		Ok(text) =>
-			match XmlNs.parse_str(text) {
+			match Xml.Namespaced.parse_str(text, {}) {
 				Ok(again) =>
 					if unprefixed(again.root) != unprefixed(doc.root) {
 						crash "writing with a table does not read back up to prefixes:\n${text}"
 					}
 
-				Err(error) => crash "writing with a table gives a document XmlNs rejects: ${Str.inspect(error)}\n${text}"
+				Err(error) => crash "writing with a table gives a document Xml.Namespaced rejects: ${Str.inspect(error)}\n${text}"
 			}
 
 		Err(Unrenderable(failure)) => crash "a parsed tree cannot be written with a table: ${Str.inspect(failure)}"
@@ -279,3 +279,10 @@ target = Fuzz.target_with({
 	test,
 	show: |bytes| Str.inspect(Str.from_utf8(bytes)),
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
+}

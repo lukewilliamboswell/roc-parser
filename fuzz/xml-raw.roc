@@ -4,7 +4,7 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.Utf8
+import parser.Parser
 import parser.Xml
 
 ## Arbitrary UTF-8 must parse or fail cleanly, and:
@@ -27,7 +27,7 @@ test = |bytes| {
 			match Str.from_utf8(bytes) {
 				Err(_) => Fuzz.reject
 				Ok(input) => {
-					result = Xml.parse_str(input)
+					result = Xml.parse_str(input, {})
 					check_location(bytes, result)
 					check_combinator(input, result)
 					if !bytes.contains('\r') {
@@ -68,15 +68,21 @@ check_location = |bytes, result| {
 	match result {
 		Ok(_) => {}
 		Err(InvalidXml(error)) => {
-			if error.line == 0 or error.column == 0 {
+			match error.location {
+				Text(at) => if at.offset > bytes.len() or line_column(bytes, at.offset) != { line: at.line, column: at.column } {
+					crash "XML diagnostic byte offset disagrees with source coordinates"
+				}
+				_ => {}
+			}
+			if source_position(error.location).line == 0 or source_position(error.location).column == 0 {
 				crash "XML error locations must be one-based: ${show(result)}"
 			}
 			lengths = line_lengths(bytes)
-			match lengths.get(error.line - 1) {
-				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${show(result)}"
+			match lengths.get(source_position(error.location).line - 1) {
+				Err(_) => crash "error line ${source_position(error.location).line.to_str()} is past the last line (${lengths.len().to_str()}): ${show(result)}"
 				Ok(length) =>
-					if error.column > length + 1 {
-						crash "error column ${error.column.to_str()} is past the end of line ${error.line.to_str()} (${length.to_str()} bytes): ${show(result)}"
+					if source_position(error.location).column > length + 1 {
+						crash "error column ${source_position(error.location).column.to_str()} is past the end of line ${source_position(error.location).line.to_str()} (${length.to_str()} bytes): ${show(result)}"
 					}
 			}
 		}
@@ -85,18 +91,13 @@ check_location = |bytes, result| {
 
 check_combinator : Str, Parsed -> {}
 check_combinator = |input, result| {
-	combinator = Utf8.parse_str(Xml.parser, input)
+	combinator = Xml.parser({}).parse_str(input)
 	consistent =
 		match (result, combinator) {
 			(Ok(tree), Ok(other)) => tree == other
-			(Err(InvalidXml(error)), Err(ParseError({ problem, offset }))) => {
-				location = line_column(input.to_utf8(), offset)
-				same_place = location.line == error.line and location.column == error.column
-				if problem == UnexpectedInput {
-					same_place and error.problem == TrailingContent
-				} else {
-					same_place and problem == error.problem
-				}
+			(Err(InvalidXml(error)), Err(ParseError({ problem, location, .. }))) => {
+				same_place = source_position(location) == source_position(error.location)
+				same_place and (Err(problem) == native_failure(error.problem) or (problem == UnexpectedInput and error.problem == TrailingContent))
 			}
 			_ => False
 		}
@@ -131,20 +132,27 @@ line_column = |bytes, offset| {
 
 check_line_ends : Str, Parsed, Str -> {}
 check_line_ends = |input, result, line_end| {
-	changed = Xml.parse_str(Str.replace_each(input, "\n", line_end))
-	if changed != result {
+	changed_source = Str.replace_each(input, "\n", line_end)
+	changed = Xml.parse_str(changed_source, {})
+	check_location(changed_source.to_utf8(), changed)
+	same = match (result, changed) {
+		(Ok(original), Ok(other)) => original == other
+		(Err(InvalidXml(original)), Err(InvalidXml(other))) => original.problem == other.problem and original.path == other.path and source_position(original.location) == source_position(other.location)
+		_ => False
+	}
+	if !same {
 		crash "line ends ${Str.inspect(line_end)} changed the result\nLF:    ${show(result)}\nother: ${show(changed)}"
 	}
 }
 
 check_leading_comment : Str, Parsed -> {}
 check_leading_comment = |input, result| {
-	commented = Xml.parse_str("<!-- c -->\n${input}")
+	commented = Xml.parse_str("<!-- c -->\n${input}", {})
 	consistent =
 		match (result, commented) {
 			(Ok(plain), Ok(with_comment)) => plain == with_comment
 			(Err(InvalidXml(plain)), Err(InvalidXml(with_comment))) =>
-				plain.line + 1 == with_comment.line and plain.column == with_comment.column and plain.problem == with_comment.problem
+				source_position(plain.location).line + 1 == source_position(with_comment.location).line and source_position(plain.location).column == source_position(with_comment.location).column and plain.problem == with_comment.problem
 			_ => False
 		}
 	if !consistent {
@@ -156,7 +164,7 @@ show : Parsed -> Str
 show = |result| {
 	match result {
 		Ok(xml) => Str.inspect(xml)
-		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidXml(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -176,7 +184,7 @@ pathological = |bytes| {
 		0 => {
 			# Deep nesting: <a><a>...x...</a></a>
 			input = "${Str.repeat("<a>", size)}x${Str.repeat("</a>", size)}"
-			depth = nesting_depth(Xml.parse_str(input))
+			depth = nesting_depth(Xml.parse_str(input, {}))
 			if depth != Ok(size) {
 				crash "deep nesting of ${size.to_str()} parsed as ${Str.inspect(depth)}"
 			}
@@ -190,7 +198,7 @@ pathological = |bytes| {
 				$index = $index + 1
 			}
 			attributes = $attributes
-			match Xml.parse_str("<e${attributes}/>") {
+			match Xml.parse_str("<e${attributes}/>", {}) {
 				Ok(xml) => {
 					count =
 						match xml.root {
@@ -204,7 +212,7 @@ pathological = |bytes| {
 				Err(_) => crash "${size.to_str()} distinct attributes were rejected"
 			}
 			# The same with a duplicate at the end must be rejected.
-			if Xml.parse_str("<e${attributes} a0='x'/>").is_ok() {
+			if Xml.parse_str("<e${attributes} a0='x'/>", {}).is_ok() {
 				crash "duplicate attribute after ${size.to_str()} attributes was accepted"
 			}
 		}
@@ -212,7 +220,7 @@ pathological = |bytes| {
 			# Long text made of references.
 			input = "<t>${Str.repeat("&amp;&#x41;&lt;", size)}</t>"
 			expected = Str.repeat("&A<", size)
-			if Xml.parse_str(input).map_ok(|xml| xml.root) != Ok(Element({ name: "t", attributes: [], children: [Text(expected)] })) {
+			if Xml.parse_str(input, {}).map_ok(|xml| xml.root) != Ok(Element({ name: "t", attributes: [], children: [Text(expected)] })) {
 				crash "${size.to_str()} references parsed wrongly"
 			}
 		}
@@ -220,15 +228,15 @@ pathological = |bytes| {
 			# Many siblings interleaved with comments and CDATA, merging into one text.
 			input = "<t>${Str.repeat("a<!--c-->b<![CDATA[c]]><?p?>", size)}</t>"
 			expected = Str.repeat("abc", size)
-			if Xml.parse_str(input).map_ok(|xml| xml.root) != Ok(Element({ name: "t", attributes: [], children: [Text(expected)] })) {
+			if Xml.parse_str(input, {}).map_ok(|xml| xml.root) != Ok(Element({ name: "t", attributes: [], children: [Text(expected)] })) {
 				crash "${size.to_str()} merged text pieces parsed wrongly"
 			}
 		}
 		_ => {
 			# Unclosed deep nesting must fail at the end of input, not crash.
 			input = Str.repeat("<a>", size)
-			match Xml.parse_str(input) {
-				Err(InvalidXml(error)) if error.line == 1 and error.column == Str.count_utf8_bytes(input) + 1 => {}
+			match Xml.parse_str(input, {}) {
+				Err(InvalidXml(error)) if source_position(error.location).line == 1 and source_position(error.location).column == Str.count_utf8_bytes(input) + 1 => {}
 				other => crash "unclosed nesting of ${size.to_str()} gave ${show(other)}"
 			}
 		}
@@ -274,3 +282,16 @@ target = Fuzz.target_with({
 	test,
 	show: |bytes| Str.inspect(Str.from_utf8(bytes)),
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
+}
+
+native_failure : [..p] -> Try({}, Parser.Problem(p))
+native_failure = |problem| {
+	value = Err(problem)?
+	Ok(value)
+}

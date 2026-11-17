@@ -21,8 +21,8 @@ reconstruction and discarded or duplicated attributes are rejected. Document ele
 `body` wrappers. Fragment context nodes are synthetic and do not need to appear
 in the source.
 
-Errors use `Markup.Problem.HtmlStructure` with a typed reason and the causing
-half-open UTF-8 byte span. Line and column identify that span's start. For
+The diagnostic's `problem` uses `HtmlStructure` with a typed reason and the causing
+half-open UTF-8 byte span. Its structured `location` identifies that span's start. For
 example, `<p><div></div></p>` identifies the opening `div`, while a missing end
 tag identifies the end of input.
 

@@ -3,10 +3,11 @@ app [target] {
 	parser: "../package/main.roc",
 }
 
+import parser.Parser
 import fuzz.Fuzz
 import parser.Xml
 
-## Xml.parse with lowered limits: the first three bytes choose `max_depth`
+## Xml.parse_str with lowered limits: the first three bytes choose `max_depth`
 ## (0-15), `max_elements` (0-63) and `max_attributes` (0-7), and the rest is
 ## the document.
 ##
@@ -62,13 +63,13 @@ test! = |bytes| {
 			Ok(text) => text
 			Err(_) => return Fuzz.reject
 		}
-	measured = Fuzz.measure!("parse", || Xml.parse(input, { max_depth: props.max_depth, max_elements: props.max_elements, max_attributes: props.max_attributes }))
+	measured = Fuzz.measure!("parse", || Xml.parse_str(input, { limits: Bounded({ max_depth: props.max_depth, max_elements: props.max_elements, max_attributes: props.max_attributes }) }))
 	ceiling = 4096 + 16 * input.count_utf8_bytes() + 512 * (props.max_elements + 1)
 	if measured.stats.peak_live_bytes > ceiling {
 		crash "parsing kept ${measured.stats.peak_live_bytes.to_str()} live bytes, over the ceiling ${ceiling.to_str()}"
 	}
 	bounded = measured.value
-	match Xml.parse_str(input) {
+	match Xml.parse_str(input, {}) {
 		Ok(xml) => {
 			shape = shape_of(xml.root)
 			within = shape.depth <= props.max_depth and shape.elements <= props.max_elements and shape.attributes <= props.max_attributes
@@ -78,12 +79,12 @@ test! = |bytes| {
 						crash "a document past its limits, or a different tree, was returned"
 					}
 
-				Err(LimitExceeded(exceeded)) => {
+				Err(InvalidXml({ problem: LimitExceeded(exceeded), .. })) => {
 					if within {
 						crash "a document within its limits failed: ${Str.inspect(exceeded)}"
 					}
 					real =
-						match exceeded.limit {
+						match exceeded.resource {
 							Depth => exceeded.max == props.max_depth and shape.depth > props.max_depth
 							Elements => exceeded.max == props.max_elements and shape.elements > props.max_elements
 							Attributes => exceeded.max == props.max_attributes and shape.attributes > props.max_attributes
@@ -101,15 +102,14 @@ test! = |bytes| {
 		Err(InvalidXml(error)) =>
 			match bounded {
 				Ok(_) => crash "a malformed document was accepted with limits"
-				Err(InvalidXml(other)) =>
-					if other != error {
+				Err(InvalidXml(other)) => match other.problem {
+					LimitExceeded(_) => if !before_or_at(source_position(other.location), source_position(error.location)) {
+						crash "a limit was reported after the syntax failure"
+					}
+					_ => if other != error {
 						crash "the bounded parser reports ${Str.inspect(other)}, parse_str ${Str.inspect(error)}"
 					}
-
-				Err(LimitExceeded(exceeded)) =>
-					if !before_or_at({ line: exceeded.line, column: exceeded.column }, { line: error.line, column: error.column }) {
-						crash "a limit was reported at ${Str.inspect(exceeded)}, after the error ${Str.inspect(error)}"
-					}
+				}
 			}
 	}
 	Fuzz.keep
@@ -122,3 +122,10 @@ target = Fuzz.target_with!({
 	test!,
 	show: |bytes| Str.inspect({ limits: bytes.take_first(3), document: Str.from_utf8(bytes.drop_first(3)) }),
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
+}

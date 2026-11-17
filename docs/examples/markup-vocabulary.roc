@@ -6,37 +6,36 @@ app [main!] {
 import cli.Stdout
 import parser.Html
 import parser.Markup
-import parser.MarkupFacts
-
 # tag::names[]
-svg_candidates = MarkupFacts.element_names(Uri(Markup.svg_namespace))
+svg_candidates = Markup.element_names(Uri(Markup.svg_namespace))
 
 suggestion = svg_candidates.find_first(|name| name.with_ascii_lowercased() == "lineargradient") ?? "none"
 
-aria_candidates = MarkupFacts.aria_attribute_names
+aria_candidates = Markup.aria_attribute_names
 
 # end::names[]
 
 # tag::newline[]
+html_name : Str -> Markup.Name
 html_name = |local| { namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local }
 
 # These sample values contain no markup requiring escaping.
 # Use the state after the tokens the serializer actually emitted.
-protect_text = |state, value| if MarkupFacts.initial_newline_step(state, Characters(value)).skipped {
+protect_text = |state, value| if state.step(Characters(value)).action == Skipped {
 	"\n${value}"
 } else value
 
 desired = "\nvalue"
 
-pre_text = protect_text(MarkupFacts.initial_newline(html_name("pre")), desired)
+pre_text = protect_text((html_name("pre")).initial_newline(), desired)
 
-textarea_text = protect_text(MarkupFacts.initial_newline(html_name("textarea")), desired)
+textarea_text = protect_text((html_name("textarea")).initial_newline(), desired)
 
-after_comment = MarkupFacts.initial_newline_step(MarkupFacts.initial_newline(html_name("pre")), Comment)
+after_comment = ((html_name("pre")).initial_newline()).step(Comment)
 
 comment_text = protect_text(after_comment.state, desired)
 
-empty_binding = MarkupFacts.initial_newline_step(MarkupFacts.initial_newline(html_name("pre")), Characters(""))
+empty_binding = ((html_name("pre")).initial_newline()).step(Characters(""))
 
 # end::newline[]
 
@@ -53,12 +52,12 @@ text_content = |source| Html.parse_fragment(source, {}).map_ok(
 
 main! = |_args| {
 	Stdout.line!("SVG candidate: ${suggestion}")?
-	Stdout.line!("HTML candidates include selectedcontent: ${Str.inspect(MarkupFacts.element_names(Uri(Markup.html_namespace)).contains("selectedcontent"))}")?
+	Stdout.line!("HTML candidates include selectedcontent: ${Str.inspect(Markup.element_names(Uri(Markup.html_namespace)).contains("selectedcontent"))}")?
 	Stdout.line!("ARIA candidates include aria-label: ${Str.inspect(aria_candidates.contains("aria-label"))}")?
 	Stdout.line!("pre LF protected: ${Str.inspect(text_content("<pre>${pre_text}</pre>") == Ok(desired))}")?
 	Stdout.line!("textarea LF protected: ${Str.inspect(text_content("<textarea>${textarea_text}</textarea>") == Ok(desired))}")?
 	Stdout.line!("pre comment keeps LF: ${Str.inspect(text_content("<pre><!-- marker -->${comment_text}</pre>") == Ok(desired))}")?
-	Stdout.line!("Empty binding keeps LF pending: ${Str.inspect(empty_binding.state == Pending)}")?
+	Stdout.line!("Empty binding keeps LF pending: ${Str.inspect(empty_binding.state.is_pending())}")?
 	Stdout.line!("RCDATA comment spelling is text: ${Str.inspect(text_content("<textarea><!-- marker -->\nvalue</textarea>") == Ok("<!-- marker -->\nvalue"))}")?
 	Ok({})
 }

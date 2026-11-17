@@ -4,7 +4,7 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.Utf8
+import parser.Parser
 import parser.Xml
 import XmlGen
 
@@ -22,12 +22,12 @@ generate = |bytes| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	actual = Xml.parse_str(input.xml)
+	actual = Xml.parse_str(input.xml, {})
 	match actual {
 		Ok(xml) if xml == input.expected => {}
 		_ => crash "round trip mismatch\n--- xml ---\n${Str.inspect(input.xml)}\n--- expected ---\n${Str.inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
 	}
-	combinator = Utf8.parse_str(Xml.parser, input.xml)
+	combinator = Xml.parser({}).parse_str(input.xml)
 	if combinator != Ok(input.expected) {
 		crash "Xml.parser disagrees with Xml.parse_str on ${Str.inspect(input.xml)}"
 	}
@@ -81,7 +81,7 @@ show_result : Try(Xml, [InvalidXml(Xml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(xml) => Str.inspect(xml)
-		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidXml(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -95,3 +95,10 @@ target = Fuzz.target_with({
 		XmlGen.show(input.xml)
 	},
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
+}

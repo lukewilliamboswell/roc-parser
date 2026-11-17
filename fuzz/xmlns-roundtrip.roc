@@ -3,15 +3,15 @@ app [target] {
 	parser: "../package/main.roc",
 }
 
+import parser.Xml
 import fuzz.Fuzz
-import parser.XmlNs
 
 ## Writing namespaced trees: fuzzer bytes choose a tree (names from a few
 ## namespaces, text and attribute values full of characters that need
 ## escaping, and sometimes a name, character or attribute that cannot be
 ## written) and a prefix table, which may make one namespace the default.
 ##
-## - XmlNs.render refuses exactly the trees with something it cannot write.
+## - Xml.Namespaced.render refuses exactly the trees with something it cannot write.
 ## - A tree it writes reads back as the same tree, up to prefixes and
 ##   bindings; written again with its own prefixes, it reads back exactly.
 
@@ -23,7 +23,7 @@ pick = |cur, count| {
 	{ n: U8.to_u64(byte) % count, cur: { bytes: cur.bytes, pos: cur.pos + 1 } }
 }
 
-namespaces : List(XmlNs.Namespace)
+namespaces : List(Xml.Namespaced.Namespace)
 namespaces = [NoNamespace, Uri("urn:a"), Uri("urn:b"), Uri("http://example.org/é?q=1&r")]
 
 locals : List(Str)
@@ -33,7 +33,7 @@ locals = ["a", "b", "é", "_x", "p-q", "x.1", "日本", "w"]
 pieces : List(Str)
 pieces = ["x", "&", "<", ">", "]]>", "\r", "\r\n", "\n", "\t", "\"", "'", "é", "😀", " ", "&amp;", "]]"]
 
-Built : { node : XmlNs.Node, cur : Cur, valid : Bool }
+Built : { node : Xml.Namespaced.Node, cur : Cur, valid : Bool }
 
 gen_text : Cur -> { text : Str, cur : Cur, valid : Bool }
 gen_text = |start| {
@@ -56,7 +56,7 @@ gen_text = |start| {
 	{ text: $text, cur: $cur, valid: $valid }
 }
 
-gen_name : Cur -> { name : XmlNs.Name, cur : Cur, valid : Bool }
+gen_name : Cur -> { name : Xml.Namespaced.Name, cur : Cur, valid : Bool }
 gen_name = |start| {
 	ns = pick(start, namespaces.len())
 	local = pick(ns.cur, 33)
@@ -81,7 +81,7 @@ gen_element = |start, depth| {
 		# An attribute may also be in the xml namespace.
 		with_xml = pick($cur, 8)
 		$cur = with_xml.cur
-		name = if (with_xml.n == 0) { ..attribute_name.name, namespace: Uri(XmlNs.xml_namespace) } else attribute_name.name
+		name = if (with_xml.n == 0) { ..attribute_name.name, namespace: Uri(Xml.Namespaced.xml_namespace) } else attribute_name.name
 		if $attributes.any(|attribute| attribute.name.namespace == name.namespace and attribute.name.local == name.local) {
 			$valid = False
 		}
@@ -142,7 +142,7 @@ gen_table = |start| {
 
 ## Whether an attribute of the tree is in the table's default namespace,
 ## which only elements can use.
-uses_default_for_attribute : XmlNs.Node, Str -> Bool
+uses_default_for_attribute : Xml.Namespaced.Node, Str -> Bool
 uses_default_for_attribute = |root, uri| {
 	var $pending = [root]
 	while !$pending.is_empty() {
@@ -162,7 +162,7 @@ uses_default_for_attribute = |root, uri| {
 	False
 }
 
-unprefixed : XmlNs.Node -> XmlNs.Node
+unprefixed : Xml.Namespaced.Node -> Xml.Namespaced.Node
 unprefixed = |node| {
 	match node {
 		Text(text) => Text(text)
@@ -188,8 +188,9 @@ test = |bytes| {
 					Err(None) => True
 				}
 			)
+	doc : Xml.Namespaced
 	doc = { declaration: Err(Missing), root: built.node }
-	match XmlNs.render(doc, { prefixes: Table(table.table) }) {
+	match doc.encode({ prefixes: Table(table.table) }).map_ok(Str.from_utf8_lossy) {
 		Err(Unrenderable(failure)) =>
 			if writable {
 				crash "a writable tree was refused: ${Str.inspect(failure)}\n${Str.inspect(built.node)}"
@@ -199,14 +200,14 @@ test = |bytes| {
 			if !writable {
 				crash "a tree that cannot be written was written:\n${text}"
 			}
-			match XmlNs.parse_str(text) {
+			match Xml.Namespaced.parse_str(text, {}) {
 				Ok(again) => {
 					if unprefixed(again.root) != built.node {
 						crash "the written tree reads back differently:\n${text}\n${Str.inspect(again.root)}\n${Str.inspect(built.node)}"
 					}
-					match XmlNs.render(again, {}) {
+					match again.encode({}).map_ok(Str.from_utf8_lossy) {
 						Ok(own) =>
-							if XmlNs.parse_str(own).map_ok(|third| third.root) != Ok(again.root) {
+							if Xml.Namespaced.parse_str(own, {}).map_ok(|third| third.root) != Ok(again.root) {
 								crash "written with its own prefixes, the tree reads back differently:\n${own}"
 							}
 

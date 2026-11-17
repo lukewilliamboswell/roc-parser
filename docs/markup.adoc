@@ -24,8 +24,8 @@ remains text. The same program is exercised as
 |`MathML` |XML |A `math` root in the MathML namespace |Children in the MathML namespace
 |===
 
-`parse_str(source)` reads a complete document. `parse_with(source, props)`
-selects options. `parse_fragment(source, props)` accepts multiple roots, including
+`parse_str(source, props)` reads a complete document with defaulted constructor
+props. `parse_fragment(source, props)` accepts multiple roots, including
 text, and returns a nominal `Fragment`. A fragment's `single_element()` requires
 one element and no other non-whitespace root content; comments and processing
 instructions do not count as roots.
@@ -42,14 +42,14 @@ A literal's expected type establishes compile-time checking:
 include::examples/markup-literals.roc[tag=literals]
 ----
 
-Use `Literal.require(Svg.validate({ source: text, name: "drawing.svg" }))` for
+Use `Parser.Quotation.require(Svg.validate({ source: text, name: "drawing.svg" }))` for
 an imported complete document, or `Svg.Fragment.validate` for an imported
 fragment. `Html` and `MathML` provide the same document conversion. Dynamic
 input should retain its fallible parsing result rather than call
-`Literal.require`.
+`Parser.Quotation.require`.
 
-Parsing failures carry `InvalidMarkup({ problem, line, column })`. Match
-`Markup.Problem` to handle them without inspecting diagnostic strings. Child
+Parsing failures carry `InvalidMarkup(diagnostic)`. Use `diagnostic.location` and `diagnostic.path` to locate a failure. Match
+`diagnostic.problem`, a `Markup.Problem`, to handle them without inspecting diagnostic strings. Child
 failures carry a `ChildGrammar`; root failures preserve expanded names; resource
 failures carry the resource tag and maximum. Template failures retain the hole
 index and an `InterpolationProblem` tag. XML syntax failures preserve the
@@ -93,12 +93,13 @@ delimiter, comment, or raw-text body (including script, style and noscript). It 
 or occupy only part of a fixed attribute value. Namespace-switching attributes
 such as MathML `annotation-xml`'s `encoding` must remain fixed.
 
-A template's original input is its `List(Str)` of fixed segments. The plan retains
-those boundaries; its `parsed.source` contains the concatenated fixed text.
+A template's original input is its `List(Str)` of fixed segments. The opaque plan
+retains those boundaries; `plan.metadata()` provides its `segments`, `parsed`
+source and typed `slots`. The source contains the concatenated fixed text.
 The Roc expressions between segments belong to the compiler, not the markup
 source representation.
 
-The plan's `slots` identify text nodes or attribute positions by index and
+The metadata's `slots` identify text nodes or attribute positions by index and
 contain a typed `expected` grammar. Fixed values are validated during parsing;
 a future hole value is not validated merely because its slot is legal. A
 consumer can validate that value, retain a more specific producer type, or apply
@@ -106,7 +107,7 @@ its own policy when binding. A homogeneous hole type does not prove that every
 value is appropriate for every syntactic position.
 
 `parse_segments(segments, props)` builds a plan explicitly. Use
-`MarkupTemplate.bind(plan, values.iter())` to check a manual binding count.
+`plan.bind(values.iter())` to check a manual binding count.
 There is one logical binding per segment boundary. Multiple slots can share
 that binding index when HTML construction copies selected option content into
 `selectedcontent`; apply the value to every matching slot. Binding reports the
@@ -123,8 +124,9 @@ include::examples/markup-literals.roc[tag=lower]
 
 == Validate and handle errors
 
-The format APIs return `InvalidMarkup({ problem, line, column })`. Lines and
-UTF-8 byte columns are one-based. `problem` distinguishes syntax, namespace,
+The format APIs return `InvalidMarkup(diagnostic)`. Its `location` carries
+source coordinates when available; lines and UTF-8 byte columns are one-based.
+`diagnostic.problem` distinguishes syntax, namespace,
 root, element/attribute vocabulary, content-model, value-grammar, interpolation,
 binding-count and resource-limit failures. `InvalidValue` includes its authored
 value and a typed grammar such as `Length`, `PathData` or `Keyword(values)`.
@@ -189,13 +191,13 @@ same tree's node list. `Authored(span)` identifies original bytes;
 `Implied(offset)` identifies an insertion point chosen by tree construction.
 `Cloned({ source, at })` identifies a generated copy, retaining its authored
 source span and the destination insertion point.
-Use `Markup.text(tree, index)` to join descendant character data.
+Use `tree.text(index)` to join descendant character data.
 
 Keep URI, prefix and local name separately when lowering a tree.
-xref:dom-names.adoc#dom-names[`DomName`] validates computed DOM names without changing XML source grammar;
-xref:markup-facts.adoc#markup-facts[`MarkupFacts`] supplies namespace-aware vocabulary, attribute and text-behavior facts.
-xref:dom-construction.adoc#dom-construction[`DomConstruction`] checks bounded HTML repairs for explicitly named DOM nodes.
-xref:markup-context.adoc#markup-context[`MarkupContext`] checks authoring placement for a new child or text value against a retained enclosing context without reparsing or walking ancestors.
+xref:dom-names.adoc#dom-names[`Markup.Name`] validates computed DOM names without changing XML source grammar;
+xref:markup-facts.adoc#markup-facts[`Markup.Name`] supplies namespace-aware vocabulary, attribute and text-behavior facts.
+xref:dom-construction.adoc#dom-construction[`Html.RepairContext`] checks bounded HTML repairs for explicitly named DOM nodes.
+xref:markup-context.adoc#markup-context[`Markup.Context`] checks authoring placement for a new child or text value against a retained enclosing context without reparsing or walking ancestors.
 The xref:consumer-fidelity.adoc#consumer-fidelity[consumer-fidelity review] checks prefixes, qualified spellings, namespace declarations, binding identity and adoption.
 
 Read original bytes to reproduce authored source exactly. Reconstructing a tree

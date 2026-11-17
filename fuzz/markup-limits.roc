@@ -35,7 +35,7 @@ test! = |bytes| {
 				crash "a generated document inside all limits was rejected: ${Str.inspect(error)}"
 			}
 			match error.problem {
-				LimitExceeded(_) | SourceTooLarge(_) => {}
+				LimitExceeded(_) => {}
 				_ => crash "a resource rejection was classified as syntax"
 			}
 		}
@@ -67,7 +67,7 @@ test! = |bytes| {
 				crash "rejected adoption elements inside the configured limit: ${Str.inspect(error)}"
 			}
 			match error.problem {
-				LimitExceeded(Elements) => {}
+				LimitExceeded({ resource: Xml(Elements), .. }) => {}
 				_ => crash "adoption element limit was classified incorrectly"
 			}
 		}

@@ -4,7 +4,7 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.Utf8
+import parser.Parser
 import parser.Xml
 import XmlGen
 
@@ -18,7 +18,7 @@ Mutation : {
 	name : Str,
 	xml : Str,
 
-	## Byte offsets where the error may be reported (inclusive).
+	## Byte offsets where the error may be reported inclusive.
 	low : U64,
 	high : U64,
 }
@@ -185,19 +185,19 @@ drop_root_end_tag = |pieces, located| {
 
 test : Mutation -> Fuzz.Outcome
 test = |mutation| {
-	match Xml.parse_str(mutation.xml) {
+	match Xml.parse_str(mutation.xml, {}) {
 		Ok(_) => crash "accepted a document with ${mutation.name}: ${Str.inspect(mutation.xml)}"
 		Err(InvalidXml(error)) => {
 			low = XmlGen.line_column(mutation.xml, mutation.low)
 			high = XmlGen.line_column(mutation.xml, mutation.high)
-			at = { line: error.line, column: error.column }
+			at = { line: source_position(error.location).line, column: source_position(error.location).column }
 			in_range = (at.line > low.line or (at.line == low.line and at.column >= low.column)) and (at.line < high.line or (at.line == high.line and at.column <= high.column))
 			if !in_range {
-				crash "${mutation.name}: error ${error.line.to_str()}:${error.column.to_str()} \"${Str.inspect(error.problem)}\" not at ${low.line.to_str()}:${low.column.to_str()}..${high.line.to_str()}:${high.column.to_str()} in ${Str.inspect(mutation.xml)}"
+				crash "${mutation.name}: error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} \"${Str.inspect(error.problem)}\" not at ${low.line.to_str()}:${low.column.to_str()}..${high.line.to_str()}:${high.column.to_str()} in ${Str.inspect(mutation.xml)}"
 			}
 		}
 	}
-	if Utf8.parse_str(Xml.parser, mutation.xml).is_ok() {
+	if Xml.parser({}).parse_str(mutation.xml).is_ok() {
 		crash "Xml.parser accepted a document with ${mutation.name}: ${Str.inspect(mutation.xml)}"
 	}
 	Fuzz.keep
@@ -213,3 +213,10 @@ target = Fuzz.target_with({
 
 at_least_one : U64 -> U64
 at_least_one = |count| if (count == 0) 1 else count
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
+}

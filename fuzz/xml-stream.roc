@@ -5,8 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Xml
-import parser.XmlNs
-import parser.Streaming
+import parser.Parser
 import XmlGen
 
 ## Chunk boundaries cannot change events or errors. Complete-input readers
@@ -57,7 +56,7 @@ check_reference_budget = |choices| {
 	source = "<a>${Str.join_with(List.repeat(entity, count), separator)}</a>".to_utf8()
 	props : Xml.StreamProps
 	props = { max_token_bytes: budget, max_text_bytes: 4 }
-	whole = Streaming.collect(Streaming.read_iter([source].iter(), Xml.decoder(props)))
+	whole = (Xml.decoder(props)).collect([source].iter())
 	match whole {
 		Ok(events) => {
 			text = Str.join_with(
@@ -75,12 +74,12 @@ check_reference_budget = |choices| {
 		}
 		Err(_) => crash "a completed entity spent the following entity's byte allowance"
 	}
-	if Streaming.collect(Streaming.read_iter(source.map(|byte| [byte]).iter(), Xml.decoder(props))) != whole {
+	if (Xml.decoder(props)).collect(source.map(|byte| [byte]).iter()) != whole {
 		crash "entity byte budgets depend on source chunks"
 	}
 	oversize = "<a>${entity}${separator}${too_large}</a>".to_utf8()
-	match Streaming.collect(Streaming.read_iter([oversize].iter(), Xml.decoder(props))) {
-		Err(ReadFailed(ParseErr(problem))) if problem.problem == ResourceLimit({ limit: ReferenceBytes, max: budget }) and problem.offset == 3 + entity.count_utf8_bytes() + separator.count_utf8_bytes() + budget => {}
+	match (Xml.decoder(props)).collect([oversize].iter()) {
+		Err(InvalidXml({ problem: LimitExceeded({ resource: ReferenceBytes, max, observed: AtLeast(observed) }), location: Text({ offset, .. }), .. })) if max == budget and observed == budget + 1 and offset == 3 + entity.count_utf8_bytes() + separator.count_utf8_bytes() + budget => {}
 		_ => crash "an oversized following entity escaped its own byte budget"
 	}
 }
@@ -91,25 +90,25 @@ test = |input| {
 	bytes = input.take_first(2048)
 	props : Xml.StreamProps
 	props = { max_text_bytes: 4 + (input.first() ?? 0).to_u64() % 32, max_token_bytes: 4096 }
-	whole = Streaming.collect(Streaming.read_iter([bytes].iter(), Xml.decoder(props)))
+	whole = (Xml.decoder(props)).collect([bytes].iter())
 	pieces = [[]].concat(bytes.map(|byte| [byte])).append([])
-	if Streaming.collect(Streaming.read_iter(pieces.iter(), Xml.decoder(props))) != whole {
+	if (Xml.decoder(props)).collect(pieces.iter()) != whole {
 		crash "XML events/errors depend on chunk boundaries"
 	}
 	split = if (bytes.is_empty()) 0 else (input.get(1) ?? 0).to_u64() % (bytes.len() + 1)
 	parts = [bytes.take_first(split), [], bytes.drop_first(split)]
-	if Streaming.collect(Streaming.read_iter(parts.iter(), Xml.decoder(props))) != whole {
+	if (Xml.decoder(props)).collect(parts.iter()) != whole {
 		crash "XML split changed result"
 	}
-	namespaced = Streaming.collect(Streaming.read_iter([bytes].iter(), XmlNs.decoder(props)))
-	if Streaming.collect(Streaming.read_iter(pieces.iter(), XmlNs.decoder(props))) != namespaced {
+	namespaced = (Xml.Namespaced.decoder(props)).collect([bytes].iter())
+	if (Xml.Namespaced.decoder(props)).collect(pieces.iter()) != namespaced {
 		crash "namespace events/errors depend on chunk boundaries"
 	}
 	match Str.from_utf8(bytes) {
 		Ok(source) => {
 			# Byte streaming intentionally refuses non-UTF-8 declarations.
 			declares_other = match Xml.reader(source, {}) {
-				Ok(reader) => match reader.declaration() {
+				Ok(reader) => match reader.metadata().declaration {
 					Ok({ encoding: Ok(OtherEncoding(_)), .. }) => True
 					_ => False
 				}
@@ -128,7 +127,7 @@ test = |input| {
 					}
 					_ => {}
 				}
-				if XmlNs.parse_str(source).is_ok() != namespaced.is_ok() {
+				if Xml.Namespaced.parse_str(source, {}).is_ok() != namespaced.is_ok() {
 					crash "namespace chunk reader disagrees with complete parser acceptance"
 				}
 			}
@@ -141,8 +140,8 @@ test = |input| {
 	}
 	limited : Xml.StreamProps
 	limited = { max_depth: 1 + (input.first() ?? 0).to_u64() % 8, max_elements: (input.get(1) ?? 0).to_u64() % 32, max_attributes: (input.get(2) ?? 0).to_u64() % 8, max_token_bytes: 8 + (input.get(3) ?? 0).to_u64() % 64, max_text_bytes: props.max_text_bytes, max_context_bytes: (input.get(4) ?? 0).to_u64() }
-	if Streaming.collect(Streaming.read_iter([bytes].iter(), Xml.decoder(limited))) != Streaming.collect(Streaming.read_iter(pieces.iter(), Xml.decoder(limited)))
-		or Streaming.collect(Streaming.read_iter([bytes].iter(), XmlNs.decoder(limited))) != Streaming.collect(Streaming.read_iter(pieces.iter(), XmlNs.decoder(limited))) {
+	if (Xml.decoder(limited)).collect([bytes].iter()) != (Xml.decoder(limited)).collect(pieces.iter())
+		or (Xml.Namespaced.decoder(limited)).collect([bytes].iter()) != (Xml.Namespaced.decoder(limited)).collect(pieces.iter()) {
 		crash "resource limits depend on source chunk boundaries"
 	}
 	match whole {
@@ -167,7 +166,7 @@ test = |input| {
 	if !other_encoding {
 		generated_bytes = generated_source.to_utf8()
 		chunks = generated_bytes.map(|byte| [byte])
-		actual = Streaming.collect(Streaming.read_iter(chunks.iter(), Xml.decoder(props)))
+		actual = (Xml.decoder(props)).collect(chunks.iter())
 		expected = reader_events(generated_source)
 		match (expected, actual) {
 			(Ok(wanted), Ok(got)) if wanted == coalesce(got) => {}
@@ -182,7 +181,7 @@ test! = |bytes| {
 	source : Stream(Try(List(U8), [Injected]))
 	source = [Ok("<a/>".to_utf8()), Err(Injected)].iter().stream()
 	var $last = Ok(Finished({ emitted_items: 0.U64, rejected_records: 0.U64 }))
-	for! event in Streaming.read_stream(source, Xml.decoder({})) {
+	for! event in (Xml.decoder({})).read_stream(source) {
 		$last = event
 	}
 	if $last != Err(SourceErr(Injected)) {
@@ -191,7 +190,7 @@ test! = |bytes| {
 	namespaced_source : Stream(Try(List(U8), [Injected]))
 	namespaced_source = [Ok("<r xmlns='u'/>".to_utf8()), Err(Injected)].iter().stream()
 	var $namespace_last = Ok(Finished({ emitted_items: 0.U64, rejected_records: 0.U64 }))
-	for! event in Streaming.read_stream(namespaced_source, XmlNs.decoder({})) {
+	for! event in (Xml.Namespaced.decoder({})).read_stream(namespaced_source) {
 		$namespace_last = event
 	}
 	if $namespace_last != Err(SourceErr(Injected)) {

@@ -8,7 +8,6 @@ import parser.Svg
 import parser.MathML
 import parser.Html
 import parser.Markup
-import parser.MarkupContext
 import MarkupCheck
 
 ## Byte choices build both a serialization and its expected tree directly.
@@ -26,7 +25,7 @@ test = |bytes| {
 	binding = if (extended) " xmlns:x='urn:extension'" else ""
 	attribute = if (extended) " x:xmlns='v'" else ""
 	root_attributes = if (extended) [{ name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), prefix: Prefix("xmlns"), local: "x" }, value: "urn:extension" }] else []
-	root_context = MarkupContext.seed({ namespace: Uri(namespace), prefix: Unprefixed, local: root_name }, root_attributes, { syntax: if (format == 2) HtmlSyntax else XmlSyntax }) ?? crash "independently generated root context rejected"
+	root_context = Markup.Context.from_parent({ parent: { namespace: Uri(namespace), prefix: Unprefixed, local: root_name }, attributes: root_attributes, syntax: if (format == 2) HtmlSyntax else XmlSyntax }) ?? crash "independently generated root context rejected"
 	var $source = "<${root_name}${binding}>"
 	var $expected = []
 	var $index = 0
@@ -37,8 +36,8 @@ test = |bytes| {
 		# Context checks consume the independently generated identities and values;
 		# they never supply the expected model or serialization.
 		child_attributes = if (extended) [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: "id" }, value: "x${value}" }, { name: { namespace: Uri("urn:extension"), prefix: Prefix("x"), local: "xmlns" }, value: "v" }] else [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: "id" }, value: "x${value}" }]
-		child_context = MarkupContext.child(root_context, { namespace: Uri(namespace), prefix: Unprefixed, local: child_name }, child_attributes) ?? crash "independently generated child context rejected"
-		_ = MarkupContext.text(child_context, text) ?? crash "independently generated text context rejected"
+		child_context = root_context.child({ name: { namespace: Uri(namespace), prefix: Unprefixed, local: child_name }, attributes: child_attributes }) ?? crash "independently generated child context rejected"
+		_ = child_context.text(text) ?? crash "independently generated text context rejected"
 		$expected = $expected.append(Element({ namespace, local: child_name, attributes, children: [Text(text)] }))
 		$index = $index + 1
 	}

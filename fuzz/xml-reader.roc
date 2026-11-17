@@ -27,7 +27,7 @@ read_all = |reader| {
 	while True {
 		match $reader.next() {
 			Event(event, rest) => {
-				$events = $events.append({ event, location: rest.location() })
+				$events = $events.append({ event, location: source_position(rest.metadata().location) })
 				$reader = rest
 			}
 
@@ -106,7 +106,7 @@ test = |bytes| {
 			Ok(text) => text
 			Err(_) => return Fuzz.reject
 		}
-	expected = Xml.parse_str(input)
+	expected = Xml.parse_str(input, {})
 	read =
 		match Xml.reader(input, {}) {
 			Ok(reader) => read_all(reader)
@@ -123,7 +123,7 @@ test = |bytes| {
 			}
 			check_locations(input, read.events)
 			check_element(input, xml.root, events, bytes)
-			if Xml.parse(input, {}) != Ok(xml) {
+			if Xml.parse_str(input, { limits: Bounded({}) }) != Ok(xml) {
 				crash "Xml.parse with default limits disagrees with parse_str"
 			}
 		}
@@ -132,7 +132,7 @@ test = |bytes| {
 			if read.ending != Failed(InvalidXml(error)) {
 				crash "the reader and parse_str disagree on a malformed document: ${Str.inspect(read.ending)} versus ${Str.inspect(error)}"
 			}
-			if Xml.parse(input, {}) != Err(InvalidXml(error)) {
+			if Xml.parse_str(input, { limits: Bounded({}) }) != Err(InvalidXml(error)) {
 				crash "Xml.parse with default limits disagrees with parse_str on an error"
 			}
 		}
@@ -293,3 +293,9 @@ target = Fuzz.target_with({
 	test,
 	show: |bytes| Str.inspect(Str.from_utf8(bytes)),
 })
+
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected reader source coordinates"
+}

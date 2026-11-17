@@ -7,28 +7,26 @@ import cli.Stdout
 import parser.Svg
 import parser.MathML
 import parser.Markup
-import parser.MarkupFacts
-import parser.Literal
-
+import parser.Parser
 # tag::policy[]
 # This consumer permits extension attributes, but forbids known inline handler attributes.
 # It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.
 NoHandlers := { parsed : Markup.Parsed }.{
 	from_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])
 	from_quote = |source| {
-		fragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?
-		check(fragment.parsed)
+		fragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } }).map_err(quote_error)?
+		check(fragment.parsed).map_err(quote_error)
 	}
 
-	check : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])
+	check : Markup.Parsed -> Try(NoHandlers, [InlineHandler(Parser.Diagnostic({ element : Markup.Name, attribute : Markup.Name }))])
 	check = |parsed| {
 		for node in parsed.tree.nodes {
 			match node.kind {
 				Element(element) => {
 					for attribute in node.attributes {
-						if MarkupFacts.is_event_handler(element, attribute.name) {
-							position = Markup.position(parsed.source, attribute.span.start)
-							return Err(Literal.error({ format: "NoHandlers", message: "inline handler ${attribute.name.local} forbidden on ${element.local}", line: position.line, column: position.column }))
+						if element.is_event_handler({ attribute: attribute.name }) {
+							position = parsed.source.position(attribute.span.start)
+							return Err(InlineHandler(Parser.Diagnostic.{ problem: { element, attribute: attribute.name }, location: Text({ offset: attribute.span.start, line: position.line, column: position.column }), path: [Key(attribute.name.qualified())] }))
 						}
 					}
 				}
@@ -38,6 +36,8 @@ NoHandlers := { parsed : Markup.Parsed }.{
 		Ok(NoHandlers.{ parsed })
 	}
 }
+
+quote_error = |failure| Parser.Quotation.error({ format: "NoHandlers", message: Str.inspect(failure) })
 
 # end::policy[]
 

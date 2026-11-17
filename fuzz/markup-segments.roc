@@ -2,9 +2,9 @@ app [target] {
 	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.6.2/3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
 	parser: "../package/main.roc",
 }
+import parser.Svg
 import fuzz.Fuzz
 import parser.Markup
-import parser.MarkupTemplate
 import parser.Html
 import MarkupCheck
 
@@ -14,9 +14,9 @@ test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
 	kind = (bytes.first() ?? 0) % 10
 	segments = match kind {
-		0 => ["<g>", "</g>"]
+		0 => ["<text>", "</text>"]
 		1 => ["<path d='", "'/>"]
-		2 => ["<g id='", "'>", "</g>"]
+		2 => ["<text id='", "'>", "</text>"]
 		3 => ["<pa", "th/>"]
 		4 => ["<g xmlns='", "'/>"]
 		5 => ["<g>&am", "p;</g>"]
@@ -29,19 +29,19 @@ test = |bytes| {
 	result = if kind >= 8 {
 		Html.parse_segments(segments, {})
 	} else {
-		MarkupTemplate.parse_segments(segments, |text| Markup.parse_xml_fragment(text, Markup.svg_namespace, {}), Markup.decode_xml_text)
+		Svg.parse_segments(segments, { allow_unknown_attributes: True })
 	}
 	match result {
 		Ok(plan) => {
 			expected = segments.len() - 1
 			physical = if (kind == 8) 4 else expected
-			if !valid or plan.slots.len() != physical or Set.from_list(plan.slots.map(|slot| slot.index)).len() != expected or plan.slots.any(|slot| slot.index >= expected) {
+			if !valid or plan.metadata().slots.len() != physical or Set.from_list(plan.metadata().slots.map(|slot| slot.index)).len() != expected or plan.metadata().slots.any(|slot| slot.index >= expected) {
 				crash "illegal interpolation structure was accepted"
 			}
-			MarkupCheck.check(plan.parsed, Str.join_with(segments, ""))
+			MarkupCheck.check(plan.metadata().parsed, Str.join_with(segments, ""))
 			values = bytes.drop_first(1)
-			match MarkupTemplate.bind(plan, values.iter()) {
-				Ok(bound) => if values.len() != expected or bound.values != values {
+			match plan.bind(values.iter()) {
+				Ok(bound) => if values.len() != expected or bound.metadata().values != values {
 					crash "binding changed typed hole values or arity"
 				}
 				Err(InvalidMarkup(error)) => {

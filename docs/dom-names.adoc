@@ -3,52 +3,43 @@
 :idprefix: _
 :idseparator: _
 
-Use `DomName` when application code computes an element or attribute name for
-DOM construction. It returns the same explicit `{ namespace, prefix, local }`
-identity used by `Markup.Name` and `XmlNs.Name`, without requiring a known HTML,
-SVG or MathML vocabulary entry.
+Use `Markup.Name.from_qualified({ namespace, spelling, context })` when application
+code computes a namespace-aware element or attribute name. It returns the shared
+`Markup.Name` identity `{ namespace, prefix, local }` used by markup trees and
+`Xml.Namespaced.Name`, without requiring a known vocabulary entry.
 
-`validate_and_extract(namespace, qualified, Element)` models
-`createElementNS`; the `Attribute` context models `createAttributeNS` and
-`setAttributeNS`. An empty namespace URI becomes `NoNamespace`. The function
-splits at the first colon, validates the prefix and local spelling, then checks
-the reserved XML and XMLNS namespace rules. Failures are
-`InvalidCharacterError` or `NamespaceError`, in the DOM algorithm's order.
+The `Element` context models `createElementNS`; `Attribute` models
+`createAttributeNS` and `setAttributeNS`. An empty namespace URI becomes
+`NoNamespace`. The constructor splits at the first colon, validates prefix and
+local spelling, then checks reserved XML and XMLNS namespace rules. Failures use
+`InvalidDomName(diagnostic)`, whose `problem` is `InvalidCharacter` or
+`InvalidNamespace` with the supplied spelling and context or namespace. The
+location is `Unavailable(GeneratedValue)` because this name has no source text.
 
 [source,roc]
 ----
 include::examples/dom-names.roc[tag=names]
 ----
 
-These are the https://dom.spec.whatwg.org/#validate[current DOM construction
-rules]. They permit some names that XML source cannot express. For example,
-`a=b` is a valid computed element local name, but `<a=b/>` is not XML.
-Computed-name validation does not make a name safe to emit as XML source; the
-XML parsers continue to enforce XML's separate name grammar.
+These are the https://dom.spec.whatwg.org/#validate[DOM construction rules].
+They permit some names XML source cannot express: `a=b` is a valid computed
+element local name, but `<a=b/>` is not XML. XML parsers enforce their own source
+grammar; computed-name validation does not make a name serializable as XML.
 
-== Keep identity separate from spelling
+== Preserve explicit identity
 
-`html_element("H:DIV")` models plain `createElement` in an HTML document. It
-returns HTML namespace, `Unprefixed`, and local `h:div`. In contrast,
-`validate_and_extract(html_namespace, "h:div", Element)` returns prefix `h`
-and local `div`. The names have the same qualified spelling and different
-identities.
+A `Markup.Name` can also retain an already-resolved identity directly. For
+example, an HTML `createElement("H:DIV")` result has HTML namespace, `Unprefixed`,
+and local `h:div`. Namespace-aware construction of `h:div` instead produces prefix
+`h` and local `div`. Keep those distinct identities even though `.qualified()`
+returns the same spelling.
 
-`qualified(name)` formats the explicit prefix and local fields. It does not
-infer a prefix from colons inside an unprefixed local name, validate a name, or
-supply enough information to reconstruct its namespace identity. Keep all three
-fields when lowering a parsed or computed name into another representation.
+`name.qualified()` formats the supplied prefix and local fields. It does not
+infer a prefix from colons in an unprefixed local name, validate a name, or
+reconstruct its namespace. Keep all three fields when lowering a name.
 
-For plain XML-document construction, `unqualified_element` and
-`unqualified_attribute` preserve case and colons and return no namespace or
-prefix. An unqualified attribute with local `xlink:href` is distinct from the
-XLink-namespaced attribute with prefix `xlink` and local `href`. Match or remove
-attributes using namespace and local identity rather than qualified spelling
-alone.
-
-Choose the DOM operation that preserves the intended identity. Passing the
-qualified spelling of an unprefixed colon-local name to `createElementNS` or
-`setAttributeNS` would split it and change its identity. DOM construction
-operations also depend on the owner document: HTML-document plain attribute
-creation ASCII-lowercases names, whereas `unqualified_attribute` returns the
-case-preserving XML-document form.
+An unqualified attribute whose local name is `xlink:href` differs from an
+XLink-namespaced attribute with prefix `xlink` and local `href`. Update and remove
+attributes using namespace and local identity. Choose the downstream DOM
+constructor that preserves those explicit fields and verify its result, as shown
+in xref:consumer-fidelity.adoc#consumer-fidelity[the consumer-fidelity review].
