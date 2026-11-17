@@ -72,6 +72,7 @@ jobs:
           - json-options
           - json-roundtrip
           - json-stream
+          - json-stream-ceilings
           - ofx-raw
           - ofx-stream
           - ofx-roundtrip
