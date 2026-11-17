@@ -261,7 +261,7 @@ or earlier decoder states adds to the application's memory use.
 For a custom pull loop, start with `decoder = Xml.decoder(props)` and call
 `decoder.step(bytes, More)` until the source ends, then use `Final`. Continue
 with the returned `state` descriptor and respect its `consumed` byte count.
-The return value follows the shared xref:streaming.adoc#streaming-decoder[chunk decoder contract].
+The return value follows the shared xref:streaming.adoc#_implement_another_chunk_decoder[chunk decoder contract].
 `Xml.decoder_location` gives the latest event's original byte offset, line and
 column, and `Xml.decoder_declaration` gives the declaration parsed so far.
 `XmlNs.decoder` provides the namespace-aware version. XML failures carry a
