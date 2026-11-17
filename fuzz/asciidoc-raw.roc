@@ -13,20 +13,20 @@ test = |bytes| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Fuzz.reject
 		Ok(source) => {
-			result = AsciiDoc.parse_str(source)
+			result = AsciiDoc.parse_str(source, {})
 			match result {
 				Ok(document) => {
-					html = AsciiDoc.render(document)
-					if AsciiDoc.render(document) != html {
+					html = AsciiDoc.render_html(document)
+					if AsciiDoc.render_html(document) != html {
 						crash "AsciiDoc conversion is not deterministic"
 					}
 					if !bytes.contains('\r') {
 						crlf = Str.replace_each(source, "\n", "\r\n")
-						if AsciiDoc.parse_str(crlf) != Ok(document) {
+						if AsciiDoc.parse_str(crlf, {}) != Ok(document) {
 							crash "CRLF changed an accepted document: ${Str.inspect(source)}"
 						}
-						match AsciiDoc.parse_str(crlf) {
-							Ok(other) => if AsciiDoc.render(other) != html {
+						match AsciiDoc.parse_str(crlf, {}) {
+							Ok(other) => if AsciiDoc.render_html(other) != html {
 								crash "CRLF changed rendered HTML"
 							}
 							Err(_) => crash "CRLF rejected an accepted document"

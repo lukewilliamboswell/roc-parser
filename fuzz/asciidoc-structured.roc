@@ -133,27 +133,27 @@ test = |bytes| {
 	$source = "${$source}== First\n\nBody\n\n=== Child\n\nNested\n\n== Last\n\nEnd\n"
 	$blocks = $blocks.concat([heading("section", 1, "First", [node("paragraph", "Body", []), heading("section", 2, "Child", [node("paragraph", "Nested", [])])]), heading("section", 1, "Last", [node("paragraph", "End", [])])])
 	options = { includes: [{ path: "part.adoc", source: "Included" }], attributes: [], max_depth: 16, expand_includes: True }
-	document = match AsciiDoc.parse_with($source, options) {
+	document = match AsciiDoc.parse_str($source, options) {
 		Ok(doc) => doc
 		Err(_) => crash "Generated valid AsciiDoc rejected: ${Str.inspect($source)}"
 	}
 	if document.title != "Generated" or document.blocks.keep_if(visible_block).map(project) != $blocks {
 		crash "AsciiDoc disagrees with independent generated tree: ${Str.inspect($source)}"
 	}
-	html = AsciiDoc.render(document)
+	html = AsciiDoc.render_html(document)
 	for expected in $html {
 		if !html.contains(expected) {
 			crash "Generated AsciiDoc conversion lost semantic HTML: ${Str.inspect(expected)} source ${Str.inspect($source)}"
 		}
 	}
 	crlf = Str.replace_each($source, "\n", "\r\n")
-	match AsciiDoc.parse_with(crlf, options) {
-		Ok(doc) => if doc.title != document.title or doc.blocks.keep_if(visible_block).map(project) != $blocks or AsciiDoc.render(doc) != html {
+	match AsciiDoc.parse_str(crlf, options) {
+		Ok(doc) => if doc.title != document.title or doc.blocks.keep_if(visible_block).map(project) != $blocks or AsciiDoc.render_html(doc) != html {
 			crash "CRLF changed generated AsciiDoc semantics"
 		}
 		Err(_) => crash "CRLF rejected generated AsciiDoc"
 	}
-	match AsciiDoc.parse_with("// Prologue\n\n${$source}", options) {
+	match AsciiDoc.parse_str("// Prologue\n\n${$source}", options) {
 		Ok(doc) => if doc.title != document.title or doc.blocks.keep_if(visible_block).map(project) != $blocks {
 			crash "Leading line comment changed generated document"
 		}

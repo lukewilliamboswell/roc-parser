@@ -14,11 +14,11 @@ main! = |args| {
 	budget = U64.from_str(args.first().map_ok(OsStr.display) ?? "") ?? 0
 	indent = U64.from_str(args.get(1).map_ok(OsStr.display) ?? "") ?? 0
 	text = Str.from_utf8(Stdin.read_to_end!()?)?
-	match JsonValue.parse_with(text, { max_depth: 64, max_items: 16384, max_bytes: budget }) {
+	match JsonValue.parse_str(text, { max_depth: 64, max_items: 16384, max_bytes: budget }) {
 		Err(_) => Stdout.line!("parse limit or invalid JSON")
-		Ok(value) => match JsonValue.to_str_with(value, { indent: indent, max_bytes: budget }) {
+		Ok(value) => match value.encode({ indent, max_bytes: budget }) {
 			Err(_) => Stdout.line!("write limit or invalid JSON")
-			Ok(output) => Stdout.line!(output)
+			Ok(output) => Stdout.line!(Str.from_utf8(output) ?? crash "JSON encoder emitted invalid UTF-8")
 		}
 	}
 }

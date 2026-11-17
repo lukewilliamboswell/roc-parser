@@ -12,7 +12,7 @@ import XmlCore
 ## and that element's descendants, and an inner binding shadows an outer
 ## one. Unprefixed elements are in the default namespace, if one is in
 ## scope; unprefixed attributes are in no namespace. The `xml` prefix is
-## always bound to [XmlNsCore.xml_namespace].
+## always bound to [Xml.Namespaced.xml_namespace].
 ##
 ## Names are resolved while the document is read, so only one tree is ever
 ## built. Declarations are kept in each element's `bindings`, in source
@@ -21,7 +21,7 @@ import XmlCore
 ##
 ## ```roc
 ## expect {
-##     doc = XmlNsCore.parse_str("<feed xmlns='http://www.w3.org/2005/Atom'><title>News</title></feed>")?
+##     doc = Xml.Namespaced.parse_str("<feed xmlns='http://www.w3.org/2005/Atom'><title>News</title></feed>", {})?
 ##     atom = Uri("http://www.w3.org/2005/Atom")
 ##     doc.root.children_named(atom, "title").map(|title| title.text()) == ["News"]
 ## }
@@ -50,7 +50,11 @@ XmlNsCore := {
 	## written with.
 	##
 	## ```roc
-	## expect XmlNsCore.parse_str("<s:svg xmlns:s='http://www.w3.org/2000/svg'/>").map_ok(|doc| doc.root.name()) == Ok(Ok({ namespace: Uri("http://www.w3.org/2000/svg"), local: "svg", prefix: Prefix("s") }))
+	## expect {
+	##     doc = Xml.Namespaced.parse_str("<s:svg xmlns:s='http://www.w3.org/2000/svg'/>", {})?
+	##     name = doc.root.name()?
+	##     name.namespace == Uri("http://www.w3.org/2000/svg") and name.local == "svg" and name.prefix == Prefix("s")
+	## }
 	## ```
 	Name : XmlNsTypes.Name
 
@@ -67,7 +71,7 @@ XmlNsCore := {
 	## An `Element` holds its resolved `name`, the namespace declarations it
 	## makes in `bindings` (in source order), its other `attributes` in source
 	## order, and its `children` in document order. `Text` is as in
-	## [XmlCore.Node].
+	## [Xml.Node].
 	Node : XmlNsTypes.Node
 
 	## A rule of Namespaces in XML 1.0 that a document breaks.
@@ -96,14 +100,14 @@ XmlNsCore := {
 	## A namespace problem and the location of the start tag it is in.
 	NamespaceProblem : Diagnostic(Problem)
 
-	## Why reading stopped: an [XmlCore.ReadError], or a namespace problem.
+	## Why reading stopped: an [Xml.ReadError], or a namespace problem.
 	ReadError : [
 		InvalidXml(XmlCore.Error),
 
 		InvalidNamespace(NamespaceProblem),
 	]
 
-	## One step through a namespaced document, as [XmlCore.Event] with resolved
+	## One step through a namespaced document, as [Xml.Event] with resolved
 	## names and an element's namespace declarations in `bindings`.
 	Event : [
 		Start({ name : Name, bindings : List(Binding), attributes : List(Attribute) }),
@@ -114,10 +118,10 @@ XmlNsCore := {
 	## Chunked namespace errors retain original byte positions.
 	StreamError : [InvalidXml(XmlCore.StreamError), InvalidNamespace(NamespaceProblem)]
 
-	## Configured namespace-aware decoder for the common Streaming readers.
+	## Configured namespace-aware decoder for the shared reader contract.
 	Decoder : Streaming.Decoder(NamespaceChunkState, Event, StreamError)
 
-	## Use with Streaming.read_iter/read_stream, or the descriptor's step method.
+	## Call `.read_iter(chunks)`, `.read_stream(source)`, or `.step({ bytes, end })`.
 	decoder : XmlCore.StreamProps -> Decoder
 	decoder = |props| Streaming.decoder({ initial_state: NamespaceChunkState.{ inner: XmlCore.decoder({ ..props, namespaces: True }), scope: empty_scope, done: False }, step: namespace_chunk_step, errors: props.errors })
 
@@ -129,7 +133,7 @@ XmlNsCore := {
 	decoder_declaration : Decoder -> Try(XmlCore.Declaration, [Missing])
 	decoder_declaration = |current| XmlCore.decoder_declaration(Streaming.internal_state(current).inner)
 
-	## A pull reader that resolves namespaces as it reads, as [XmlCore.Reader]
+	## A pull reader that resolves namespaces as it reads, as [Xml.Reader]
 	## does for names as written. Keep only the latest reader and `return`
 	## from the loop's `Done` arm.
 	Reader :: {
@@ -251,7 +255,7 @@ XmlNsCore := {
 	## Parse one complete namespaced document within the limits of `props`.
 	##
 	## ```roc
-	## expect XmlNsCore.parse("<p:a/>", {}) == Err(InvalidNamespace({ problem: UndeclaredPrefix("p"), line: 1, column: 1 }))
+	## expect Xml.Namespaced.parse_str("<p:a/>", { limits: Bounded({}) }) == Err(InvalidNamespace(Parser.Diagnostic.{ problem: UndeclaredPrefix("p"), location: Text({ offset: 0, line: 1, column: 1 }), path: [] }))
 	## ```
 	parse : Str, XmlCore.ReaderProps -> Try(XmlNsCore, ReadError)
 	parse = |input, props| {
@@ -281,7 +285,7 @@ XmlNsCore := {
 	##
 	## ```roc
 	## expect {
-	##     doc = XmlNsCore.parse_str("<a xmlns='urn:a' xmlns:b='urn:b'><b:c/></a>")?
+	##     doc = Xml.Namespaced.parse_str("<a xmlns='urn:a' xmlns:b='urn:b'><b:c/></a>", {})?
 	##     doc.root.children_named(Uri("urn:b"), "c").len() == 1
 	## }
 	## ```
@@ -296,7 +300,7 @@ XmlNsCore := {
 		}
 	}
 
-	## How [XmlNsCore.render] writes a document.
+	## How [Xml.Namespaced.encode] writes a document.
 	##
 	## - `declaration`: `Plain` writes `<?xml version="1.0" encoding="UTF-8"?>`
 	##   and a line feed, `Standalone` also declares `standalone="yes"`, and
@@ -331,8 +335,8 @@ XmlNsCore := {
 	##   and local name.
 	EncodeProblem : [InvalidName(Str), InvalidChar(U32), UnboundNamespace(Str), DuplicateAttribute(Str)]
 
-	## Write a document as XML 1.0 text. The output is a function of the
-	## tree and `props` alone, and [XmlNsCore.parse_str] reads it back as the
+	## Encode a document as XML 1.0 UTF-8 bytes. The output is a function of the
+	## tree and `props` alone, and [Xml.Namespaced.parse_str] reads it back as the
 	## same tree, up to prefixes and bindings with `Table`.
 	##
 	## Text escapes `&` and `<`, `>` after `]]`, and a carriage return as
@@ -343,13 +347,13 @@ XmlNsCore := {
 	##
 	## ```roc
 	## expect {
-	##     doc = XmlNsCore.parse_str("<p:a xmlns:p='urn:p' k='1 &amp; 2'>x &lt; y</p:a>")?
-	##     render_document(doc, { declaration: Omitted }) == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
+	##     doc = Xml.Namespaced.parse_str("<p:a xmlns:p='urn:p' k='1 &amp; 2'>x &lt; y</p:a>", {})?
+	##     doc.encode({ declaration: Omitted }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "XML encoding produced invalid UTF-8") == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
 	## }
 	##
 	## expect {
-	##     doc = XmlNsCore.parse_str("<a xmlns='urn:w'><b/></a>")?
-	##     render_document(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
+	##     doc = Xml.Namespaced.parse_str("<a xmlns='urn:w'><b/></a>", {})?
+	##     doc.encode({ declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "XML encoding produced invalid UTF-8") == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
 	## }
 	## ```
 	encode : XmlNsCore, WriteProps -> Try(List(U8), EncodeError)

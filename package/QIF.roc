@@ -15,7 +15,7 @@ QIF := { events : List(QIF.Event) }.{
 	Problem : [LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), IncompleteInput, MissingRecordTerminator, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Diagnostic.Excerpt, order : DateOrder }), InvalidAmount(Diagnostic.Excerpt), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ expected : { section : Str, account : Str }, actual : { section : Str, account : Str } }), NulCharacter, HeaderBeforeTerminator, MissingSection, InvalidFieldCode(U8), InvalidEncoding({ encoding : TextEncoding, error : Streaming.EncodingError })]
 	Error : Diagnostic(Problem)
 
-	## Supported byte encodings. ASCII is a subset of Parser.Utf8.
+	## Supported byte encodings. ASCII input is valid UTF-8.
 	TextEncoding : Streaming.TextEncoding
 
 	## Date order is explicit when both first components could be months.
@@ -94,7 +94,7 @@ QIF := { events : List(QIF.Event) }.{
 	## Configured raw-event decoder. Scanner buffers and coordinates are private.
 	Decoder : Streaming.Decoder(DecoderState, Event, [InvalidQif(Error)])
 
-	## Configure raw events for Streaming.read_iter or Streaming.read_stream.
+	## Configure raw events for `.read_iter(chunks)` or `.read_stream(source)`.
 	decoder : Props -> Decoder
 	decoder = |props| Streaming.decoder({ initial_state: initial_qif(props), step: |state, bytes, end| Streaming.map_step_error(qif_step(state, bytes, end), |error| InvalidQif(error)), errors: props.errors })
 

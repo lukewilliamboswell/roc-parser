@@ -6,83 +6,76 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.JsonValue
-import parser.Literal
+import parser.Parser
 import parser.Markdown
 import parser.Xml
 import parser.Yaml
 
-## Checked conversion (`validate`, which `from_quote` and quoted values use)
-## on arbitrary UTF-8. The first byte chooses XML, YAML, JSON, CSV or Markdown
-## and the second a byte offset; the rest is the source.
-##
-## - With every lint off, `validate` accepts exactly what `parse_str`
-##   accepts, with the same value, and its error is `parse_str`'s, written as
-##   `name:line:column: FORMAT: message` by Literal.error.
-## - Lints only reject: with the default lints, `validate` gives the same
-##   result, or rejects a value it accepted with a message naming the lint.
-## - Literal.position agrees with an independent line and column count.
-
+## Runtime validation preserves native diagnostics and named source context.
+## Enabling lints can only reject an otherwise accepted value with a typed lint.
+## Quotation positions agree with an independent line/column model.
 name : Str
 name = "quoted.src"
 
-lint_names : List(Str)
-lint_names = ["non_utf8_declaration", "LegacyBoolean", "DuplicateHeader", "EmptyHeader", "unclosed_fences"]
-
-## The checked error for a native error with this location.
-expected_error : Str, { line : U64, column : U64, problem : p } -> [BadQuotedBytes(Str)]
-expected_error = |format, problem| Literal.error({ name, format, message: Str.inspect(problem.problem), line: problem.line, column: problem.column })
-
-## Enabling lints may only turn an accepted value into a lint failure.
-check_lints : Try(a, [BadQuotedBytes(Str)]), Try(a, [BadQuotedBytes(Str)]), Str -> {}
-	where [a.is_eq : a, a -> Bool]
-check_lints = |off, on, format| {
+check_lints : Try(a, e), Try(a, e), (e -> Bool), Str -> {}
+	where [a.is_eq : a, a -> Bool, e.is_eq : e, e -> Bool]
+check_lints = |off, on, is_lint, format| {
 	match (off, on) {
-		(Ok(a), Ok(b)) =>
-			if a != b {
-				crash "${format}: lints changed an accepted value"
-			}
-
-		(Ok(_), Err(BadQuotedBytes(message))) =>
-		# CSV names the record and field before the lint.
-			if !message.contains(": ${format}: ") or !lint_names.any(|lint| message.contains(lint)) {
-				crash "${format}: an accepted value was rejected without naming a lint: ${message}"
-			}
-
-		(Err(a), Err(b)) =>
-			if a != b {
-				crash "${format}: lints changed the error from ${Str.inspect(a)} to ${Str.inspect(b)}"
-			}
-
-		(Err(_), Ok(_)) => crash "${format}: lints accepted a source rejected without them"
+		(Ok(a), Ok(b)) => if a != b {
+			crash "${format}: lints changed an accepted value"
+		}
+		(Ok(_), Err(problem)) => if !is_lint(problem) {
+			crash "${format}: rejected without a typed lint: ${Str.inspect(problem)}"
+		}
+		(Err(a), Err(b)) => if a != b {
+			crash "${format}: lints changed the native error"
+		}
+		(Err(_), Ok(_)) => crash "${format}: lints accepted an invalid source"
 	}
 }
 
 check_xml : Str -> {}
 check_xml = |source| {
 	off = Xml.validate({ source, name, lints: { non_utf8_declaration: False } })
-	expected = Xml.parse_str(source).map_err(|InvalidXml(problem)| expected_error("XML", problem))
+	expected = Xml.parse_str(source, {}).map_err(|InvalidXml(error)| InvalidXml({ ..error, path: error.path.append(Source(name)) }))
 	if off != expected {
-		crash "XML: validate gives ${Str.inspect(off)}, parse_str ${Str.inspect(expected)}"
+		crash "XML: validation changed syntax value or diagnostic"
 	}
-	check_lints(off, Xml.validate({ source, name }), "XML")
+	check_lints(
+		off,
+		Xml.validate({ source, name }),
+		|InvalidXml(error)| match error.problem {
+			NonUtf8Encoding(_) => True
+			_ => False
+		},
+		"XML",
+	)
 }
 
 check_yaml : Str -> {}
 check_yaml = |source| {
 	off = Yaml.validate({ source, name, lints: { legacy_booleans: False } })
-	expected = Yaml.parse_str(source).map_err(|InvalidYaml(problem)| expected_error("YAML", problem))
+	expected = Yaml.parse_str(source, {}).map_err(|InvalidYaml(error)| InvalidYaml({ ..error, path: error.path.append(Source(name)) }))
 	if off != expected {
-		crash "YAML: validate gives ${Str.inspect(off)}, parse_str ${Str.inspect(expected)}"
+		crash "YAML: validation changed syntax value or diagnostic: ${Str.inspect({ off, expected })}"
 	}
-	check_lints(off, Yaml.validate({ source, name }), "YAML")
+	check_lints(
+		off,
+		Yaml.validate({ source, name }),
+		|InvalidYaml(error)| match error.problem {
+			LegacyBoolean(_) => True
+			_ => False
+		},
+		"YAML",
+	)
 }
 
 check_json : Str -> {}
 check_json = |source| {
 	checked = JsonValue.validate({ source, name })
-	expected = JsonValue.parse_str(source).map_err(|InvalidJsonValue(problem)| expected_error("JSON", problem))
+	expected = JsonValue.parse_str(source, {}).map_err(|InvalidJsonValue(error)| InvalidJsonValue({ ..error, path: error.path.append(Source(name)) }))
 	if checked != expected {
-		crash "JSON: validate gives ${Str.inspect(checked)}, parse_str ${Str.inspect(expected)}"
+		crash "JSON: validation changed syntax value or diagnostic"
 	}
 }
 
@@ -91,9 +84,21 @@ check_csv = |source| {
 	for header in [Absent, Exact, Normalized] {
 		off = CSV.validate({ source, name, header, lints: { duplicate_headers: False, empty_headers: False } })
 		on = CSV.validate({ source, name, header })
-		check_lints(off, on, "CSV")
+		expected = CSV.parse_str(source, {}).map_ok(|document| document.records).map_err(|InvalidCsv(error)| InvalidCsv({ ..error, path: error.path.append(Source(name)) }))
+		if off != expected {
+			crash "CSV: validation changed raw records or diagnostic"
+		}
+		check_lints(
+			off,
+			on,
+			|InvalidCsv(error)| match error.problem {
+				DuplicateHeader(_) | EmptyHeader => True
+				_ => False
+			},
+			"CSV",
+		)
 		if header != Absent and off.is_ok() != CSV.validate({ source, name }).is_ok() {
-			crash "CSV: a header mode changed whether the records are well-formed"
+			crash "CSV: header mode changed well-formedness"
 		}
 	}
 }
@@ -101,10 +106,10 @@ check_csv = |source| {
 check_markdown : Str -> {}
 check_markdown = |source| {
 	off = Markdown.validate({ source, name, lints: { unclosed_fences: False } })
-	if off != Ok(Markdown.parse_str(source)) {
-		crash "Markdown: validate without lints differs from parse_str"
+	if off != Ok(Markdown.parse_str(source, {})) {
+		crash "Markdown: validation without lints changed syntax value"
 	}
-	check_lints(off, Markdown.validate({ source, name }), "Markdown")
+	check_lints(off, Markdown.validate({ source, name }), |InvalidMarkdown(error)| error.problem == UnclosedFence, "Markdown")
 }
 
 ## One-based line and byte column of an offset, clamped to the source, with
@@ -145,8 +150,8 @@ test = |bytes| {
 						_ => check_markdown(source)
 					}
 					at = U8.to_u64(offset) * 17 % (rest.len() + 2)
-					if Literal.position(source, at) != position_of(rest, at) {
-						crash "Literal.position(${at.to_str()}) is ${Str.inspect(Literal.position(source, at))}, expected ${Str.inspect(position_of(rest, at))}"
+					if Parser.Quotation.position(source, at) != position_of(rest, at) {
+						crash "Parser.Quotation.position(${at.to_str()}) is ${Str.inspect(Parser.Quotation.position(source, at))}, expected ${Str.inspect(position_of(rest, at))}"
 					}
 					Fuzz.keep
 				}

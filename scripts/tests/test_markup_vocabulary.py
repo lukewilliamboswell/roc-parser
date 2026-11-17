@@ -39,16 +39,27 @@ class MarkupVocabularyTests(unittest.TestCase):
 
     def test_authoring_membership_uses_the_shared_generated_tables(self) -> None:
         expected = {
-            "package/HtmlValidate.roc": ["elements = MarkupVocabulary.html_element_name"],
+            "package/HtmlValidate.roc": ["elements = HtmlNameRules.elements"],
+            "package/HtmlNameRules.roc": ["elements = MarkupSyntaxFacts.html_element_name"],
             "package/MarkupValidate.roc": [
-                "svg_elements = MarkupVocabulary.svg_element_name",
-                "math_elements = MarkupVocabulary.mathml_element_name",
+                "svg_elements = ForeignNameRules.svg_elements",
+                "math_elements = ForeignNameRules.math_elements",
             ],
-            "package/MarkupVocabulary.roc": [
+            "package/ForeignNameRules.roc": [
+                "svg_elements = MarkupSyntaxFacts.svg_element_name",
+                "math_elements = MarkupSyntaxFacts.mathml_element_name",
+            ],
+            "package/MarkupSyntaxFacts.roc": [
                 "html_element_name = MarkupNameTables.html_name",
                 "svg_element_name = MarkupNameTables.svg_name",
                 "mathml_element_name = MarkupNameTables.mathml_name",
                 "aria_name = MarkupNameTables.aria_name",
+            ],
+            "package/MarkupVocabulary.roc": [
+                "html_element_name = MarkupSyntaxFacts.html_element_name",
+                "svg_element_name = MarkupSyntaxFacts.svg_element_name",
+                "mathml_element_name = MarkupSyntaxFacts.mathml_element_name",
+                "aria_name = MarkupSyntaxFacts.aria_name",
             ],
         }
         for path, declarations in expected.items():

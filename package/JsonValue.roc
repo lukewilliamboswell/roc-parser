@@ -119,7 +119,7 @@ JsonValue := [
 	## the same options.
 	##
 	## ```roc
-	## expect JsonValue.validate({ source: "{\"a\": [1,]}", name: "list.json" }) == Err(InvalidJsonValue(Diagnostic.{ problem: TrailingComma, location: Text({ offset: 8, line: 1, column: 9 }), path: [Source("list.json")] }))
+	## expect JsonValue.validate({ source: "{\"a\": [1,]}", name: "list.json" }) == Err(InvalidJsonValue(Parser.Diagnostic.{ problem: TrailingComma, location: Text({ offset: 8, line: 1, column: 9 }), path: [Source("list.json")] }))
 	##
 	## expect JsonValue.validate({ source: "{\"a\": [1,]}", options: { trailing_commas: True } }).map_ok(|doc| doc.get_path(["a", "0"])) == Ok(Ok(Number("1")))
 	## ```
@@ -152,7 +152,7 @@ JsonValue := [
 	## ```roc
 	## expect JsonValue.parse_str("{\"a\": [true, null]}", {}) == Ok(Object([{ key: "a", value: Array([Bool(True), Null]) }]))
 	##
-	## expect JsonValue.parse_str("[1,]", {}) == Err(InvalidJsonValue(Diagnostic.{ location: Text({ offset: 3 - 1, line: 1, column: 3 }), path: [], problem: TrailingComma }))
+	## expect JsonValue.parse_str("[1,]", {}) == Err(InvalidJsonValue(Parser.Diagnostic.{ location: Text({ offset: 3 - 1, line: 1, column: 3 }), path: [], problem: TrailingComma }))
 	## ```
 	## Parse one complete document with the given [JsonValue.Props].
 	##
@@ -187,14 +187,14 @@ JsonValue := [
 
 	## A [Parser] that reads one strict JSON value and the whitespace around
 	## it, and leaves the rest of the input for the next parser. A failure is
-	## `ParseError(Diagnostic.{ problem: problem, location: InputOffset(offset), path: [] })` with the byte offset of the problem.
+	## `ParseError(Parser.Diagnostic.{ problem: problem, location: InputOffset(offset), path: [] })` with the byte offset of the problem.
 	##
 	## ```roc
 	## expect (JsonValue.parser({})).run_str("[1] rest").map_ok(|{ rest, .. }| rest) == Ok("rest")
 	##
-	## expect (JsonValue.parser({})).parse_str("[1 2]") == Err(ParseError(Diagnostic.{ problem: ExpectedArrayDelimiter, location: Text({ offset: 3, line: 1, column: 4 }), path: [] }))
+	## expect (JsonValue.parser({})).parse_str("[1 2]") == Err(ParseError(Parser.Diagnostic.{ problem: ExpectedArrayDelimiter, location: Text({ offset: 3, line: 1, column: 4 }), path: [] }))
 	## ```
-	## Like [JsonValue.parser({})], with the given [JsonValue.Props].
+	## Configure the grammar with [JsonValue.Props].
 	## `max_bytes` bounds the supplied buffer, including any unconsumed suffix.
 	##
 	## ```roc
@@ -425,7 +425,11 @@ JsonValue := [
 	## limits retain structured diagnostics with a generated-value location.
 	##
 	## ```roc
-	## expect Number("1").encode({}) == Ok("1".to_utf8())
+	## expect {
+	##     value : JsonValue
+	##     value = Number("1")
+	##     value.encode({}) == Ok("1".to_utf8())
+	## }
 	## ```
 	encode : JsonValue, WriteProps -> Try(List(U8), [InvalidJsonValue(Error)])
 	encode = |value, props| write_text(value, props).map_ok(Str.to_utf8).map_err(encoding_error)

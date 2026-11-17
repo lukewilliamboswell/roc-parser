@@ -28,7 +28,7 @@ class LiteralContractTests(unittest.TestCase):
     def test_import_rejection_cannot_be_satisfied_by_a_source_excerpt(self) -> None:
         mismatch = subprocess.CompletedProcess(
             [], 1,
-            'type mismatch\nvalue = Literal.require(Yaml.validate({source:text,name:"bad.yaml"}))', "",
+            'type mismatch\nvalue = Parser.Quotation.require(Yaml.validate({source:text,name:"bad.yaml"}))', "",
         )
         with self.assertRaises(AssertionError):
             assert_compiler_result(mismatch, ["compile time crash", "bad.yaml", "YAML"])

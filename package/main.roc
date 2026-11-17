@@ -1,21 +1,17 @@
 ## roc-parser builds parsers from small, composable pieces and ships ready-made
 ## parsers for common text formats.
 ##
-## [Parser] holds the generic combinators and [Utf8] the byte-level primitives
-## and runners. [Streaming] adapts pure chunk decoders to builtin Iter and
-## Stream. [QIF] and [OFX] read and write banking records incrementally.
-## [JsonStream] reads and writes NDJSON records and top-level JSON array items.
-## [Xml] and [XmlNs] read chunked XML as events with bounded text fragments.
-## [HTTP] reads chunked request and response pipelines without collecting bodies.
-## [MarkupFacts] exposes namespace-aware vocabulary and serialization facts.
-## [DomConstruction] checks bounded HTML repairs for explicitly named DOM
-## children; it does not create nodes. [MarkupContext] checks authoring placement.
-## [CSV], [Yaml], [Xml], [XmlNs], [JsonValue], [Markdown] and
-## [HTTP] parse their formats into Roc values, following RFC 4180, YAML 1.2,
-## XML 1.0 and Namespaces in XML 1.0, RFC 8259, CommonMark 0.31.2 with GitHub
-## extensions, and RFC 9112.
-## [Literal] checks imported constants; each format also supports quotation
-## conversion and configurable validation during compilation.
+## [Parser] provides generic combinators, UTF-8 primitives and quotation helpers.
+## Configured decoders and encoders expose receiver methods for builtin Iter
+## and Stream; the owning format supplies their constructors.
+## [CSV], [QIF] and [OFX] read banking and tabular records. [JsonValue] reads
+## complete JSON values and framed NDJSON or array records. [Xml] and its
+## Namespaced API preserve distinct raw-name and expanded-name XML models.
+## [HTTP] handles request and response messages and chunked pipelines.
+## [Yaml], [Markdown], [AsciiDoc] and [RocSyntax] handle configuration, documents
+## and lossless Roc source. [Html], [Svg] and [MathML] provide checked markup.
+## [Markup] owns shared names, trees, authoring contexts and template plans;
+## Html.RepairContext checks HTML parser repairs independently of authoring rules.
 ##
 ## The manual explains when to use each module, with tested examples:
 ## https://lukewilliamboswell.github.io/roc-parser/
@@ -23,29 +19,18 @@ package
 	[
 		AsciiDoc,
 		CSV,
-		DomConstruction,
-		DomName,
 		HTTP,
 		Html,
-		JsonStream,
 		JsonValue,
-		Literal,
 		Markdown,
 		Markup,
-		MarkupContext,
-		MarkupFacts,
-		MarkupTemplate,
 		MathML,
 		OFX,
 		Parser,
 		QIF,
 		RocSyntax,
-		Streaming,
 		Svg,
-		SvgPath,
-		Utf8,
 		Xml,
-		XmlNs,
 		Yaml,
 	]
 	{

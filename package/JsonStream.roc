@@ -17,7 +17,7 @@ JsonStream :: [].{
 	## max_record_bytes bounds encoded unfinished values before JSON decoding.
 	Props := { framing : Framing ?? Ndjson, json : JsonConfig.Props ?? {}, max_record_bytes : U64 ?? 4_194_304, errors : Streaming.RecoveryProps ?? {} }
 
-	## Original one-based line/byte column and one-based record number.
+	## Native JSON diagnostics retain original source coordinates and a Record path.
 	Error : Diagnostic(JsonConfig.Problem)
 
 	## Record framing failures and the underlying structured JSON problem.

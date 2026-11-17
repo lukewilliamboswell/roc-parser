@@ -23,17 +23,17 @@ import MarkupScan
 ## Document type declarations (`<!DOCTYPE ...>`) are rejected, so entities
 ## other than the predefined ones are never declared and referring to one is
 ## a well-formedness error. Namespaces are not processed: a name such as
-## `svg:path` is kept as written; [XmlNsCore] resolves them. Input is already
+## `svg:path` is kept as written; [Xml.Namespaced] resolves them. Input is already
 ## decoded text, so a declared encoding is reported but not used to decode.
 ##
-## Read a document with [XmlCore.parse_str], or with [XmlCore.parse] and limits for
-## untrusted input, then walk it with pattern matching or the [XmlCore.Node]
-## helpers `name`, `attribute`, `children_named` and `text`. [XmlCore.reader]
+## Read a document with `Xml.parse_str(source, props)`, selecting explicit
+## resource limits for untrusted input, then walk it with pattern matching or [Xml.Node]
+## helpers `name`, `attribute`, `children_named` and `text`. [Xml.reader]
 ## reads a document one event at a time instead:
 ##
 ## ```roc
 ## expect {
-##     xml = XmlCore.parse_str("<feed><title>News</title><link href='/a'/></feed>")?
+##     xml = Xml.parse_str("<feed><title>News</title><link href='/a'/></feed>", {})?
 ##     titles = xml.root.children_named("title").map(|title| title.text())
 ##     links = xml.root.children_named("link").map(|link| link.attribute("href"))
 ##     titles == ["News"] and links == [Ok("/a")]
@@ -130,13 +130,13 @@ XmlCore := {
 	##
 	## Leading and trailing whitespace, comments and processing instructions
 	## around the root element are allowed; anything else after it is an error.
-	## A leading byte order mark is accepted. No limits apply: use [XmlCore.parse]
-	## for untrusted input.
+	## A leading byte order mark is accepted. Select `limits: Bounded(props)`
+	## when parsing untrusted input through [Xml.parse_str].
 	##
 	## ```roc
-	## expect XmlCore.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
+	## expect Xml.parse_str("<a>x &amp; y</a>", {}).map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
 	##
-	## expect XmlCore.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, problem: UnknownEntity("nbsp") }))
+	## expect Xml.parse_str("<a>&nbsp;</a>", {}) == Err(InvalidXml(Parser.Diagnostic.{ problem: UnknownEntity("nbsp"), location: Text({ offset: 3, line: 1, column: 4 }), path: [] }))
 	## ```
 	parse_str : Str -> Try(XmlCore, [InvalidXml(Error)])
 	parse_str = |input| {
@@ -160,9 +160,9 @@ XmlCore := {
 	## exceed it, before anything is built for it.
 	##
 	## ```roc
-	## expect XmlCore.parse("<a><b/></a>", { max_depth: 1 }) == Err(LimitExceeded({ limit: Depth, max: 1, line: 1, column: 4 }))
+	## expect Xml.parse_str("<a><b/></a>", { limits: Bounded({ max_depth: 1 }) }) == Err(InvalidXml(Parser.Diagnostic.{ problem: LimitExceeded({ resource: Depth, max: 1, observed: AtLeast(2) }), location: Text({ offset: 3, line: 1, column: 4 }), path: [] }))
 	##
-	## expect XmlCore.parse("<a><b/></a>", {}).is_ok()
+	## expect Xml.parse_str("<a><b/></a>", { limits: Bounded({}) }).is_ok()
 	## ```
 	parse : Str, ReaderProps -> Try(XmlCore, ReadError)
 	parse = |input, props| {
@@ -183,15 +183,15 @@ XmlCore := {
 	## trailing comments, processing instructions and whitespace, and leave
 	## the input after that for the next parser.
 	##
-	## A failure is `ParseError({ problem, offset })` with the same native problem
-	## [XmlCore.parse_str] reports and the byte offset of the problem. Use this to
-	## embed an XML document in a larger parser; otherwise prefer
-	## [XmlCore.parse_str], which reports a line and column.
+	## A failure is `ParseError({ problem, location, path })`, preserving the native
+	## XML problem. Text runners report original byte, line and column coordinates.
+	## Use `Xml.parser({}).run(bytes)` for a prefix inside a larger grammar, or
+	## `Xml.parse_str(source, props)` for one complete document.
 	##
 	## ```roc
-	## expect (XmlCore.parser).parse_str("<a></b>") == Err(ParseError({ problem: EndTagMismatch({ actual: "b", expected: "a" }), offset: 3 }))
+	## expect Xml.parser({}).parse_str("<a></b>") == Err(ParseError(Parser.Diagnostic.{ problem: EndTagMismatch({ actual: "b", expected: "a" }), location: Text({ offset: 3, line: 1, column: 4 }), path: [] }))
 	##
-	## expect (XmlCore.parser).parse_str("<a/> <b/>") == Err(ParseError({ problem: UnexpectedInput, offset: 5 }))
+	## expect Xml.parser({}).parse_str("<a/> <b/>") == Err(ParseError(Parser.Diagnostic.{ problem: UnexpectedInput, location: Text({ offset: 5, line: 1, column: 6 }), path: [] }))
 	## ```
 	parser : Parser(Parser.Utf8.Bytes, XmlCore, Problem)
 	parser = Parser.custom(
@@ -220,14 +220,14 @@ XmlCore := {
 	##
 	## `namespaces` also rejects processing instruction targets that contain
 	## a colon, as [Namespaces in XML 1.0](https://www.w3.org/TR/xml-names/#Conformance)
-	## requires. [XmlNsCore] sets it; names are still reported as written.
+	## requires. [Xml.Namespaced] sets it; names are still reported as written.
 	ReaderProps := { max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, namespaces : Bool ?? False }
 
-	## A limit of [XmlCore.ReaderProps].
+	## A limit of [Xml.ReaderProps].
 	Limit : [Depth, Elements, Attributes, TokenBytes, ReferenceBytes, ContextBytes, TextBytes]
 
 	## Why reading stopped: malformed XML, or a document that would exceed a
-	## limit of [XmlCore.ReaderProps]. `max` is the limit, and the line and column
+	## limit of [Xml.ReaderProps]. `max` is the limit, and the line and column
 	## locate the start tag (or, for `Attributes`, the attribute) that would
 	## exceed it.
 	ReadError : [
@@ -245,11 +245,11 @@ XmlCore := {
 
 	Metadata : { location : Diagnostic.Location, declaration : Try(Declaration, [Missing]) }
 
-	## Configured byte decoder for the common Streaming readers.
+	## Configured byte decoder for the shared reader contract.
 	Decoder : Streaming.Decoder(ChunkDecoder, Event, [InvalidXml(StreamError)])
 
-	## Construct a decoder; feed it with Streaming.read_iter/read_stream or
-	## call its step method directly. Only source exhaustion supplies Final.
+	## Construct a decoder and call `.read_iter(chunks)`, `.read_stream(source)`,
+	## or `.step({ bytes, end })`. Only source exhaustion supplies Final.
 	decoder : StreamProps -> Decoder
 	decoder = |props| Streaming.decoder({ initial_state: if (props.namespaces) Single(chunk_initial(props)) else Batch(chunk_batch_initial(props)), step: |state, bytes, end| Streaming.map_step_error(chunk_decoder_step(state, bytes, end), |error| InvalidXml(error)), errors: props.errors })
 
@@ -306,7 +306,7 @@ XmlCore := {
 
 	## One step through a document, in document order.
 	##
-	## Events match the tree [XmlCore.parse_str] builds: an empty-element tag
+	## Events match the tree [Xml.parse_str] builds: an empty-element tag
 	## such as `<a/>` gives `Start` then `End`, adjacent character data, CDATA
 	## sections and references form one `Text`, and comments and processing
 	## instructions are checked and then dropped. Text before and after the
@@ -320,7 +320,7 @@ XmlCore := {
 	## A pull reader over one document, for reading a large document an
 	## element at a time without building its whole tree.
 	##
-	## Get one with [XmlCore.reader], then call `next` until it returns `Done`.
+	## Get one with [Xml.reader], then call `next` until it returns `Done`.
 	## `element`, called directly after a `Start`, builds that element's
 	## subtree and continues after its end tag. A reader is a plain value:
 	## keep only the latest one, and `return` from the loop's `Done` arm, so
@@ -347,7 +347,7 @@ XmlCore := {
 	##             }
 	##         }
 	##     }
-	##     count_items(XmlCore.reader("<list><item/><item>x</item></list>", {})?) == Ok(2)
+	##     count_items(Xml.reader("<list><item/><item>x</item></list>", {})?) == Ok(2)
 	## }
 	## ```
 	Reader :: { src : Str, bytes : List(U8), limits : Limits, declaration : Box(Try(XmlCore.Declaration, [Missing])), cursor : Cursor }.{
@@ -358,7 +358,7 @@ XmlCore := {
 		##
 		## ```roc
 		## expect {
-		##     reader = XmlCore.reader("<a>x</a>", {})?
+		##     reader = Xml.reader("<a>x</a>", {})?
 		##     match reader.next() {
 		##         Event(Start({ name, .. }), rest) =>
 		##             match rest.next() {
@@ -392,7 +392,7 @@ XmlCore := {
 		##
 		## ```roc
 		## expect {
-		##     reader = XmlCore.reader("<doc><p>one</p><p>two</p></doc>", {})?
+		##     reader = Xml.reader("<doc><p>one</p><p>two</p></doc>", {})?
 		##     match reader.next() {
 		##         Event(Start(_), after_doc) =>
 		##             match after_doc.next() {
@@ -427,9 +427,9 @@ XmlCore := {
 		}
 
 		## Directly after a `Start` event, builds that element's subtree as
-		## your own type, as `element` builds an [XmlCore.Node], and returns the
+		## your own type, as `element` builds an [Xml.Node], and returns the
 		## reader after its end tag. Use it to build a model of the document
-		## without an [XmlCore.Node] tree beside it.
+		## without an [Xml.Node] tree beside it.
 		##
 		## `first` stands for the element whose `Start` was just read. Each
 		## element inside it is passed to `start` with its name and attributes,
@@ -441,7 +441,7 @@ XmlCore := {
 		##
 		## ```roc
 		## expect {
-		##     reader = XmlCore.reader("<doc><p>one</p><p>two<b/></p></doc>", {})?
+		##     reader = Xml.reader("<doc><p>one</p><p>two<b/></p></doc>", {})?
 		##     match reader.next() {
 		##         Event(Start(_), rest) =>
 		##             match rest.element_with({ context: 0, first: "doc", start: |count, name, _| Ok({ context: count + 1, open: name }), text: |text| text, end: |count, name, children| { context: count, node: "${name}(${Str.join_with(children, ",")})" } }) {
@@ -478,13 +478,13 @@ XmlCore := {
 
 	}
 
-	## A [XmlCore.Reader] positioned before the root element, after reading and
+	## A [Xml.Reader] positioned before the root element, after reading and
 	## checking the document's prolog.
 	##
 	## ```roc
-	## expect XmlCore.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.metadata().declaration.is_ok()) == Ok(True)
+	## expect Xml.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.metadata().declaration.is_ok()) == Ok(True)
 	##
-	## expect XmlCore.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, problem: RootText }))
+	## expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml(Parser.Diagnostic.{ problem: RootText, location: Text({ offset: 0, line: 1, column: 1 }), path: [] }))
 	## ```
 	reader : Str, ReaderProps -> Try(Reader, ReadError)
 	reader = |input, props| {

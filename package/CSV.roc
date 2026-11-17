@@ -90,16 +90,21 @@ CSV := { records : List(CSV.Record) }.{
 	## malformed CSV. Header checks compare normalized names in `Normalized`
 	## mode; `Absent` does not interpret any record as column names.
 	validate : ValidationProps -> Try(List(Record), [InvalidCsv(Error)])
-	validate = |props| checked_records(props.source, props.header, props.lints)
+	validate = |props| checked_records(props.source, props.header, props.lints).map_err(|InvalidCsv(error)| InvalidCsv({ ..error, path: error.path.append(Source(props.name)) }))
 
 	## Validate and decode rows into the inferred Roc type. `Exact` and
 	## `Normalized` use a header; `Absent` decodes headerless tuples.
 	validate_as : DecodeValidationProps -> Try(List(row), [InvalidCsv(Error), ..errs])
 		where [row.Parseable([InvalidCsv(Error), ..errs])]
 	validate_as = |props| {
-		records = checked_records(props.source, props.header, props.lints)?
+		records = CSV.validate({ source: props.source, header: props.header, lints: props.lints, name: props.name })?
 		Row : row
-		decode_records(props.source.to_utf8(), records, Row.parser_for(CsvFormat.Default), decoding_mode(props.header))
+		decode_records(props.source.to_utf8(), records, Row.parser_for(CsvFormat.Default), decoding_mode(props.header)).map_err(
+			|failure| match failure {
+				InvalidCsv(error) => InvalidCsv({ ..error, path: error.path.append(Source(props.name)) })
+				other => other
+			},
+		)
 	}
 
 	## Parse CSV text into raw records without decoding them.
@@ -1797,8 +1802,8 @@ expect {
 expect CSV.validate({ source: "name,name,\n" }) == Ok([["name".to_utf8(), "name".to_utf8(), []]])
 
 ## Duplicate and empty header failures retain typed reasons and original offsets.
-expect CSV.validate({ source: "name,name\n", header: Exact }) == Err(InvalidCsv(Diagnostic.{ problem: DuplicateHeader("name"), location: Text({ offset: 5, line: 1, column: 6 }), path: [Record(1), Field(2)] }))
-expect CSV.validate({ source: "name,\n", header: Exact }) == Err(InvalidCsv(Diagnostic.{ problem: EmptyHeader, location: Text({ offset: 5, line: 1, column: 6 }), path: [Record(1), Field(2)] }))
+expect CSV.validate({ source: "name,name\n", name: "headers.csv", header: Exact }) == Err(InvalidCsv(Diagnostic.{ problem: DuplicateHeader("name"), location: Text({ offset: 5, line: 1, column: 6 }), path: [Record(1), Field(2), Source("headers.csv")] }))
+expect CSV.validate({ source: "name,\n", header: Exact }) == Err(InvalidCsv(Diagnostic.{ problem: EmptyHeader, location: Text({ offset: 5, line: 1, column: 6 }), path: [Record(1), Field(2), Source("<literal>")] }))
 expect CSV.validate({ source: "", header: Exact }) == Ok([])
 
 ## Normalized checks detect collisions while exact checks keep distinct names.
@@ -1840,7 +1845,7 @@ expect {
 	result : Try(List({ required : Str }), [InvalidCsv(CSV.Error)])
 	result = CSV.validate_as({ source: "other\nvalue" })
 	match result {
-		Err(InvalidCsv(error)) => error.problem == MissingRequiredField("required") and error.location == Unavailable(NotRetained) and error.path == [Key("required")]
+		Err(InvalidCsv(error)) => error.problem == MissingRequiredField("required") and error.location == Unavailable(NotRetained) and error.path == [Key("required"), Source("<literal>")]
 		Ok(_) => False
 	}
 }

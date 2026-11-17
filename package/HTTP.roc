@@ -5,18 +5,17 @@ import Streaming
 ## Parse HTTP/1.x requests and responses, following the message syntax of
 ## RFC 9112 and the field syntax of RFC 9110.
 ##
-## [HTTP.parse_request] and [HTTP.parse_response] read one message from the
-## start of a byte list and return it with the bytes that follow (the next
-## pipelined message). [HTTP.parse_requests] reads a whole pipeline. They fail
-## with `InvalidHttp(Error)`, where the [HTTP.Error] gives the byte offset of
-## the problem. [HTTP.Request.parser({})] and [HTTP.Response.parser({})] are the same parsers for
-## use inside a larger [Parser].
+## [HTTP.Request.parse_bytes] and [HTTP.Response.parse_bytes] read one complete
+## message from a byte list and reject trailing input. Their `.parser({}).run(bytes)`
+## forms read a message prefix and return the unconsumed `rest`. [HTTP.parse_requests]
+## reads a complete pipeline. Native failures use `InvalidHttp(Error)`; parser
+## runners use the shared `ParseError` diagnostic envelope.
 ##
 ## ```roc
 ## expect {
 ##     bytes = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n".to_utf8()
-##     match parse_request_prefix(bytes) {
-##         Ok({ request, rest }) => request.method == Get and request.target == "/hello" and rest == []
+##     match HTTP.Request.parse_bytes(bytes, {}) {
+##         Ok(request) => request.method == Get and request.target == "/hello"
 ##         Err(InvalidHttp(_)) => False
 ##     }
 ## }
@@ -75,7 +74,7 @@ HTTP :: [].{
 	## with surrounding whitespace removed.
 	##
 	## Fields keep their order in the message, and repeated fields are kept.
-	## Use [HTTP.header] to look one up by name.
+	## Use `message.header(name)` to look one up by name.
 	Header : { name : Str, value : Str }
 
 	## A parsed HTTP request message.
@@ -180,7 +179,7 @@ HTTP :: [].{
 	}
 
 	## Why a message was rejected: `problem` identifies the broken rule and
-	## `offset` is the byte offset in the input where the problem is.
+	## `location: ByteOffset(offset)` identifies its original byte position.
 	##
 	## Problems with the message as a whole, such as a missing `Host` field,
 	## are at offset 0, the start of the message.
@@ -202,7 +201,7 @@ HTTP :: [].{
 	ResponseHead : { version : Version, status_code : U16, reason : Str, headers : List(Header) }
 
 	## `MessageEnd` completes one HTTP message, including informational responses.
-	## `Finished` from Streaming completes the source. After a 101 response or a
+	## `Finished` from the shared reader completes the source. After a 101 response or a
 	## successful CONNECT, `ProtocolSwitch` precedes uninterpreted `ProtocolData`.
 	Event : [RequestHead(RequestHead), ResponseHead(ResponseHead), Body(List(U8)), Trailer(Header), MessageEnd, ProtocolSwitch, ProtocolData(List(U8))]
 

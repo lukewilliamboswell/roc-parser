@@ -84,8 +84,7 @@ class OptionTests(unittest.TestCase):
             for flag in names.values():
                 self.assertIn('"' + flag + '"', probe)
         # The protocol is written by hand; the writer is called only for the three fields under test.
-        self.assertEqual(len(re.findall(r"JsonValue\.to_str\(", probe)), 1)
-        self.assertEqual(len(re.findall(r"JsonValue\.to_str_with\(", probe)), 2)
+        self.assertEqual(len(re.findall(r"JsonValue\.encode\(", probe)), 3)
 
 
 class NumberTests(unittest.TestCase):

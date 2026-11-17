@@ -33,12 +33,9 @@ def app_source(body: str) -> str:
     parser: "{(ROOT / 'package' / 'main.roc').as_posix()}",
 }}
 import cli.Stdout
-import parser.Literal
-import parser.Utf8
 import parser.Parser
 import parser.Yaml
 import parser.Xml
-import parser.XmlNs
 import parser.CSV
 import parser.QIF
 import parser.OFX
@@ -50,10 +47,7 @@ import parser.JsonValue
 import parser.Html
 import parser.Svg
 import parser.MathML
-import parser.SvgPath
 import parser.Markup
-import parser.MarkupFacts
-import parser.DomConstruction
 '''
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''
@@ -111,7 +105,7 @@ def check_case(roc: str, case: dict, directory: Path) -> None:
 def check_invalidation(roc: str, directory: Path) -> None:
     directory.mkdir()
     source = '''import "settings.yaml" as text : Str
-value = Literal.require(Yaml.validate({ source: text, name: "settings.yaml" }))
+value = Parser.Quotation.require(Yaml.validate({ source: text, name: "settings.yaml" }))
 '''
     (directory / "main.roc").write_text(app_source(source), encoding="utf-8")
     asset = directory / "settings.yaml"

@@ -277,7 +277,7 @@ MarkupCore :: [].{
 	## HTML namespace URI.
 	html_namespace = "http://www.w3.org/1999/xhtml"
 
-	## Parse XML without changing the existing XmlNsCore API.
+	## Parse a complete XML document with source-preserving markup metadata.
 	parse_xml : Str, Props -> Try(Parsed, [InvalidMarkup(Error)])
 	parse_xml = |source_text, props| parse_xml_source(source_text, "", False, props)
 

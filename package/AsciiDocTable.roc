@@ -204,7 +204,7 @@ parse_environment = |source, attrs| {
 	var $inferred_header = False
 	if format == "csv" or format == "tsv" {
 		separator = attr(attrs, "separator", if (format == "tsv") "\t" else ",").to_utf8().first() ?? 44
-		records = if (separator == 44) CSV.parse_records(source).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy))) else Ok(delimited_records(source, separator))
+		records = if (separator == 44) CSV.parse_string_records(source, {}) else Ok(delimited_records(source, separator))
 		match records {
 			Ok(rows) => {
 				$first_row_count = (rows.first() ?? []).len()

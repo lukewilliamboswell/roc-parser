@@ -201,8 +201,8 @@ Yaml := [
 	## A [Parser] that reads the rest of its input as one YAML document, for
 	## composing YAML with other parsers.
 	##
-	## It always consumes all of its input. A failure is a `ParseError` whose
-	## `offset` is the byte offset of the reported line and column.
+	## It always consumes all input. `ParseError` carries the native YAML problem
+	## and the shared location/path envelope; text runners provide original text coordinates.
 	##
 	## ```roc
 	## expect (Yaml.parser({})).parse_str("a: 1") == Ok(Mapping([{ key: "a", value: Int(1) }]))

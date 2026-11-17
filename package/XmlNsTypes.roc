@@ -35,7 +35,7 @@ XmlNsTypes :: [].{
 		##
 		## ```roc
 		## expect {
-		##     root = XmlNsCore.parse_str("<a xmlns:x='urn:x' x:id='1' id='2'/>")?.root
+		##     root = Xml.Namespaced.parse_str("<a xmlns:x='urn:x' x:id='1' id='2'/>", {})?.root
 		##     root.attribute(Uri("urn:x"), "id") == Ok("1") and root.attribute(NoNamespace, "id") == Ok("2")
 		## }
 		## ```

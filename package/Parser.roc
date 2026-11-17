@@ -7,11 +7,11 @@ import Streaming
 ## A `Parser(input, a, p)` is a value that describes how to read an `a` from the
 ## front of an `input`. Combine small parsers with `keep`, `skip`, `map`,
 ## `one_of`, `many` and `sep_by` to build larger ones, then run the result with
-## `Utf8.parse_str` (for `Str`) or [Parser.parse] (for any input type).
+## `parser.parse_str(source)` for text or `parser.parse(input)` for generic input.
 ##
 ## This parser turns `"Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"`
 ## into `{ id: 1, requirements: [[Blue(3), Red(4)], [Red(1), Green(2), Blue(6)], [Green(2)]] }`
-## (the same code is a test in `Utf8.roc`):
+## using the shared UTF-8 primitives:
 ## ```roc
 ## Requirement : [Green(U64), Red(U64), Blue(U64)]
 ## RequirementSet : List(Requirement)
@@ -19,25 +19,25 @@ import Streaming
 ##
 ## parse_game : Str -> Try(Game, [ParsingError])
 ## parse_game = |s| {
-##     green = Parser.const(|x| Green(x)).keep(Utf8.digits({})).skip(Utf8.string(" green"))
-##     red = Parser.const(|x| Red(x)).keep(Utf8.digits({})).skip(Utf8.string(" red"))
-##     blue = Parser.const(|x| Blue(x)).keep(Utf8.digits({})).skip(Utf8.string(" blue"))
+##     green = Parser.const(|x| Green(x)).keep(Parser.Utf8.digits({})).skip(Parser.Utf8.string(" green"))
+##     red = Parser.const(|x| Red(x)).keep(Parser.Utf8.digits({})).skip(Parser.Utf8.string(" red"))
+##     blue = Parser.const(|x| Blue(x)).keep(Parser.Utf8.digits({})).skip(Parser.Utf8.string(" blue"))
 ##
 ##     requirement_set : Parser(_, RequirementSet, _)
-##     requirement_set = Parser.one_of([green, red, blue]).sep_by(Utf8.string(", "))
+##     requirement_set = Parser.one_of([green, red, blue]).sep_by(Parser.Utf8.string(", "))
 ##
 ##     requirements : Parser(_, List(RequirementSet), _)
-##     requirements = requirement_set.sep_by(Utf8.string("; "))
+##     requirements = requirement_set.sep_by(Parser.Utf8.string("; "))
 ##
 ##     game : Parser(_, Game, _)
 ##     game =
 ##         Parser.const(|id| |r| { id, requirements: r })
-##             .skip(Utf8.string("Game "))
-##             .keep(Utf8.digits({}))
-##             .skip(Utf8.string(": "))
+##             .skip(Parser.Utf8.string("Game "))
+##             .keep(Parser.Utf8.digits({}))
+##             .skip(Parser.Utf8.string(": "))
 ##             .keep(requirements)
 ##
-##     match Utf8.parse_str(game, s) {
+##     match game.parse_str(s) {
 ##         Ok(g) => Ok(g)
 ##         Err(ParseError(_)) => Err(ParsingError)
 ##     }
@@ -105,7 +105,7 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 		## at_sign : Parser(Parser.Utf8.Bytes, [AtSign], _)
 		## at_sign = Parser.const(AtSign).skip(Parser.Utf8.codeunit('@'))
 		##
-		## expect (at_sign).parse_str("@") == Ok(AtSign)
+		## expect at_sign.parse_str("@") == Ok(AtSign)
 		## expect (at_sign).run_str("$").is_err()
 		## ```
 		codeunit : U8 -> Parser(Bytes, U8, Problem(p))
@@ -473,6 +473,7 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	PathSegment : DiagnosticCore.PathSegment
 	UnavailableReason : DiagnosticCore.UnavailableReason
 	Observed : DiagnosticCore.Observed
+	Excerpt : DiagnosticCore.Excerpt
 	RecoveryProps : Streaming.RecoveryProps
 	InputEnd : Streaming.InputEnd
 	Step(state, item, problem) : Streaming.Step(state, item, problem)
@@ -515,16 +516,16 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	Problem(p) : [UnexpectedInput, NoAlternatives, CharacterNotFound, Utf8Boundary, ..p]
 
 	## The result of running a parser on part of an input: the parsed `value`
-	## and the `rest` of the input, or a `ParseError` whose `offset` counts the
-	## input elements (bytes, for UTF-8 input) read before the failure.
+	## and the `rest` of the input, or a `ParseError` diagnostic. Generic
+	## input positions use `InputOffset`; text runners supply `Text` coordinates.
 	ParseResult(input, a, p) : Try({ value : a, rest : input }, [ParseError(Diagnostic(Parser.Problem(p)))])
 
 	## Write a custom parser without using the provided combinators.
 	##
 	## The function receives the remaining input and returns either the parsed
 	## `value` with the `rest` it did not consume, or
-	## `Err(ParseError({ problem, offset }))`, where `offset` is how far into
-	## the given input the failure is (usually `0`).
+	## `Err(ParseError({ problem, location, path }))`. Use `InputOffset(offset)`
+	## for positions relative to this input, or preserve a native location and path.
 	custom : (input -> Try({ value : a, rest : input }, [ParseError(Diagnostic([..p]))])) -> Parser(input, a, p) where [input.len : input -> U64]
 	custom = |fun| {
 		{
@@ -576,11 +577,11 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## Run a parser on the given input, expecting it to consume all of it.
 	##
 	## The input type only needs a `len` method, which is used both to detect
-	## leftover input and to turn the furthest failure into an `offset` counted
+	## leftover input and to locate generic failures with `InputOffset` counted
 	## from the start of `input`. Leftover input is a failure too: if some
 	## parser failed at or beyond the leftover, its problem is reported;
-	## otherwise the problem is `unexpected input`. For UTF-8 text use
-	## `Utf8.parse_str` or `Utf8.parse_bytes`.
+	## otherwise the problem is `UnexpectedInput`. For text use
+	## `parser.parse_str(source)`; byte lists use `parser.parse(bytes)`.
 	parse : Parser(input, a, p), input -> Try(a, [ParseError(Diagnostic(Parser.Problem(p)))]) where [input.len : input -> U64]
 	parse = |parser, input| {
 		total = input.len()
@@ -614,10 +615,10 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## This is the usual start of a pipeline: `const` supplies a (curried)
 	## constructor function and each `keep` feeds it one parsed value.
 	## ```roc
-	## parse_u32 : Parser(Utf8.Bytes, U32, _)
-	## parse_u32 = Parser.const(U64.to_u32_wrap).keep(Utf8.digits({}))
+	## parse_u32 : Parser(Parser.Utf8.Bytes, U32, _)
+	## parse_u32 = Parser.const(U64.to_u32_wrap).keep(Parser.Utf8.digits({}))
 	##
-	## expect Utf8.parse_str(parse_u32, "123") == Ok(123.U32)
+	## expect parse_u32.parse_str("123") == Ok(123.U32)
 	## ```
 	const : a -> Parser(_, a, p)
 	const = |value| {
@@ -654,15 +655,15 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## Each parser starts from the same input. An empty list always fails.
 	## For UTF-8 input, [Parser.one_of] behaves the same way.
 	## ```roc
-	## color : Parser(Utf8.Bytes, [Red, Green, Blue], _)
+	## color : Parser(Parser.Utf8.Bytes, [Red, Green, Blue], _)
 	## color =
 	##     Parser.one_of([
-	##         Parser.const(Red).skip(Utf8.string("red")),
-	##         Parser.const(Green).skip(Utf8.string("green")),
-	##         Parser.const(Blue).skip(Utf8.string("blue")),
+	##         Parser.const(Red).skip(Parser.Utf8.string("red")),
+	##         Parser.const(Green).skip(Parser.Utf8.string("green")),
+	##         Parser.const(Blue).skip(Parser.Utf8.string("blue")),
 	##     ])
 	##
-	## expect Utf8.parse_str(color, "green") == Ok(Green)
+	## expect color.parse_str("green") == Ok(Green)
 	## ```
 	one_of : List(Parser(input, a, p)) -> Parser(input, a, p) where [input.len : input -> U64]
 	one_of = |parsers| {
@@ -728,14 +729,14 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## the inner parser started.
 	##
 	## ```roc
-	## even : Parser(Utf8.Bytes, U64, _)
+	## even : Parser(Parser.Utf8.Bytes, U64, _)
 	## even =
-	##     Utf8.digits({})
+	##     Parser.Utf8.digits({})
 	##         .map(|n| if n % 2 == 0 { Ok(n) } else { Err(OddNumber) })
 	##         .flatten()
 	##
-	## expect Utf8.parse_str(even, "42") == Ok(42)
-	## expect Utf8.parse_str(even, "7") == Err(ParseError(Parser.Diagnostic.{ problem: OddNumber, location: InputOffset(0), path: [] }))
+	## expect even.parse_str("42") == Ok(42)
+	## expect even.parse_str("7") == Err(ParseError(Parser.Diagnostic.{ problem: OddNumber, location: Text({ offset: 0, line: 1, column: 1 }), path: [] }))
 	## ```
 	flatten : Parser(input, Try(a, Parser.Problem(p)), p) -> Parser(input, a, p) where [input.len : input -> U64]
 	flatten = |parser| {
@@ -759,8 +760,8 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## and `map`, which are simpler and let the parser be built once.
 	##
 	## ```roc
-	## sized : Parser(Utf8.Bytes, List(U8), _)
-	## sized = Utf8.digit({}).and_then(|n| Utf8.any_codeunit({}).many().map(|bytes| bytes.take_first(n)))
+	## sized : Parser(Parser.Utf8.Bytes, List(U8), _)
+	## sized = Parser.Utf8.digit({}).and_then(|n| Parser.Utf8.any_codeunit({}).many().map(|bytes| bytes.take_first(n)))
 	## ```
 	and_then : Parser(input, a, p), (a -> Parser(input, b, p)) -> Parser(input, b, p)
 	and_then = |first, build_next| {
@@ -837,7 +838,7 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
 	##
 	## ```roc
-	## between_brackets = |parser| parser.between(Utf8.codeunit('['), Utf8.codeunit(']'))
+	## between_brackets = |parser| parser.between(Parser.Utf8.codeunit('['), Parser.Utf8.codeunit(']'))
 	## ```
 	between : Parser(input, a, p), Parser(input, open, p), Parser(input, close, p) -> Parser(input, a, p)
 	between = |parser, open, close| {
@@ -864,10 +865,10 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## The separators are consumed and omitted from the result.
 	##
 	## ```roc
-	## parse_numbers : Parser(Utf8.Bytes, List(U64), _)
-	## parse_numbers = Utf8.digits({}).sep_by(Utf8.codeunit(','))
+	## parse_numbers : Parser(Parser.Utf8.Bytes, List(U64), _)
+	## parse_numbers = Parser.Utf8.digits({}).sep_by(Parser.Utf8.codeunit(','))
 	##
-	## expect Utf8.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
+	## expect parse_numbers.parse_str("1,2,3") == Ok([1, 2, 3])
 	## ```
 	sep_by : Parser(input, a, p), Parser(input, sep, p) -> Parser(input, List(a), p) where [input.len : input -> U64]
 	sep_by = |parser, separator| {
@@ -911,10 +912,10 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	##
 	## Both parsers must succeed, and the input read by the second is consumed.
 	## ```roc
-	## at_sign : Parser(Utf8.Bytes, [AtSign], _)
-	## at_sign = Parser.const(AtSign).skip(Utf8.codeunit('@'))
+	## at_sign : Parser(Parser.Utf8.Bytes, [AtSign], _)
+	## at_sign = Parser.const(AtSign).skip(Parser.Utf8.codeunit('@'))
 	##
-	## expect Utf8.parse_str(at_sign, "@") == Ok(AtSign)
+	## expect at_sign.parse_str("@") == Ok(AtSign)
 	## ```
 	skip : Parser(input, a, p), Parser(input, _, p) -> Parser(input, a, p)
 	skip = |fun_parser, skip_parser| {
@@ -940,26 +941,26 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## This can be used with [Parser.skip] to ignore text.
 	##
 	## ```roc
-	## ignore_text : Parser(Utf8.Bytes, U64, _)
+	## ignore_text : Parser(Parser.Utf8.Bytes, U64, _)
 	## ignore_text =
 	##     Parser.const(|d| d)
 	##         .skip(Parser.chomp_until(':'))
-	##         .skip(Utf8.codeunit(':'))
-	##         .keep(Utf8.digits({}))
+	##         .skip(Parser.Utf8.codeunit(':'))
+	##         .keep(Parser.Utf8.digits({}))
 	##
-	## expect Utf8.parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
+	## expect ignore_text.parse_str("ignore preceding text:123") == Ok(123)
 	## ```
 	##
 	## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 	##
 	## ```roc
-	## capture_text : Parser(Utf8.Bytes, List(U8), _)
+	## capture_text : Parser(Parser.Utf8.Bytes, List(U8), _)
 	## capture_text =
 	##     Parser.const(|codeunits| codeunits)
 	##         .keep(Parser.chomp_until(':'))
-	##         .skip(Utf8.codeunit(':'))
+	##         .skip(Parser.Utf8.codeunit(':'))
 	##
-	## expect Utf8.parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
+	## expect capture_text.parse_str("Roc:") == Ok(['R', 'o', 'c'])
 	## ```
 	##
 	## Use [Str.from_utf8_lossy] to turn the results into a `Str`.
@@ -985,25 +986,25 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## This is useful for chomping whitespace or variable names.
 	##
 	## ```roc
-	## ignore_numbers : Parser(Utf8.Bytes, Str, _)
+	## ignore_numbers : Parser(Parser.Utf8.Bytes, Str, _)
 	## ignore_numbers =
 	##     Parser.const(|str| str)
 	##         .skip(Parser.chomp_while(|b| b >= '0' and b <= '9'))
-	##         .keep(Utf8.string("TEXT"))
+	##         .keep(Parser.Utf8.string("TEXT"))
 	##
-	## expect Utf8.parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
+	## expect ignore_numbers.parse_str("0123456789876543210TEXT") == Ok("TEXT")
 	## ```
 	##
 	## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 	##
 	## ```roc
-	## capture_numbers : Parser(Utf8.Bytes, List(U8), _)
+	## capture_numbers : Parser(Parser.Utf8.Bytes, List(U8), _)
 	## capture_numbers =
 	##     Parser.const(|codeunits| codeunits)
 	##         .keep(Parser.chomp_while(|b| b >= '0' and b <= '9'))
-	##         .skip(Utf8.string("TEXT"))
+	##         .skip(Parser.Utf8.string("TEXT"))
 	##
-	## expect Utf8.parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
+	## expect capture_numbers.parse_str("123TEXT") == Ok(['1', '2', '3'])
 	## ```
 	##
 	## Use [Str.from_utf8_lossy] to turn the results into a `Str`.
@@ -1039,8 +1040,8 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## with small parsers and keeping its text costs no allocation.
 	##
 	## ```roc
-	## identifier = Parser.span(Utf8.codeunit('$').skip(Parser.chomp_while(|b| b >= 'a' and b <= 'z')))
-	## expect Utf8.parse_str(identifier, "$abc") == Ok("$abc".to_utf8())
+	## identifier = Parser.span(Parser.Utf8.codeunit('$').skip(Parser.chomp_while(|b| b >= 'a' and b <= 'z')))
+	## expect identifier.parse_str("$abc") == Ok("$abc".to_utf8())
 	## ```
 	span : Parser(List(item), a, p) -> Parser(List(item), List(item), p)
 	span = |parser| {

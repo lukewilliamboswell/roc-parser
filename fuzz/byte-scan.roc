@@ -5,14 +5,13 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Parser
-import parser.Utf8
 
 ## The vector byte scanners agree with a byte-at-a-time reference:
-## - Utf8.find_any and Utf8.skip_class, for a class drawn from the input
+## - Parser.Utf8.find_any and Parser.Utf8.skip_class, for a class drawn from the input
 ##   (an explicit byte set, a byte range, or a complement, which covers
 ##   both the vector and the scalar-only table shapes), from every start;
-## - Utf8.find_line_end from every start;
-## - Utf8.span_class returns exactly the skipped prefix as a slice.
+## - Parser.Utf8.find_line_end from every start;
+## - Parser.Utf8.span_class returns exactly the skipped prefix as a slice.
 
 Case : { members : List(U8), lo : U8, hi : U8, mode : U8, input : List(U8) }
 
@@ -51,23 +50,23 @@ reference = |bytes, pos, member, want| {
 test : Case -> Fuzz.Outcome
 test = |case| {
 	member = member_of(case)
-	class = Utf8.ByteClass.from_predicate(member)
+	class = Parser.Utf8.ByteClass.from_predicate(member)
 	line_end = |b| b == '\n' or b == '\r'
 	input = case.input
 	var $pos = 0
 	while $pos <= input.len() + 1 {
-		if Utf8.find_any(input, $pos, class) != reference(input, $pos, member, True) {
+		if Parser.Utf8.find_any(input, $pos, class) != reference(input, $pos, member, True) {
 			crash "find_any disagrees with the reference at ${$pos.to_str()}"
 		}
-		if Utf8.skip_class(input, $pos, class) != reference(input, $pos, member, False) {
+		if Parser.Utf8.skip_class(input, $pos, class) != reference(input, $pos, member, False) {
 			crash "skip_class disagrees with the reference at ${$pos.to_str()}"
 		}
-		if Utf8.find_line_end(input, $pos) != reference(input, $pos, line_end, True) {
+		if Parser.Utf8.find_line_end(input, $pos) != reference(input, $pos, line_end, True) {
 			crash "find_line_end disagrees with the reference at ${$pos.to_str()}"
 		}
 		$pos = $pos + 1
 	}
-	match Utf8.parse_bytes_partial(Utf8.span_class(class), input) {
+	match (Parser.Utf8.span_class(class)).run(input) {
 		Ok({ value, rest }) => {
 			n = reference(input, 0, member, False)
 			if value != input.take_first(n) or rest != input.drop_first(n) {

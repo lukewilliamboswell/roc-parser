@@ -67,10 +67,6 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	## Virtual sources and initial attributes for bounded preprocessing.
 	Props := { includes : List({ path : Str, source : Str }) ?? [], attributes : List(Attribute) ?? [], max_depth : U64 ?? 16, expand_includes : Bool ?? False }
 
-	## Default attributes, includes disabled and include depth limited to 16.
-	default_props : Props
-	default_props = {}
-
 	## Parse using caller-supplied include sources; never reads files.
 	parse_str : Str, Props -> Try(AsciiDoc, [Unsupported(Error), InvalidAsciiDoc(Error)])
 	parse_str = |source, props| parse_document_metadata(source, props).map_ok(|parsed| parsed.value)
@@ -233,7 +229,7 @@ parse_document_metadata = |source, options| {
 	}
 	checked = match AsciiDocPreprocess.run_scoped_checked(source, { includes: options.includes, attributes: options.attributes, max_depth: options.max_depth, expand_includes: options.expand_includes }) {
 		Ok(value) => value
-		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ location: Text({ offset: error.offset, line: error.line, column: 1 }), path: [], problem: Preprocessing(error.problem) }))
+		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ location: Text({ offset: error.offset, line: error.line, column: 1 }), path: if (error.path.is_empty()) [] else [Source(error.path)], problem: Preprocessing(error.problem) }))
 	}
 	value = parse_processed(checked.processed)?
 	Ok({ value, unexpanded_includes: checked.unexpanded_includes })
@@ -3098,7 +3094,7 @@ expect match AsciiDocPreprocess.run("a\ninclude::empty.adoc[]\nb", { ..AsciiDocP
 # AsciiDoc keeps it wherever its lines land.
 render_included : Str, Str, Str -> Str
 render_included = |source, path, part| {
-	match AsciiDoc.parse_str(source, { ..AsciiDoc.default_props, expand_includes: True, includes: [{ path, source: part }] }) {
+	match AsciiDoc.parse_str(source, { expand_includes: True, includes: [{ path, source: part }] }) {
 		Ok(document) => AsciiDoc.render_html(document)
 		Err(_) => "error"
 	}
@@ -3158,7 +3154,7 @@ expect {
 	)
 }
 expect render_included(":tabsize: 3x\n\n----\ninclude::part.roc[indent=0]\n----", "part.roc", "\t// tag::a[]\n\tfn = |x|\n\t\n\t\tx\ty\n\t// end::a[]\n  é\tz\n").contains("<pre> // tag::a[]\n fn = |x|\n \n    x  y\n // end::a[]\né   z</pre>")
-expect match AsciiDoc.parse_str("----\ninclude::part.rb[indent=0]\n----", { ..AsciiDoc.default_props, expand_includes: True, attributes: [{ name: "tabsize", value: "4" }], includes: [{ path: "part.rb", source: "\t\tx\n\t  y" }] }) {
+expect match AsciiDoc.parse_str("----\ninclude::part.rb[indent=0]\n----", { expand_includes: True, attributes: [{ name: "tabsize", value: "4" }], includes: [{ path: "part.rb", source: "\t\tx\n\t  y" }] }) {
 	Ok(document) => AsciiDoc.render_html(document).contains("<pre>  x\ny</pre>")
 	Err(_) => False
 }
@@ -3267,3 +3263,9 @@ asciidoc_quotation_error = |failure| {
 
 asciidoc_quote_validate : AsciiDoc.ValidationProps -> Try(AsciiDoc, [BadQuotedBytes(Str)])
 asciidoc_quote_validate = |props| AsciiDoc.validate(props).map_err(asciidoc_quotation_error)
+
+# An included source owns its own coordinates and source path.
+expect match AsciiDoc.parse_str("include::chapter.adoc[]", { expand_includes: True, includes: [{ path: "chapter.adoc", source: "intro\ninclude::missing.adoc[]" }] }) {
+	Err(InvalidAsciiDoc(error)) => error.problem == Preprocessing(MissingInclude("missing.adoc")) and error.location == Text({ offset: 6, line: 2, column: 1 }) and error.path == [Source("chapter.adoc")]
+	_ => False
+}
