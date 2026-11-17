@@ -910,7 +910,7 @@ decimal = |text| {
 		return False
 	}
 	var $at = if (bytes.first() == Ok('-') or bytes.first() == Ok('+')) 1 else 0
-	var $digits = 0
+	var $digits = 0.U64
 	var $point = False
 	while $at < bytes.len() {
 		byte = bytes.get($at) ?? 0
@@ -1389,7 +1389,9 @@ expect ["", "plain", "\r", "\n", "\r\n", "a\r\nb\rc\nd", "\n\r\n\r"].all(
 	|text| {
 		bytes = text.to_utf8()
 		start = move(initial({}), '\r')
-		move_span(start, bytes, 0, bytes.len()) == bytes.fold(start, move)
+		bulk = move_span(start, bytes, 0, bytes.len())
+		individual = bytes.fold(start, move)
+		{ offset: bulk.offset, line: bulk.line, column: bulk.column, last_cr: bulk.last_cr } == { offset: individual.offset, line: individual.line, column: individual.column, last_cr: individual.last_cr }
 	},
 )
 
