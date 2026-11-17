@@ -2858,6 +2858,8 @@ chunk_step = |initial, bytes, end| {
 				}
 			}
 			CData => {
+				# Append delayed brackets directly in record updates so the
+				# unfinished text buffer stays uniquely owned.
 				if $state.skip_text_lf and byte == '\n' {
 					$state = chunk_advance({ ..$state, skip_text_lf: False }, byte)
 					$index = $index + 1
@@ -2865,7 +2867,8 @@ chunk_step = |initial, bytes, end| {
 					# Only the last two brackets can belong to the terminator.
 					if $state.cdata_brackets == 2 {
 						at = if ($state.text.is_empty()) $state.cdata_at else $state.text_at
-						$state = { ..chunk_append_text($state, ']'), text_at: at }
+						left = chunk_utf8_left($state.utf8_left, ']')
+						$state = { ..$state, text: $state.text.append(']'), text_at: at, utf8_left: left }
 						$state = { ..$state, cdata_at: { ..$state.cdata_at, offset: $state.cdata_at.offset + 1, column: $state.cdata_at.column + 1 } }
 					} else {
 						$state = { ..$state, cdata_at: if ($state.cdata_brackets == 0) chunk_at($state) else $state.cdata_at, cdata_brackets: $state.cdata_brackets + 1 }
@@ -2881,7 +2884,10 @@ chunk_step = |initial, bytes, end| {
 				} else {
 					while $state.cdata_brackets > 0 {
 						at = if ($state.text.is_empty()) $state.cdata_at else $state.text_at
-						$state = { ..chunk_append_text($state, ']'), text_at: at, cdata_brackets: $state.cdata_brackets - 1, cdata_at: { ..$state.cdata_at, offset: $state.cdata_at.offset + 1, column: $state.cdata_at.column + 1 } }
+						remaining = $state.cdata_brackets - 1
+						next_at = { ..$state.cdata_at, offset: $state.cdata_at.offset + 1, column: $state.cdata_at.column + 1 }
+						left = chunk_utf8_left($state.utf8_left, ']')
+						$state = { ..$state, text: $state.text.append(']'), text_at: at, utf8_left: left, cdata_brackets: remaining, cdata_at: next_at }
 						if $state.text.len() >= $state.props.max_text_bytes - 3 {
 							return chunk_emit_text($state, $index, True)
 						}
