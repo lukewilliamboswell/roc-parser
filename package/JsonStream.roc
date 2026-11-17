@@ -227,10 +227,10 @@ advance = |initial, bytes, end| {
 						return { state: $state, consumed: $index, outcome: Failed(problem($state, "record byte limit exceeded")) }
 					}
 					$state = { ..$state, record_line: $state.line, record_column: $state.column }
-					match scan($state, byte) {
-						Ok(scanned) => {
-							$state = scanned
-						}
+					scanned = scan($state, byte)
+					$state = scanned.state
+					match scanned.error {
+						Ok(_) => {}
 						Err(error) => return { state: $state, consumed: $index, outcome: Failed(error) }
 					}
 				}
@@ -238,10 +238,10 @@ advance = |initial, bytes, end| {
 				$state = move({ ..$state, phase: if (byte == ',') Next else End }, byte)
 				return record_result($state, $index + 1)
 			} else {
-				match scan($state, byte) {
-					Ok(scanned) => {
-						$state = scanned
-					}
+				scanned = scan($state, byte)
+				$state = scanned.state
+				match scanned.error {
+					Ok(_) => {}
 					Err(error) => return { state: $state, consumed: $index, outcome: Failed(error) }
 				}
 			}
@@ -267,40 +267,39 @@ advance = |initial, bytes, end| {
 	{ state: $state, consumed: $index, outcome: Done }
 }
 
-scan : State, U8 -> Try(State, JsonStream.Error)
+# Return the state on both success and failure so the caller can transfer its
+# record buffer into this scan. Retaining the old state for an Err branch would
+# make append copy the growing record for every byte.
+scan : State, U8 -> { state : State, error : Try({}, JsonStream.Error) }
 scan = |state, byte| {
 	if state.record.len() >= state.props.max_record_bytes {
-		return Err(problem(state, "record byte limit exceeded"))
+		return { state, error: Err(problem(state, "record byte limit exceeded")) }
 	}
-	var $next = { ..state, record: state.record.append(byte) }
-	if state.string {
-		if state.escape {
+	var $next = state
+	if $next.string {
+		if $next.escape {
 			$next = { ..$next, escape: False }
-		}
-		else if byte == '\\' {
+		} else if byte == '\\' {
 			$next = { ..$next, escape: True }
-		}
-		else if byte == '"' {
+		} else if byte == '"' {
 			$next = { ..$next, string: False }
 		}
 	} else if byte == '"' {
 		$next = { ..$next, string: True }
-	}
-	else if byte == '/' and state.props.json.comments {
+	} else if byte == '/' and $next.props.json.comments {
 		$next = { ..$next, comment: Slash }
-	}
-	else if byte == '[' or byte == '{' {
-		if state.stack.len() >= state.props.json.max_depth {
-			return Err(problem(state, "nesting limit exceeded"))
+	} else if byte == '[' or byte == '{' {
+		if $next.stack.len() >= $next.props.json.max_depth {
+			return { state: $next, error: Err(problem($next, "nesting limit exceeded")) }
 		}
-		$next = { ..$next, stack: state.stack.append(if (byte == '[') ']' else '}') }
+		$next = { ..$next, stack: $next.stack.append(if (byte == '[') ']' else '}') }
 	} else if byte == ']' or byte == '}' {
-		if (state.stack.last() ?? 0) != byte {
-			return Err(problem(state, "mismatched closing delimiter"))
+		if ($next.stack.last() ?? 0) != byte {
+			return { state: $next, error: Err(problem($next, "mismatched closing delimiter")) }
 		}
-		$next = { ..$next, stack: state.stack.drop_last(1) }
+		$next = { ..$next, stack: $next.stack.drop_last(1) }
 	}
-	Ok($next)
+	{ state: { ..$next, record: $next.record.append(byte) }, error: Ok({}) }
 }
 
 Writer : { props : JsonStream.WriteProps, started : Bool }
