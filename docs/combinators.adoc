@@ -29,7 +29,7 @@ every `expect` in them passes.
 |Function |Use it to
 
 |`Utf8.parse_str(p, str)`
-|Parse a whole `Str`. Returns `Ok(value)` or `Err(ParseError({ message, offset }))`,
+|Parse a whole `Str`. Returns `Ok(value)` or `Err(ParseError({ problem, offset }))`,
 where `offset` is the byte offset of the furthest failure. Input left over is
 a failure too.
 
@@ -59,13 +59,13 @@ All of these read from `Utf8.Bytes`, which is `List(U8)`.
 |`Utf8.codeunit_satisfies(pred)`
 |One byte that `pred` accepts.
 
-|`Utf8.any_codeunit`
+|`Utf8.any_codeunit({})`
 |Any one byte.
 
 |`Utf8.string(s)`, `Utf8.utf8(bytes)`
 |Exactly the given text, returned as a `Str` or as bytes.
 
-|`Utf8.digit`, `Utf8.digits`
+|`Utf8.digit({})`, `Utf8.digits({})`
 |One ASCII digit, or a run of them, as a `U64`. `digits` fails on a number
 too large for a `U64`.
 
@@ -75,7 +75,7 @@ too large for a `U64`.
 |`Parser.chomp_until(b)`
 |Bytes up to, but not including, the byte `b`. Fails if `b` never appears.
 
-|`Utf8.rest_str`, `Utf8.rest`
+|`Utf8.rest_str({})`, `Utf8.rest({})`
 |All remaining input, as a `Str` (failing if it is not valid UTF-8) or as
 bytes.
 |===
@@ -108,17 +108,23 @@ results of subsequent `keep` calls.
 |Keeps the input `p` reads but replaces its result with `{}`.
 
 |`p.flatten()`
-|Turns a parser producing `Try(a, Str)` into one producing `a`, where `Err(msg)`
-becomes a parse failure with that message.
+|Turns a parser producing `Try(a, Parser.Problem(p))` into one producing `a`, where `Err(problem)`
+becomes a parse failure with that structured tag.
 |===
 
 `flatten` is how you validate a value while parsing. Here a number above
-65535 is rejected with a message of your choosing:
+65535 is rejected with a tag carrying the authored value and allowed maximum:
 
 [source,roc]
 ----
 include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
 ----
+
+The third `Parser` parameter is the grammar's problem union. Primitive UTF-8
+constructors extend `Utf8.Problem(p)` with your tags, preserving each branch's
+payload through composition. Parameterless primitives are factories, such as
+`Utf8.digits({})`, so they can adopt the surrounding grammar's problem type.
+An infallible top-level parser can use `[]` as its problem parameter.
 
 == Alternatives and optional parts
 
@@ -128,17 +134,17 @@ include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
 
 |`Parser.one_of(list)`
 |Tries each parser in order; the first success wins. On failure, reports the
-last parser's message.
+furthest failure, using the later failure on a tie.
 
 |`Parser.one_of(list)`, `Parser.alt(p, q)`
-|The same for any input type. On failure, joins all the messages with "or".
+|The same furthest-failure behavior for any input type.
 
 |`Parser.maybe(p)`
 |Produces `Ok(value)` if `p` succeeds, or `Err(Missing)` without reading
 anything if it fails.
 
-|`Parser.fail(message)`
-|Always fails with `message`. Useful as the last alternative.
+|`Parser.fail(problem)`
+|Always fails with the structured `problem`. Useful as the last alternative.
 |===
 
 [source,roc]
@@ -272,9 +278,9 @@ This has three consequences:
 
 == Parsers over other input
 
-`Parser(input, a)` works for any input type, not only bytes. The `CSV`
+`Parser(input, a, problem)` works for any input type, not only bytes. The `CSV`
 module's record parsers read a `CSV.Record`, a list of fields, and
 `CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
 parser for your own input type, use `Parser.custom` with a
 function from input to `Ok({ value, rest })` or
-`Err(ParseError({ message, offset }))`.
+`Err(ParseError({ problem, offset }))`.

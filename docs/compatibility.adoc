@@ -103,7 +103,7 @@ maps each old name to its replacement. In summary:
 
 |`Parser`, `Utf8`
 |The text parsers live in the `Utf8` module. Runners report the furthest failure as
-`ParseError({ message, offset })`, and partial runners return
+`ParseError({ problem, offset })`, and partial runners return
 `{ value, rest }`. `maybe` returns `Try(a, [Missing])`. Several functions
 were renamed or removed, and
 `many` and `sep_by` stop when an element consumes no input instead of

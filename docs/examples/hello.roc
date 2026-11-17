@@ -11,7 +11,7 @@ import parser.Utf8
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "2024"
-	match Utf8.parse_str(Utf8.digits, input) {
+	match Utf8.parse_str(Utf8.digits({}), input) {
 		Ok(number) => Stdout.line!("Parsed the number ${number.to_str()}")?
 		Err(_) => Stdout.line!("Not a number: ${input}")?
 	}
@@ -19,4 +19,4 @@ main! = |args| {
 }
 # end::parse[]
 
-expect Utf8.parse_str(Utf8.digits, "42") == Ok(42)
+expect Utf8.parse_str(Utf8.digits({}), "42") == Ok(42)

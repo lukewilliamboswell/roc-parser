@@ -16,9 +16,9 @@
 ##
 ## parse_game : Str -> Try(Game, [ParsingError])
 ## parse_game = |s| {
-##     green = Parser.const(|x| Green(x)).keep(Utf8.digits).skip(Utf8.string(" green"))
-##     red = Parser.const(|x| Red(x)).keep(Utf8.digits).skip(Utf8.string(" red"))
-##     blue = Parser.const(|x| Blue(x)).keep(Utf8.digits).skip(Utf8.string(" blue"))
+##     green = Parser.const(|x| Green(x)).keep(Utf8.digits({})).skip(Utf8.string(" green"))
+##     red = Parser.const(|x| Red(x)).keep(Utf8.digits({})).skip(Utf8.string(" red"))
+##     blue = Parser.const(|x| Blue(x)).keep(Utf8.digits({})).skip(Utf8.string(" blue"))
 ##
 ##     requirement_set : Parser(_, RequirementSet, _)
 ##     requirement_set = Parser.one_of([green, red, blue]).sep_by(Utf8.string(", "))
@@ -30,7 +30,7 @@
 ##     game =
 ##         Parser.const(|id| |r| { id, requirements: r })
 ##             .skip(Utf8.string("Game "))
-##             .keep(Utf8.digits)
+##             .keep(Utf8.digits({}))
 ##             .skip(Utf8.string(": "))
 ##             .keep(requirements)
 ##
@@ -138,7 +138,7 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	## constructor function and each `keep` feeds it one parsed value.
 	## ```roc
 	## parse_u32 : Parser(Utf8.Bytes, U32, _)
-	## parse_u32 = Parser.const(U64.to_u32_wrap).keep(Utf8.digits)
+	## parse_u32 = Parser.const(U64.to_u32_wrap).keep(Utf8.digits({}))
 	##
 	## expect Utf8.parse_str(parse_u32, "123") == Ok(123.U32)
 	## ```
@@ -240,7 +240,7 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	## ```roc
 	## even : Parser(Utf8.Bytes, U64, _)
 	## even =
-	##     Utf8.digits
+	##     Utf8.digits({})
 	##         .map(|n| if n % 2 == 0 { Ok(n) } else { Err(OddNumber) })
 	##         .flatten()
 	##
@@ -270,7 +270,7 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	##
 	## ```roc
 	## sized : Parser(Utf8.Bytes, List(U8), _)
-	## sized = Utf8.digit.and_then(|n| Utf8.any_codeunit.many().map(|bytes| bytes.take_first(n)))
+	## sized = Utf8.digit({}).and_then(|n| Utf8.any_codeunit({}).many().map(|bytes| bytes.take_first(n)))
 	## ```
 	and_then : Parser(input, a, p), (a -> Parser(input, b, p)) -> Parser(input, b, p)
 	and_then = |first, build_next| {
@@ -375,7 +375,7 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	##
 	## ```roc
 	## parse_numbers : Parser(Utf8.Bytes, List(U64), _)
-	## parse_numbers = Utf8.digits.sep_by(Utf8.codeunit(','))
+	## parse_numbers = Utf8.digits({}).sep_by(Utf8.codeunit(','))
 	##
 	## expect Utf8.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 	## ```
@@ -455,7 +455,7 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 	##     Parser.const(|d| d)
 	##         .skip(Parser.chomp_until(':'))
 	##         .skip(Utf8.codeunit(':'))
-	##         .keep(Utf8.digits)
+	##         .keep(Utf8.digits({}))
 	##
 	## expect Utf8.parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
 	## ```

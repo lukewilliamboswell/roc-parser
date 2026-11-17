@@ -41,9 +41,9 @@ read. Graham Hutton's 1992 paper "Higher-order functions for parsing" turned
 these ideas into a complete, teachable library and became the standard
 reference.
 
-roc-parser keeps the function and drops the list. A `Parser(input, a)` wraps
+roc-parser keeps the function and drops the list. A `Parser(input, a, problem)` wraps
 a function from `input` to a `Try` holding either the value and the rest of
-the input, `{ value, rest }`, or a `ParseError` with a message and an offset.
+the input, `{ value, rest }`, or a `ParseError` with a problem tag and an offset.
 `Parser.custom` takes such a function directly, so you can always step
 outside the combinators, and `Parser.run` runs a parser and returns the same
 shape:
@@ -166,7 +166,7 @@ just the row and column, which the Elm compiler uses for its error messages.
 
 roc-parser adopts megaparsec's rule. Parsers track the _furthest failure_,
 the failure that read furthest into the input, and every runner reports it
-as `ParseError({ message, offset })`, where `offset` is a byte offset. A
+as `ParseError({ problem, offset })`, where `offset` is a byte offset. A
 repetition that stops at a bad element remembers that element's failure, so
 if the parse then fails, the error points at the bad element rather than at
 the input left over after the repetition:

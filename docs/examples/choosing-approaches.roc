@@ -63,12 +63,12 @@ expect port_of("server: {}\n") == Err(Missing)
 # be digits and the grammar is yours to define.
 Endpoint : { host : Str, port : U64 }
 
-endpoint : Parser(Utf8.Bytes, Endpoint)
+endpoint : Parser(Utf8.Bytes, Endpoint, _)
 endpoint =
 	Parser.const(|host| |port| { host, port })
 		.keep(Parser.chomp_while(|b| b != ':').map(Str.from_utf8_lossy))
 		.skip(Utf8.codeunit(':'))
-		.keep(Utf8.digits)
+		.keep(Utf8.digits({}))
 
 expect Utf8.parse_str(endpoint, "example.com:443") == Ok({ host: "example.com", port: 443 })
 expect Utf8.parse_str(endpoint, "example.com:https").is_err()

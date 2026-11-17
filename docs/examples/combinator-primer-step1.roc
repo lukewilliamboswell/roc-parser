@@ -11,7 +11,7 @@ import parser.Utf8
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(Utf8.Bytes, Str)
+key : Parser(Utf8.Bytes, Str, _)
 key =
 	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()

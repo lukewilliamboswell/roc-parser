@@ -12,7 +12,7 @@ import parser.Utf8
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "AAAiBByAABBwBtCCCiAyArBBx"
-	result : Try(List(Letter), [ParseError({ message : Str, offset : U64 })])
+	result : Try(List(Letter), [ParseError({ problem : Parser.Problem(_), offset : U64 })])
 	result = Utf8.parse_str(letter_parser.many(), input)
 
 	match result.map_ok(count_letter_as) {
@@ -37,13 +37,13 @@ count_letter_as = |letters|
 		.sum()
 
 # Build a custom parser to convert utf8 input into Letter tags
-letter_parser : Parser(List(U8), Letter)
+letter_parser : Parser(List(U8), Letter, _)
 letter_parser = Parser.custom(
 	|input| {
-		val_result : Try(Letter, [ParseError({ message : Str, offset : U64 })])
+		val_result : Try(Letter, [ParseError({ problem : Parser.Problem(_), offset : U64 })])
 		val_result =
 			match input {
-				[] => Err(ParseError({ message: "Nothing to parse", offset: 0 }))
+				[] => Err(ParseError({ problem: UnexpectedEnd, offset: 0 }))
 				['A', ..] => Ok(A)
 				['B', ..] => Ok(B)
 				['C', ..] => Ok(C)

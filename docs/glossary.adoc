@@ -74,7 +74,7 @@ the connection. See <<glossary-smuggling,smuggling>>.
 == Furthest failure
 Of all the failures seen while parsing, the one that read furthest into the
 input, including failures that an alternative or a repetition recovered
-from. The runners report it as `ParseError({ message, offset })`, so the
+from. The runners report it as `ParseError({ problem, offset })`, so the
 error points at the bad element and not at the input left over after it.
 
 [#glossary-i-json]
@@ -88,7 +88,7 @@ True`, and rejects repeated keys by default. See <<json-options>>.
 [#glossary-input]
 == Input
 The data a parser reads, given by the first type parameter of
-`Parser(input, a)`. For text it is `Utf8.Bytes`, a list of UTF-8 bytes; for CSV
+`Parser(input, a, problem)`. For text it is `Utf8.Bytes`, a list of UTF-8 bytes; for CSV
 record decoding it is a `CSV.Record`, a list of fields.
 
 [#glossary-jsonc]
@@ -116,7 +116,7 @@ style. The compiler finds the method from the value's type, which is
 == Opaque nominal type
 A nominal type declared with `::`, whose backing representation is hidden
 outside its module, so values can only be built and read through its
-methods. `Parser(input, a)` is one. A nominal type declared with `:=`, such
+methods. `Parser(input, a, problem)` is one. A nominal type declared with `:=`, such
 as `Yaml`, `JsonValue` or `Markdown`, shows its tags, so you can match on them.
 
 [#glossary-oracle]
@@ -134,9 +134,9 @@ naming the format's internal state type. You rarely write it yourself.
 
 [#glossary-parser]
 == Parser
-A value of type `Parser(input, a)`: a description of how to read an `a` from
+A value of type `Parser(input, a, problem)`: a description of how to read an `a` from
 the start of an input. Running it returns the value and the unconsumed input,
-or a `ParseError` with a message and an offset.
+or a `ParseError` with a problem tag and an offset.
 
 [#glossary-parser-for]
 == `parser_for`

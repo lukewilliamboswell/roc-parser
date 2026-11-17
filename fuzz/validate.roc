@@ -26,11 +26,11 @@ name : Str
 name = "quoted.src"
 
 lint_names : List(Str)
-lint_names = ["non_utf8_declaration", "legacy_booleans", "duplicate_headers", "empty_headers", "unclosed_fences"]
+lint_names = ["non_utf8_declaration", "LegacyBoolean", "duplicate_headers", "empty_headers", "unclosed_fences"]
 
 ## The checked error for a native error with this location.
-expected_error : Str, { line : U64, column : U64, message : Str } -> [BadQuotedBytes(Str)]
-expected_error = |format, problem| Literal.error({ name, format, message: problem.message, line: problem.line, column: problem.column })
+expected_error : Str, { line : U64, column : U64, problem : p } -> [BadQuotedBytes(Str)]
+expected_error = |format, problem| Literal.error({ name, format, message: Str.inspect(problem.problem), line: problem.line, column: problem.column })
 
 ## Enabling lints may only turn an accepted value into a lint failure.
 check_lints : Try(a, [BadQuotedBytes(Str)]), Try(a, [BadQuotedBytes(Str)]), Str -> {}
@@ -44,7 +44,7 @@ check_lints = |off, on, format| {
 
 		(Ok(_), Err(BadQuotedBytes(message))) =>
 		# CSV names the record and field before the lint.
-			if !message.contains(": ${format}: ") or !lint_names.any(|lint| message.contains(": ${lint}: ")) {
+			if !message.contains(": ${format}: ") or !lint_names.any(|lint| message.contains(lint)) {
 				crash "${format}: an accepted value was rejected without naming a lint: ${message}"
 			}
 

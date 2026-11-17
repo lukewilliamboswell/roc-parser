@@ -54,7 +54,7 @@ answer = Literal.require(
 # tag::custom[]
 Count := { value : U64 }.{
 	from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])
-	from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits, source }).map_ok(|value| Count.{ value })
+	from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits({}), source }).map_ok(|value| Count.{ value })
 }
 
 count : Count

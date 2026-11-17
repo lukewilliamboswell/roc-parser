@@ -11,10 +11,10 @@ import parser.Utf8
 # A tree is a number or a bracketed, comma-separated list of trees: [1,[2,3]]
 Tree := [Leaf(U64), Node(List(Tree))]
 
-tree : {} -> Parser(Utf8.Bytes, Tree)
+tree : {} -> Parser(Utf8.Bytes, Tree, _)
 tree = |{}|
 	Parser.one_of([
-		Utf8.digits.map(|n| Leaf(n)),
+		Utf8.digits({}).map(|n| Leaf(n)),
 		Parser.lazy(|_| tree({}))
 			.sep_by(Utf8.codeunit(','))
 			.between(Utf8.codeunit('['), Utf8.codeunit(']'))
@@ -34,12 +34,12 @@ expect Utf8.parse_str(tree({}), "[1,[2,3],[]]").map_ok(leaves) == Ok(3)
 
 # tag::mutual[]
 # A sum of two terms, where a term is a number or a bracketed sum: 1+(2+3)
-term : Parser(Utf8.Bytes, U64)
+term : Parser(Utf8.Bytes, U64, _)
 term =
-	Utf8.digits
+	Utf8.digits({})
 		.alt(Parser.lazy(|_| expr).between(Utf8.codeunit('('), Utf8.codeunit(')')))
 
-expr : Parser(Utf8.Bytes, U64)
+expr : Parser(Utf8.Bytes, U64, _)
 expr =
 	Parser.const(|x| |y| x + y)
 		.keep(term)

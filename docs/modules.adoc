@@ -117,9 +117,9 @@ parsers for data formats, web markup and Roc source.
 
 == How the modules fit together
 
-A `Parser(input, a)` is a value that describes how to read an `a` from the
+A `Parser(input, a, problem)` is a value that describes how to read an `a` from the
 start of an `input`. Running it returns the value and the input it did not
-consume, or a `ParseError` with a message and an offset. `Parser` provides the combinators that
+consume, or a `ParseError` with a problem tag and an offset. `Parser` provides the combinators that
 build parsers from parsers; `Utf8` provides the parsers that read text, with
 `Utf8.Bytes` (a `List(U8)`) as the input type.
 
@@ -133,7 +133,7 @@ Each format type module follows the same conventions:
   directly.
 * `parser` (and, for HTTP, `request` and `response`) is the same parser as a
   `Parser(Utf8.Bytes, ...)` value, for embedding in a larger parser. Its
-  failures are `ParseError({ message, offset })`. `JsonValue.parser_with`
+  failures are `ParseError({ problem, offset })`. `JsonValue.parser_with`
   takes the same options as `JsonValue.parse_with`.
 * `CSV.parse` and `Yaml.decode` decode straight into your own record type
   through the static dispatch method `parser_for`; the compiler infers the
@@ -169,8 +169,8 @@ include::examples/reference-modules.expected[]
 `Parser` is the combinator library. Use it when you are writing a parser for a
 format this package does not cover, or extending one of the format parsers.
 
-* `Parser(input, a)` is an opaque nominal type, and `ParseResult(input, a)`,
-  `Try({ value, rest }, [ParseError({ message, offset })])`, is what one step
+* `Parser(input, a, problem)` is an opaque nominal type, and `ParseResult(input, a, problem)`,
+  `Try({ value, rest }, [ParseError({ problem, offset })])`, is what one step
   of parsing returns.
 * Build values with `const` and feed it parsed arguments with `keep`; read and
   discard syntax with `skip`.
@@ -214,7 +214,7 @@ exact dialect.
 * `CSV.parse_with` matches columns by position instead, with a record parser
   you build from `CSV.record`, `CSV.field` and `.keep(...)`. Field parsers
   `CSV.string`, `CSV.u64` and `CSV.f64` are provided, and any
-  `Parser(Utf8.Bytes, a)` works.
+  `Parser(Utf8.Bytes, a, _)` works.
 * `CSV.parse_records` returns the raw records, each a `CSV.Record` (a
   `List(List(U8))`), when rows differ in shape or you want to inspect them
   first. `CSV.split_header` separates the header row, and `CSV.decode` runs a

@@ -38,7 +38,7 @@ Markdown has no syntax errors. Every input is a valid document, so
 `Markdown.parse_str` returns the blocks directly rather than a `Try`; text that
 looks like broken syntax becomes ordinary paragraph text. To use the document
 parser inside your own combinators, `Markdown.parser` is the same parser as a
-`Parser(Utf8.Bytes, List(Markdown))`.
+`Parser(Utf8.Bytes, List(Markdown), [])`.
 
 The following app parses a document that uses each kind of block and prints
 each block with `Str.inspect`, which shows what the parser produced.

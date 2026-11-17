@@ -1,1 +1,1 @@
-Err(ParseError({ message: "port 70000 is out of range", offset: 0 }))
+Err(ParseError({ offset: 0, problem: PortOutOfRange({ max: 65535.0, value: 70000 }) }))

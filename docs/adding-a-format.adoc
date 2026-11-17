@@ -51,8 +51,8 @@ the existing formats are listed in <<property-testing>>.
 ** `Toml.parse_str : Str -> Try(Toml, [InvalidToml(Toml.Error)])`, where
    `Toml.Error` is a record with a `message` and the most precise location
    the format has (`line` and `column` for a text format);
-** `Toml.parser : Parser(Utf8.Bytes, Toml)` for callers who compose
-   parsers, failing with `ParseError({ message, offset })`;
+** `Toml.parser : Parser(Utf8.Bytes, Toml, Toml.Problem)` for callers who compose
+   parsers, failing with `ParseError({ problem, offset })`;
 ** `Try(a, [Missing])` for every optional value, and methods in the
    `.{ }` block, called in method-call style in examples;
 ** fallible parsing and validation functions return errors on every input;

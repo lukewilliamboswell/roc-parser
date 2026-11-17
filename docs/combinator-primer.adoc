@@ -43,7 +43,7 @@ include::examples/combinator-primer-step1.roc[tag=key,indent=0]
 
 Three ideas appear here:
 
-* A `Parser(Utf8.Bytes, Str)` reads from UTF-8 bytes (`Utf8.Bytes` is
+* A `Parser(Utf8.Bytes, Str, _)` reads from UTF-8 bytes (`Utf8.Bytes` is
   `List(U8)`) and produces a `Str`. Every parser has an input type and a
   result type.
 * `Utf8.codeunit_satisfies(is_key_byte)` reads one byte if `is_key_byte`
@@ -116,7 +116,7 @@ success. If one fails part-way through, the next one starts again from the
 beginning, so `text` does not see input already examined by `number` or
 `flag`.
 
-`Utf8.digits` reads a whole number as a `U64`, and `Utf8.string("true")`
+`Utf8.digits({})` reads a whole number as a `U64`, and `Utf8.string("true")`
 reads exactly that text. `.between(open, close)` reads `open`, the parser,
 and `close`, and keeps only the middle result.
 
@@ -188,7 +188,7 @@ kept, so a mistake in the middle of a file is reported where it is.
 * `Parser.const(f).keep(a).skip(b).keep(c)` reads things in sequence.
 * `.map(f)` transforms a result; `Parser.one_of` chooses between
   alternatives; `one_or_more`, `many` and `sep_by` repeat.
-* A parse ends in `Ok` or a `ParseError` with a message and a byte `offset`.
+* A parse ends in `Ok` or a `ParseError` with a problem tag and a byte `offset`.
 
 <<combinators>> covers the remaining combinators and the rules for
 alternatives and repetition in more depth.

@@ -30,7 +30,7 @@ method_name = |method| {
 
 # tag::embedded[]
 ## A capture file: a one-line label, then the raw request.
-capture : Parser(Utf8.Bytes, { label : Str, request : HTTP.Request })
+capture : Parser(Utf8.Bytes, { label : Str, request : HTTP.Request }, _)
 capture =
 	Parser.const(|label| |request| { label, request })
 		.keep(Parser.chomp_while(|byte| byte != '\n').map(|bytes| Str.from_utf8_lossy(bytes)))
@@ -97,7 +97,7 @@ main! = |_args| {
 
 	match HTTP.parse_request(smuggled.to_utf8()) {
 		Ok(_) => Stdout.line!("accepted")?
-		Err(InvalidHttp({ offset, message })) => Stdout.line!("rejected at byte ${offset.to_str()}: ${message}")?
+		Err(InvalidHttp({ offset, problem })) => Stdout.line!("rejected at byte ${offset.to_str()}: ${Str.inspect(problem)}")?
 	}
 	# end::rejected[]
 

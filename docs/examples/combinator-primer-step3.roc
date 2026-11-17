@@ -10,7 +10,7 @@ import parser.Utf8
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(Utf8.Bytes, Str)
+key : Parser(Utf8.Bytes, Str, _)
 key =
 	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
@@ -19,30 +19,30 @@ key =
 # tag::value[]
 Value : [Number(U64), Flag(Bool), Text(Str)]
 
-number : Parser(Utf8.Bytes, Value)
-number = Utf8.digits.map(|n| Number(n))
+number : Parser(Utf8.Bytes, Value, _)
+number = Utf8.digits({}).map(|n| Number(n))
 
-flag : Parser(Utf8.Bytes, Value)
+flag : Parser(Utf8.Bytes, Value, _)
 flag =
 	Parser.one_of([
 		Parser.const(Flag(Bool.True)).skip(Utf8.string("true")),
 		Parser.const(Flag(Bool.False)).skip(Utf8.string("false")),
 	])
 
-text : Parser(Utf8.Bytes, Value)
+text : Parser(Utf8.Bytes, Value, _)
 text =
 	Parser.chomp_while(|b| b != '"')
 		.map(|bytes| Text(Str.from_utf8_lossy(bytes)))
 		.between(Utf8.codeunit('"'), Utf8.codeunit('"'))
 
-value : Parser(Utf8.Bytes, Value)
+value : Parser(Utf8.Bytes, Value, _)
 value = Parser.one_of([number, flag, text])
 
 # end::value[]
 
 Entry : { key : Str, value : Value }
 
-entry : Parser(Utf8.Bytes, Entry)
+entry : Parser(Utf8.Bytes, Entry, _)
 entry =
 	Parser.const(|k| |v| { key: k, value: v })
 		.keep(key)

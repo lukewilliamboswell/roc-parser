@@ -10,21 +10,21 @@ import parser.Utf8
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(Utf8.Bytes, Str)
+key : Parser(Utf8.Bytes, Str, _)
 key =
 	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
 		.map(Str.from_utf8_lossy)
 
 # tag::entry[]
-value : Parser(Utf8.Bytes, Str)
+value : Parser(Utf8.Bytes, Str, _)
 value =
 	Parser.chomp_while(|b| b != '\n')
 		.map(Str.from_utf8_lossy)
 
 Entry : { key : Str, value : Str }
 
-entry : Parser(Utf8.Bytes, Entry)
+entry : Parser(Utf8.Bytes, Entry, _)
 entry =
 	Parser.const(|k| |v| { key: k, value: v })
 		.keep(key)

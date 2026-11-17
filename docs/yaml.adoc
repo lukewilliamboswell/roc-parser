@@ -146,7 +146,7 @@ include::examples/yaml-guide.expected[lines=16..17]
 ----
 
 Empty input, or a document holding only comments, parses as `Null`. To
-combine YAML with other parsers, `Yaml.parser` is a `Parser(Utf8.Bytes, Yaml)`
+combine YAML with other parsers, `Yaml.parser` is a `Parser(Utf8.Bytes, Yaml, Yaml.Problem)`
 that reads the rest of its input; its `ParseError` offset is the byte offset
 of the error's line and column.
 

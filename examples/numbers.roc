@@ -12,7 +12,7 @@ import parser.Utf8
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
-	result : Try(List(List(U64)), [ParseError({ message : Str, offset : U64 })])
+	result : Try(List(List(U64)), [ParseError({ problem : Parser.Problem(_), offset : U64 })])
 	result = Utf8.parse_str(multiple_numbers.many(), input)
 
 	match result.map_ok(largest) {
@@ -23,10 +23,10 @@ main! = |args| {
 }
 
 # Parse a number followed by a newline
-single_number : Parser(List(U8), U64)
+single_number : Parser(List(U8), U64, _)
 single_number =
 	Parser.const(|n| n)
-		.keep(Utf8.digits)
+		.keep(Utf8.digits({}))
 		.skip(Utf8.string("\n"))
 
 ## A number parser consumes one newline-terminated number.
@@ -36,7 +36,7 @@ expect {
 }
 
 # Parse a series of numbers followed by a newline
-multiple_numbers : Parser(List(U8), List(U64))
+multiple_numbers : Parser(List(U8), List(U64), _)
 multiple_numbers =
 	Parser.const(|ns| ns)
 		.keep(single_number.many())

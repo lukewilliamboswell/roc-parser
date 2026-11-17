@@ -181,29 +181,29 @@ generate = |bytes| {
 
 # ------------------------------------------------------------------ library
 
-even_only : List(U8) -> Try(List(U8), Str)
-even_only = |v| if (v.len() % 2 == 0) Ok(v) else Err("odd length")
+even_only : List(U8) -> Try(List(U8), Parser.Problem(_))
+even_only = |v| if (v.len() % 2 == 0) Ok(v) else Err(OddLength)
 
 items : List(List(U8)), U8 -> List(U8)
 items = |vals, marker| vals.fold([], |acc, v| acc.concat(v).append(marker))
 
-build : Expr -> Parser(List(U8), List(U8))
+build : Expr -> Parser(List(U8), List(U8), _)
 build = |expr| build_step(expr, build)
 
-build_step : Expr, (Expr -> Parser(List(U8), List(U8))) -> Parser(List(U8), List(U8))
+build_step : Expr, (Expr -> Parser(List(U8), List(U8), _)) -> Parser(List(U8), List(U8), _)
 build_step = |expr, again| {
 	match expr {
 		Lit(lit) => Utf8.utf8(lit)
 		Text(text) => Utf8.string(text).map(|s| s.to_utf8())
 		Cu(c) => Utf8.codeunit(c).map(|b| [b])
 		Sat(t) => Utf8.codeunit_satisfies(|b| b < t).map(|b| [b])
-		AnyCu => Utf8.any_codeunit.map(|b| [b])
-		AnyThing => Utf8.rest
-		AnyString => Utf8.rest_str.map(|s| s.to_utf8())
-		Digit => Utf8.digit.map(|n| n.to_str().to_utf8())
-		Digits => Utf8.digits.map(|n| n.to_str().to_utf8())
+		AnyCu => Utf8.any_codeunit({}).map(|b| [b])
+		AnyThing => Utf8.rest({})
+		AnyString => Utf8.rest_str({}).map(|s| s.to_utf8())
+		Digit => Utf8.digit({}).map(|n| n.to_str().to_utf8())
+		Digits => Utf8.digits({}).map(|n| n.to_str().to_utf8())
 		Const(lit) => Parser.const(lit)
-		Fail => Parser.fail("model fail")
+		Fail => Parser.fail(ModelFailure)
 		ChompWhile(t) => Parser.chomp_while(|b| b < t)
 		ChompUntil(c) => Parser.chomp_until(c)
 		Seq(a, b) => Parser.map2(again(a), again(b), |x, y| x.concat(y))
@@ -405,9 +405,9 @@ test = |case| {
 	actual =
 		match Parser.run(parser, case.input) {
 			Ok({ value: val, rest: rest }) => Ok({ val, rest })
-			Err(ParseError({ message, offset })) => {
+			Err(ParseError({ problem, offset })) => {
 				# Messages must be renderable without crashing.
-				_ = message.count_utf8_bytes()
+				_ = Str.inspect(problem).count_utf8_bytes()
 				if (offset > case.input.len()) crash "failure offset ${offset.to_str()} is beyond the input"
 				Err(Fail)
 			}
@@ -419,9 +419,9 @@ test = |case| {
 	# beyond the point where the partial run stopped (the furthest failure).
 	match (Utf8.parse_bytes(parser, case.input), expected) {
 		(Ok(v), Ok(r)) => if (!r.rest.is_empty() or v != r.val) crash "parse_bytes Ok differs from model"
-		(Err(ParseError({ offset, message: _ })), Ok(r)) =>
+		(Err(ParseError({ offset, problem: _ })), Ok(r)) =>
 			if (r.rest.is_empty() or offset < case.input.len() - r.rest.len() or offset > case.input.len()) crash "parse_bytes leftover offset ${offset.to_str()} differs from model"
-		(Err(ParseError({ offset, message: _ })), Err(_)) => if (offset > case.input.len()) crash "parse_bytes offset is beyond the input"
+		(Err(ParseError({ offset, problem: _ })), Err(_)) => if (offset > case.input.len()) crash "parse_bytes offset is beyond the input"
 		_ => crash "parse_bytes outcome differs from model"
 	}
 	# Str front ends only when the input is valid UTF-8.
@@ -439,7 +439,7 @@ test = |case| {
 			full = Utf8.parse_str(parser, text)
 			match (full, expected) {
 				(Ok(v), Ok(r)) => if (!r.rest.is_empty() or v != r.val) crash "parse_str Ok differs from model"
-				(Err(ParseError({ offset, message: _ })), Ok(r)) => if (r.rest.is_empty() or offset < case.input.len() - r.rest.len()) crash "parse_str leftover differs from model"
+				(Err(ParseError({ offset, problem: _ })), Ok(r)) => if (r.rest.is_empty() or offset < case.input.len() - r.rest.len()) crash "parse_str leftover differs from model"
 				(Err(ParseError(_)), Err(_)) => {}
 				_ => crash "parse_str outcome differs from model"
 			}

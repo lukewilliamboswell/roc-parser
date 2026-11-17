@@ -15,8 +15,8 @@ import parser.Yaml
 
 # tag::entry-points[]
 # Parser and Utf8: build a parser from combinators, run it on a Str.
-pair : Parser(Utf8.Bytes, (U64, U64))
-pair = Parser.const(|a| |b| (a, b)).keep(Utf8.digits).skip(Utf8.codeunit(',')).keep(Utf8.digits)
+pair : Parser(Utf8.Bytes, (U64, U64), _)
+pair = Parser.const(|a| |b| (a, b)).keep(Utf8.digits({})).skip(Utf8.codeunit(',')).keep(Utf8.digits({}))
 
 # CSV: decode each row into a record type the compiler infers from use.
 people : Str -> Try(List({ name : Str, age : U64 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
