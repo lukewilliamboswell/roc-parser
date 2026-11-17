@@ -12,6 +12,19 @@ import cli.Stdout
 ## optimizer cannot drop the work.
 Bench :: {}.{
 
+	## Visit every UTF-8 byte with the same one-based weighting as the references.
+	weighted_utf8 : Str -> U64
+	weighted_utf8 = |text| {
+		bytes = text.to_utf8()
+		var $index = 0.U64
+		var $sum = 0.U64
+		while $index < bytes.len() {
+			$sum = $sum + ($index + 1) * (bytes.get($index) ?? 0).to_u64()
+			$index = $index + 1
+		}
+		$sum
+	}
+
 	run! : List(OsStr), (Str -> Try(U64, U64)) => Try({}, _)
 	run! = |args, parse| {
 		iterations = match args.last() {

@@ -10,12 +10,9 @@ import Bench
 main! : List(OsStr) => Try({}, _)
 main! = |args| Bench.run!(args, parse)
 
-weighted : Str -> U64
-weighted = |text| text.to_utf8().iter().with_index().fold(0.U64, |sum, pair| sum + (pair.0 + 1) * pair.1.to_u64())
-
 parse : Str -> Try(U64, U64)
 parse = |input| {
 	doc = QIF.parse_str(input).map_err(|_| 1)?
 	rows = doc.transactions({ date_order: DayFirst }).map_err(|_| 1)?
-	Ok(rows.fold(0.U64, |sum, row| sum + 1 + weighted(row.payee) + weighted(row.memo)))
+	Ok(rows.fold(0.U64, |sum, row| sum + 1 + Bench.weighted_utf8(row.payee) + Bench.weighted_utf8(row.memo)))
 }

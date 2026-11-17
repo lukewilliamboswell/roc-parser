@@ -15,7 +15,14 @@ main! = |args| Bench.run!(args, parse)
 parse : Str -> Try(U64, U64)
 parse = |input| {
 	match CSV.parse_with(Parser.many(CSV.field(CSV.string)), input) {
-		Ok(rows) => Ok(rows.fold(0, |total, row| row.fold(total + 1, |sum, field| sum + field.to_utf8().iter().with_index().fold(0, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))))
+		Ok(rows) => Ok(rows.fold(0, |total, row| row.fold(total + 1, |sum, field| sum + Bench.weighted_utf8(field))))
 		Err(_) => Err(1)
 	}
+}
+
+expect {
+	["", "ASCII", "café 日本 🐦", "1234567890123456789012", "12345678901234567890123", "123456789012345678901234", "\u(0000)\r\n"].all(
+		|text|
+			Bench.weighted_utf8(text) == text.to_utf8().iter().with_index().fold(0.U64, |sum, pair| sum + (pair.0 + 1) * pair.1.to_u64()),
+	)
 }
