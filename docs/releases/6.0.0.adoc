@@ -5,18 +5,41 @@
 Use the compiler named in the published release record and basic-cli 0.28.1
 for the maintained applications and examples. Repository tooling uses its
 separate fixed compiler.
-The published release record identifies the compiler used for the delivered
-package.
 
-This major release changes AsciiDoc output where it disagreed with Asciidoctor
-and adopts the compiler's current format-owned error contract. CSV and YAML
-derived operations include `MissingRequiredField(Str)`, including headerless CSV
-tuple parsing. Add that variant to explicitly closed result annotations that
-previously allowed only `InvalidCsv(CSV.Error)`.
+Compared with 5.0.0, this release introduces a shared streaming API and changes programmatic
+error handling across the library. Native failures carry located `problem`
+tags with structured payloads for source values, expected tokens and limits.
+Match those tags instead of diagnostic text. At a display boundary, use
+`Str.inspect(error.problem)` to produce text; quotation and imported-source
+validation still report compiler diagnostics.
 
-Existing `Xml.parse_str` and `Xml.parser` signatures and results are preserved.
-The new markup APIs are additions; choose XML or HTML syntax explicitly when
-switching between standalone SVG/MathML and browser markup.
+=== Migrate parsers and errors
+
+* `Parser(input, value, problem)` and `Parser.ParseResult(input, value, problem)`
+  now include the grammar's problem type. Add the third parameter to explicit
+  annotations; `_` can infer it. An infallible parser can use `[]`.
+* `Parser.fail` accepts a tagged problem. A `Try` flattened into a parser must
+  likewise carry structured problems with tags and relevant payloads.
+* Parameterless UTF-8 primitives are factories:
+  `Utf8.digit({})`, `Utf8.digits({})`, `Utf8.any_codeunit({})`,
+  `Utf8.rest({})` and `Utf8.rest_str({})`. CSV's combinator factories are
+  `CSV.parser({})`, `CSV.string({})`, `CSV.u64({})` and `CSV.f64({})`.
+* Use `map_problem` to retain a native parser's domain when composing it with
+  another grammar, for example
+  `Yaml.parser.map_problem(|problem| YamlProblem(problem))`.
+  Offsets and furthest-failure selection are preserved.
+* Native error records expose `problem` in place of `message`, including the
+  XML, JSON, YAML, CSV, HTTP, AsciiDoc and financial-format errors.
+  Positional CSV parsing with `CSV.parse_with` or `CSV.decode` additionally
+  reports `InvalidRow(CSV.RowError(p))`, preserving the custom parser's problem
+  and the row/field location. Handle it alongside `InvalidCsv(CSV.Error)`.
+
+Existing `Xml.parse_str` entrypoints remain available; explicitly typed parser
+annotations and native-error field access must be migrated as described above.
+CSV and YAML derived operations include `MissingRequiredField(Str)`, including
+headerless CSV tuple parsing. Include that variant in closed result annotations.
+See the {src}/docs/errors.adoc[error guide] and
+{src}/docs/combinators.adoc[combinator guide] for complete examples.
 
 == Use this release
 
@@ -27,7 +50,6 @@ Add the package to your app's header:
 parser: "{package-url}",
 ----
 
-Applications using basic-cli should use 0.28.1.
 
 The rc.3 preview moves XML node backing types into separate modules to avoid
 compiler warnings. `Xml.Node` and `XmlNs.Node` remain the public aliases, with
@@ -36,6 +58,37 @@ some structural aliases inline and reports a breaking change from rc.2; see the
 {src}/docs/releases/6.0.0-rc.3.adoc[rc.3 notes] before upgrading a preview client.
 
 == Added
+
+=== Streaming and financial formats
+
+* Shared `Streaming.read_iter` and `Streaming.read_stream` adapters for pure
+  and effectful byte sources. Configure CSV, QIF, OFX, JSON record, XML,
+  namespace-resolved XML or HTTP decoders, then consume `Value`, recoverable
+  `Rejected` events and the final `Finished(report)`. Source errors remain
+  distinct from parser failures.
+* Shared `Streaming.write_iter` and `Streaming.write_stream` adapters with
+  CSV, QIF, OFX and JSON encoders. Configure error recovery with
+  `decoder.with_errors(props)` and output fragments with
+  `encoder.with_chunk_bytes(bytes)`. Recovery is limited to independently
+  framed records; broken framing, encoding and resource failures stay terminal.
+* `JsonStream.decoder` for NDJSON records or top-level JSON array items,
+  XML event decoders with bounded text fragments, and HTTP request/response
+  decoders for heads, body fragments, trailers and message boundaries.
+  Drain readers through `Finished` to validate the complete source.
+* QIF raw section/record parsing and bank, cash and credit-card transaction
+  decoding; OFX bank/card statements in 1.x SGML and 2.x XML, with XML output
+  by default. Both support UTF-8 and Windows-1252, preserve exact monetary and
+  identifier text, and provide bounded streaming writers. Investment formats
+  are outside the supported typed subset.
+* `CSV.parse_string_records(text)` returns
+  `Try(List(List(Str)), [InvalidCsv(CSV.Error)])`, including
+  the header as an ordinary record, with CSV quoting decoded. `CSV.Record` and
+  `CSV.parse_records` remain byte-based.
+
+See the {src}/docs/streaming.adoc[streaming guide] for decoder constructors,
+completion, error policies and retained-memory limits.
+
+=== Markup and XML
 
 * `Html`, `Svg` and `MathML` document and fragment parsers, with strict defaults,
   explicit HTML/XML syntax selection, configurable fragment contexts, browser
@@ -81,6 +134,14 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Fixed
 
+* CSV typed parsing reports failures in encounter order. An invalid value in
+  an earlier completed row takes precedence over malformed CSV later in the file.
+* Optimized whole-document QIF and OFX collection, including reduced temporary
+  values and repeated scalar validation, while retaining exact field values
+  and the incremental readers' diagnostic behavior.
+* AsciiDoc `ifeval` recognizes exponents after a decimal point without fractional
+  digits: `1.e2` compares as `100`, matching Asciidoctor's numeric coercion.
+
 * AsciiDoc list paragraphs preserve indentation beyond the common width of
   their continuation lines.
 * AsciiDoc preserves metadata and styles on nested lists, recognises Roman
@@ -97,3 +158,17 @@ checks include pinned independent parsers, semantic validators and browser DOM
 consumers. Git keeps curated cases and an upstream manifest; the full WPT corpus
 is fetched and generated into ignored local storage. Markup fuzz campaigns and
 benchmarks run locally, with no new scheduled campaigns.
+
+Cross-language correctness and performance comparisons run locally. CI,
+nightly compatibility checks and releases retain native Roc verification,
+fuzz smoke campaigns and benchmark-driver smoke checks, without running the
+reference libraries. Local oracle and reference-timing caches record their
+input, dependency and configuration identities for reproducible reuse.
+
+Whole-document collection and streaming consumption have separate workloads
+and checksums. `--max-slowdown 1.5` checks eligible measurements against the
+fastest qualified reference for each workload; missing evidence, failed
+parses and excessive timing spread cannot pass. Some streaming
+workloads still exceed the target. Consult the
+recorded workload, ownership model and timing receipts when comparing results.
+See the {src}/docs/benchmarks.adoc[benchmark guide].
