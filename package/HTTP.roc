@@ -170,9 +170,12 @@ HTTP :: [].{
 		).map_err(|InvalidHttp(error)| quote_http_error(source, error))
 
 		## Associate responses with methods; informational responses retain one.
-		DecoderProps := { methods : Iter(HTTP.Method), reader : HTTP.ReadProps ?? {} }
+		DecoderProps := { methods : Iter(HTTP.Method), reader : HTTP.ReadLimits ?? {}, errors : Streaming.RecoveryProps ?? {} }
 		decoder : DecoderProps -> Streaming.Decoder(IncrementalState, HTTP.Event, [InvalidHttp(HTTP.Error)])
-		decoder = |props| Streaming.decoder({ initial_state: incremental_initial(props.reader, Responses, props.methods), step: |state, bytes, end| Streaming.map_step_error(incremental_step(state, bytes, end), |error| InvalidHttp(http_error(error))), errors: props.reader.errors })
+		decoder = |props| {
+			reader = HTTP.ReadProps.{ max_head_bytes: props.reader.max_head_bytes, max_line_bytes: props.reader.max_line_bytes, max_headers: props.reader.max_headers, max_trailer_bytes: props.reader.max_trailer_bytes, max_trailers: props.reader.max_trailers, max_body_chunk_bytes: props.reader.max_body_chunk_bytes, errors: props.errors }
+			Streaming.decoder({ initial_state: incremental_initial(reader, Responses, props.methods), step: |state, bytes, end| Streaming.map_step_error(incremental_step(state, bytes, end), |error| InvalidHttp(http_error(error))), errors: props.errors })
+		}
 
 	}
 
@@ -181,13 +184,16 @@ HTTP :: [].{
 	##
 	## Problems with the message as a whole, such as a missing `Host` field,
 	## are at offset 0, the start of the message.
-	Resource : [SectionBytes, LineBytes, Headers, Trailers]
+	Resource : [HeadBytes, TrailerBytes, LineBytes, Headers, Trailers]
 	Problem : [LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), DuplicateHost, MissingHost, CrWithoutLf, LfWithoutCr, MissingCrlf, MissingTarget, InvalidTarget, InvalidMethod, MissingMethod, InvalidVersion, InvalidStatusWidth, InvalidStatus, InvalidReasonCharacter, InvalidReasonEncoding, MissingStatus, InvalidFieldEncoding, ObsoleteFolding, WhitespaceBeforeColon, InvalidFieldCharacter, InvalidFieldName, TransferEncodingHttp10, ContentLengthOverflow, ConflictingFraming, UnsupportedTransferCoding, ConflictingContentLength, InvalidContentLength, IncompleteBody, IncompleteChunk, MissingChunkCrlf, InvalidChunkSize, ChunkSizeOverflow, WhitespaceAfterChunkSize, MissingExtensionName, InvalidExtension, MissingExtensionValue, InvalidQuotedPair, InvalidQuotedCharacter, UnclosedQuote, TrailingContent, RepeatedContentLength, RepeatedContentLengthValues, InvalidBodyChunkSize, SourceClosed, IncompleteSection, MissingRequestMethod, ForbiddenTrailer]
 	Error : Diagnostic(Problem)
 
 	## Bounds for incremental readers. Body fragments never exceed
 	## `max_body_chunk_bytes`; heads and trailer sections have independent bounds.
-	ReadProps := { max_head_bytes : U64 ?? 65_536, max_line_bytes : U64 ?? 8192, max_headers : U64 ?? 100, max_trailer_bytes : U64 ?? 65_536, max_trailers : U64 ?? 100, max_body_chunk_bytes : U64 ?? 65_536, errors : Streaming.RecoveryProps ?? {} }
+	## Limits shared by request and response event readers.
+	ReadLimits := { max_head_bytes : U64 ?? default_max_head_bytes, max_line_bytes : U64 ?? default_max_line_bytes, max_headers : U64 ?? default_max_headers, max_trailer_bytes : U64 ?? default_max_trailer_bytes, max_trailers : U64 ?? default_max_trailers, max_body_chunk_bytes : U64 ?? default_max_body_chunk_bytes }
+
+	ReadProps := { max_head_bytes : U64 ?? default_max_head_bytes, max_line_bytes : U64 ?? default_max_line_bytes, max_headers : U64 ?? default_max_headers, max_trailer_bytes : U64 ?? default_max_trailer_bytes, max_trailers : U64 ?? default_max_trailers, max_body_chunk_bytes : U64 ?? default_max_body_chunk_bytes, errors : Streaming.RecoveryProps ?? {} }
 
 	## A request head, emitted before any body bytes.
 	RequestHead : { method : Method, target : Str, version : Version, headers : List(Header) }
@@ -401,7 +407,7 @@ incremental_step = |initial, bytes, end| {
 							$used = $used + accepted
 						}
 						if accepted < count {
-							problem = if ($state.section_bytes >= section_limit) LimitExceeded({ resource: SectionBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }) else LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) })
+							problem = if ($state.section_bytes >= section_limit) LimitExceeded({ resource: if ($state.phase == Trailers) TrailerBytes else HeadBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }) else LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) })
 							return incremental_failed($state, $used, $state.offset, problem)
 						}
 						$bulk = True
@@ -417,7 +423,7 @@ incremental_step = |initial, bytes, end| {
 					}
 					section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
 					if $state.section_bytes >= section_limit {
-						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: SectionBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }))
+						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: if ($state.phase == Trailers) TrailerBytes else HeadBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }))
 					}
 					if byte != '\r' and byte != '\n' and $state.line_bytes >= $state.props.max_line_bytes {
 						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) }))
@@ -1820,3 +1826,21 @@ expect {
 	response = "HTTP/1.1 204 No Content\r\nX-Trace: yes\r\n\r\n"
 	response.header("x-trace") == Ok("yes") and response.body.is_empty()
 }
+
+default_max_head_bytes : U64
+default_max_head_bytes = 65_536
+
+default_max_line_bytes : U64
+default_max_line_bytes = 8192
+
+default_max_headers : U64
+default_max_headers = 100
+
+default_max_trailer_bytes : U64
+default_max_trailer_bytes = 65_536
+
+default_max_trailers : U64
+default_max_trailers = 100
+
+default_max_body_chunk_bytes : U64
+default_max_body_chunk_bytes = 65_536
