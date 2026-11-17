@@ -93,7 +93,8 @@ $ python3 scripts/readme_throughput.py --cpu 3 --refresh-references  # explicit 
 The runner builds Roc drivers serially with `--opt=speed --debug`, then pins
 the timed runs to that CPU. It parses one deterministic document for each
 concrete README format, constructs the result and consumes a
-checksum. CSV, QIF and OFX use whole-document collection; the markup formats
+checksum. CSV collects string rows with `CSV.parse_string_records`; QIF and
+OFX use whole-document collection. The markup formats
 use validated fragments with explicit namespace roots for SVG and MathML.
 Documents are about 64 KiB, except HTTP, which uses a
 555-byte browser GET request with realistic headers and no body. Opaque body
