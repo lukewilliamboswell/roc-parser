@@ -61,27 +61,22 @@ QIF := { events : List(QIF.Event) }.{
 
 	## Text is already decoded; encoding applies only to byte entrypoints.
 	parse_with : Str, Props -> Try(QIF, [InvalidQif(Error)])
-	parse_with = |source, props| parse_bytes(source.to_utf8(), { ..props, encoding: Utf8 })
+	parse_with = |source, props| parse_core(
+		source.to_utf8(),
+		{ ..props, encoding: Utf8 },
+		|part, offset| {
+			# Str is already valid UTF-8. The shared scanner supplies complete
+			# lines/payloads, whose ASCII delimiters establish safe boundaries.
+			after = source.drop_first_bytes(offset).map_err(|_| BadEncoding({ index: 0, message: "invalid UTF-8" }))?
+			after.drop_last_bytes(after.count_utf8_bytes() - part.len()).map_err(|_| BadEncoding({ index: 0, message: "invalid UTF-8" }))
+		},
+	)
 
 	## Parse raw bytes with explicit encoding and resource limits.
 	parse_bytes : List(U8), Props -> Try(QIF, [InvalidQif(Error)])
 	parse_bytes = |bytes, props| {
-		var $decoder = decoder(props)
-		var $pos = 0
-		var $events = []
-		while True {
-			result = $decoder.step(bytes.drop_first($pos), Final)
-			$decoder = result.state
-			$pos = $pos + result.consumed
-			match result.outcome {
-				Item(event) => {
-					$events = $events.append(event)
-				}
-				Done => return Ok(QIF.{ events: $events })
-				Failed(error) | RecordError(error) => return Err(InvalidQif(error))
-				NeedInput => return Err(InvalidQif(problem($decoder, "incomplete final input")))
-			}
-		}
+		encoding = props.encoding
+		parse_core(bytes, props, |part, _| Streaming.decode_text(part, encoding))
 	}
 
 	## Composable complete-document raw parser.
@@ -99,93 +94,8 @@ QIF := { events : List(QIF.Event) }.{
 		## Consume up to one event. More never finalizes an unfinished line.
 		step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, Error)
 		step = |initial, bytes, end| {
-			if initial.done {
-				return { state: initial, consumed: 0, outcome: Done }
-			}
-			var $s = initial
-			var $pos = 0
-			while $pos < bytes.len() {
-				if $s.skip_lf and bytes.get($pos) == Ok('\n') {
-					additional = if ($s.record_bytes == 0) 0 else 1
-					$pos = $pos + 1
-					$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional, skip_lf: False, line_start: $s.offset + 1 }
-					if $s.record_bytes > $s.props.max_record_bytes {
-						return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
-					}
-				} else {
-					# Scan a contiguous line span before updating the persistent state.
-					# Streaming spans own their storage before any text can escape.
-					record_room = $s.props.max_record_bytes - $s.record_bytes
-					line_room = $s.props.max_line_bytes - $s.line_bytes.len()
-					room = if (record_room < line_room) record_room else line_room
-					remaining = bytes.len() - $pos
-					# Inspect at most the budget plus its first violating byte.
-					scan_len = if (room < remaining) room + 1 else remaining
-					stop = Utf8.find_line_end(bytes.take_first($pos + scan_len), $pos)
-					len = stop - $pos
-					if len > record_room or len > line_room {
-						record_first = record_room <= line_room
-						accepted = if (record_first) record_room else line_room
-						consumed = accepted + 1
-						$s = { ..$s, offset: $s.offset + consumed, record_bytes: $s.record_bytes + consumed, column: $s.column + accepted + (if (record_first) 0 else 1) }
-						return { state: terminal($s), consumed: $pos + consumed, outcome: Failed(problem($s, if (record_first) "QIF record byte limit exceeded" else "QIF byte limit exceeded")) }
-					}
-					span = bytes.sublist({ start: $pos, len })
-					accumulated = if $s.line_bytes.is_empty() {
-						if end == More {
-							# Completed payloads and section/account context can outlive
-							# the call too, so never retain a slice of a streaming chunk.
-							var $pending = List.with_capacity(len)
-							var $copied = 0
-							while $copied < len {
-								$pending = $pending.append(span.get($copied) ?? 0)
-								$copied = $copied + 1
-							}
-							$pending
-						} else span
-					} else $s.line_bytes.concat(span)
-					$s = { ..$s, offset: $s.offset + len, record_bytes: $s.record_bytes + len, column: $s.column + len, line_bytes: accumulated, skip_lf: False }
-					$pos = stop
-					if $pos == bytes.len() {
-						break
-					}
-					byte = bytes.get($pos) ?? 0
-					$pos = $pos + 1
-					additional = if ($s.line_bytes == ['^']) 0 else 1
-					$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
-					if $s.record_bytes > $s.props.max_record_bytes {
-						return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
-					}
-					line = $s.line_bytes
-					$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
-					next_line_start = $s.offset
-					processed = process_line($s, line)
-					$s = { ..processed.state, line_start: next_line_start }
-					match processed.result {
-						Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
-						Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
-						Continue => {}
-					}
-				}
-			}
-			if end == More {
-				return { state: $s, consumed: $pos, outcome: NeedInput }
-			}
-			if !$s.line_bytes.is_empty() {
-				line = $s.line_bytes
-				$s = { ..$s, line_bytes: [] }
-				processed = process_line($s, line)
-				$s = processed.state
-				match processed.result {
-					Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
-					Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
-					Continue => {}
-				}
-			}
-			if !$s.fields.is_empty() {
-				return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "record must end with ^")) }
-			}
-			{ state: terminal($s), consumed: $pos, outcome: Done }
+			encoding = initial.props.encoding
+			step_with_decode(initial, bytes, end, |part, _| Streaming.decode_text(part, encoding))
 		}
 	}
 
@@ -499,14 +409,127 @@ typed_step = |state, bytes, end| {
 	{ state: raw.state, consumed: raw.consumed, outcome }
 }
 
+# One scanner/collector serves decoded text and byte input. The text callback
+# belongs only to a complete parse call; incremental Decoder never stores it.
+parse_core : List(U8), QIF.Props, (List(U8), U64 -> Try(Str, [BadEncoding({ index : U64, message : Str })])) -> Try(QIF, [InvalidQif(QIF.Error)])
+parse_core = |bytes, props, decode| {
+	var $decoder = QIF.decoder(props)
+	var $pos = 0
+	var $events = []
+	while True {
+		result = step_with_decode($decoder, bytes.drop_first($pos), Final, decode)
+		$decoder = result.state
+		$pos = $pos + result.consumed
+		match result.outcome {
+			Item(event) => {
+				$events = $events.append(event)
+			}
+			Done => return Ok(QIF.{ events: $events })
+			Failed(error) | RecordError(error) => return Err(InvalidQif(error))
+			NeedInput => return Err(InvalidQif(problem($decoder, "incomplete final input")))
+		}
+	}
+}
+
+step_with_decode : QIF.Decoder, List(U8), Streaming.InputEnd, (List(U8), U64 -> Try(Str, [BadEncoding({ index : U64, message : Str })])) -> Streaming.Step(QIF.Decoder, QIF.Event, QIF.Error)
+step_with_decode = |initial, bytes, end, decode| {
+	if initial.done {
+		return { state: initial, consumed: 0, outcome: Done }
+	}
+	var $s = initial
+	var $pos = 0
+	while $pos < bytes.len() {
+		if $s.skip_lf and bytes.get($pos) == Ok('\n') {
+			additional = if ($s.record_bytes == 0) 0 else 1
+			$pos = $pos + 1
+			$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional, skip_lf: False, line_start: $s.offset + 1 }
+			if $s.record_bytes > $s.props.max_record_bytes {
+				return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+			}
+		} else {
+			# Scan a contiguous line span before updating the persistent state.
+			# Streaming spans own their storage before any text can escape.
+			record_room = $s.props.max_record_bytes - $s.record_bytes
+			line_room = $s.props.max_line_bytes - $s.line_bytes.len()
+			room = if (record_room < line_room) record_room else line_room
+			remaining = bytes.len() - $pos
+			# Inspect at most the budget plus its first violating byte.
+			scan_len = if (room < remaining) room + 1 else remaining
+			stop = Utf8.find_line_end(bytes.take_first($pos + scan_len), $pos)
+			len = stop - $pos
+			if len > record_room or len > line_room {
+				record_first = record_room <= line_room
+				accepted = if (record_first) record_room else line_room
+				consumed = accepted + 1
+				$s = { ..$s, offset: $s.offset + consumed, record_bytes: $s.record_bytes + consumed, column: $s.column + accepted + (if (record_first) 0 else 1) }
+				return { state: terminal($s), consumed: $pos + consumed, outcome: Failed(problem($s, if (record_first) "QIF record byte limit exceeded" else "QIF byte limit exceeded")) }
+			}
+			span = bytes.sublist({ start: $pos, len })
+			accumulated = if $s.line_bytes.is_empty() {
+				if end == More {
+					# Completed payloads and section/account context can outlive
+					# the call too, so never retain a slice of a streaming chunk.
+					var $pending = List.with_capacity(len)
+					var $copied = 0
+					while $copied < len {
+						$pending = $pending.append(span.get($copied) ?? 0)
+						$copied = $copied + 1
+					}
+					$pending
+				} else span
+			} else $s.line_bytes.concat(span)
+			$s = { ..$s, offset: $s.offset + len, record_bytes: $s.record_bytes + len, column: $s.column + len, line_bytes: accumulated, skip_lf: False }
+			$pos = stop
+			if $pos == bytes.len() {
+				break
+			}
+			byte = bytes.get($pos) ?? 0
+			$pos = $pos + 1
+			additional = if ($s.line_bytes == ['^']) 0 else 1
+			$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
+			if $s.record_bytes > $s.props.max_record_bytes {
+				return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+			}
+			line = $s.line_bytes
+			$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
+			next_line_start = $s.offset
+			processed = process_line($s, line, decode)
+			$s = { ..processed.state, line_start: next_line_start }
+			match processed.result {
+				Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
+				Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
+				Continue => {}
+			}
+		}
+	}
+	if end == More {
+		return { state: $s, consumed: $pos, outcome: NeedInput }
+	}
+	if !$s.line_bytes.is_empty() {
+		line = $s.line_bytes
+		$s = { ..$s, line_bytes: [] }
+		processed = process_line($s, line, decode)
+		$s = processed.state
+		match processed.result {
+			Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
+			Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
+			Continue => {}
+		}
+	}
+	if !$s.fields.is_empty() {
+		return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "record must end with ^")) }
+	}
+	{ state: terminal($s), consumed: $pos, outcome: Done }
+}
+
 terminal : QIF.Decoder -> QIF.Decoder
 terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done: True }
 
 problem : QIF.Decoder, Str -> QIF.Error
 problem = |s, message| { offset: s.offset, line: s.line_number, column: s.column, message }
 
-process_line : QIF.Decoder, List(U8) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
-process_line = |s, bytes| {
+process_line : QIF.Decoder, List(U8), (List(U8), U64 -> Try(Str, [BadEncoding({ index : U64, message : Str })])) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
+process_line = |s, bytes, decode| {
 	bom = s.line_start == 0 and s.props.encoding == Utf8 and bytes.take_first(3) == [0xef, 0xbb, 0xbf]
 	content = if (bom) bytes.drop_first(3) else bytes
 	prefix = if (bom) 3 else 0
@@ -516,7 +539,7 @@ process_line = |s, bytes| {
 	if code >= 33 and code <= 126 and code != '!' and code != '^' {
 		# An ASCII field indicator needs no conversion. Decode the payload once;
 		# malformed payloads still precede framing/context errors as before.
-		value = match Streaming.decode_text(content.drop_first(1), s.props.encoding) {
+		value = match decode(content.drop_first(1), at.offset + 1) {
 			Ok(decoded) => decoded
 			Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + 1 + error.index, line: at.line, column: at.column + 1 + error.index, message: error.message }) }
 		}
@@ -536,7 +559,7 @@ process_line = |s, bytes| {
 		fields = pending_fields.append({ code, value })
 		return { state: { ..s, fields, record_at }, result: Continue }
 	}
-	text = match Streaming.decode_text(content, s.props.encoding) {
+	text = match decode(content, at.offset) {
 		Ok(value) => value
 		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, message: error.message }) }
 	}
@@ -887,6 +910,22 @@ expect {
 	}
 	$same
 }
+
+expect {
+	options : List(QIF.Props)
+	options = [{ date_order: RejectAmbiguous }, { date_order: DayFirst }, { date_order: MonthFirst }, { date_order: YearFirst }]
+	dates = ["29/02/2024", "29/02/2023", "01/02/2024", "2024-02-29", "8'27'24", " 27 / 08 / 2024 ", "1/1/18446744073709551616"]
+	var $same = True
+	for date in dates {
+		text = "!Type:Bank\r\nD${date}\r\nT-12.340000000000000000001\r\nP日本語 Café € 😀\r\n^\r\n"
+		str_doc = QIF.parse_str(text)?
+		byte_doc = QIF.parse_bytes(text.to_utf8(), {})?
+		for props in options {
+			$same = $same and str_doc.transactions(props) == byte_doc.transactions(props)
+		}
+	}
+	$same
+}
 expect match QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_line_bytes: 10 }) {
 	Err(InvalidQif(error)) => error == { offset: 22, line: 2, column: 12, message: "QIF byte limit exceeded" }
 	_ => False
@@ -989,6 +1028,31 @@ expect {
 			$same = $same and contains_nul(bytes)
 		}
 		$same = $same and !contains_nul(List.repeat(255.U8, prefix))
+	}
+	$same
+}
+
+# Complete Str input and validated UTF-8 bytes share framing, locations, limits
+# and diagnostics, including BOM, Unicode and non-UTF-8 byte-option overrides.
+expect {
+	options : List(QIF.Props)
+	options = [{}, { encoding: Windows1252 }, { max_line_bytes: 10 }, { max_record_bytes: 11 }, { max_context_bytes: 12 }, { max_fields: 1 }]
+	texts = ["", "\n\r\n\r", "\u(feff)", sample, "\u(feff)!Type:Bank\r\nP日本語 Café € 😀\r\nMlong memo beyond short string storage\nXone\nXtwo\n^", "!Type:Bank\nP\u(0)\n^\n", "!Type:Bank\nPvalid\n!Type:Cash\n", "!Type:Bank\rPunterminated", "!Type:Bank\néinvalid indicator\n^\n", "!Type:Bank\n^oops\n^\n", "!Account\rNAn account beyond short string storage\r^\r!Type:Bank\rPpaid\r^\r"]
+	var $same = True
+	for text in texts {
+		for props in options {
+			match (QIF.parse_with(text, props), QIF.parse_bytes(text.to_utf8(), { ..props, encoding: Utf8 })) {
+				(Ok(a), Ok(b)) => {
+					$same = $same and a.events == b.events
+				}
+				(Err(InvalidQif(a)), Err(InvalidQif(b))) => {
+					$same = $same and a == b
+				}
+				_ => {
+					$same = False
+				}
+			}
+		}
 	}
 	$same
 }
