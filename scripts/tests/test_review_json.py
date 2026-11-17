@@ -511,13 +511,14 @@ class DataTests(unittest.TestCase):
         spdx3 = next(document for document in review.DOCUMENTS if document["name"].startswith("spdx-3"))
         self.assertEqual(spdx3["options"], {"duplicates": "CollapseIdentical"})
 
-    def test_workflow_runs_the_review(self):
+    def test_reviews_are_local_and_native_fuzz_remains_scheduled(self):
         plan = (review.ROOT / "scripts/src/HarnessPlan.roc").read_text()
         self.assertIn('{ name: "json", args: ["scripts/review_json.py", "check", "--baseline", "scripts/json/known-failures.json"], fast: True }', plan)
         self.assertIn('{ name: "json-robustness", args: ["scripts/review_json.py", "campaign", "--smoke"], fast: False }', plan)
         workflow = (review.ROOT / ".github" / "workflows" / "fuzz.yml").read_text()
-        self.assertIn("          - json\n", workflow)
-        self.assertIn("          - json-robustness\n", workflow)
+        self.assertNotIn("          - json\n", workflow)
+        self.assertNotIn("          - json-robustness\n", workflow)
+        self.assertIn("          - json-raw\n", workflow)
 
 
 class GeneratorTests(unittest.TestCase):
