@@ -48,9 +48,9 @@ Streaming :: [].{
 		state = |current| current.inner
 		step : Decoder(state, item, problem), List(U8), InputEnd -> Step(Decoder(state, item, problem), item, problem)
 		step = |current, bytes, end| {
-			advance_fn = current.advance
-			next = advance_fn(current.inner, bytes, end)
-			{ state: Decoder.{ inner: next.state, advance: current.advance, handling: current.handling }, consumed: next.consumed, outcome: next.outcome }
+			Decoder.{ inner, advance, handling } = current
+			next = advance(inner, bytes, end)
+			{ state: Decoder.{ inner: next.state, advance, handling }, consumed: next.consumed, outcome: next.outcome }
 		}
 	}
 	decoder : state, (state, List(U8), InputEnd -> Step(state, item, problem)) -> Decoder(state, item, problem)
