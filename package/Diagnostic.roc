@@ -1,3 +1,5 @@
+import SourceExcerpt
+
 ## Shared failure metadata. Public aliases are owned by Parser and formats.
 Diagnostic(problem) := {
 	problem : problem,
@@ -20,6 +22,12 @@ Diagnostic(problem) := {
 
 	## Counts can stop at the first violation without scanning additional input.
 	Observed : [Exact(U64), AtLeast(U64)]
+
+	## A bounded copy of offending source bytes and its original size.
+	Excerpt : SourceExcerpt
+
+	excerpt : List(U8) -> Excerpt
+	excerpt = SourceExcerpt.from_bytes
 
 	## Text coordinates when known; binary and generated values have none.
 	line_column : Location -> Try({ line : U64, column : U64 }, [NoTextPosition])
