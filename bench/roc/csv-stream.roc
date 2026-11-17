@@ -32,7 +32,7 @@ parse = |input| {
 	for event in CSV.iter_with(Parser.many(CSV.field(CSV.string)), chunks, {}, {}) {
 		match event {
 			Ok(Value(row)) => {
-				$sum = row.fold($sum + 1, |total, field| field.to_utf8().iter().with_index().fold(total, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))
+				$sum = row.fold($sum + 1, |total, field| total + Bench.weighted_utf8(field))
 			}
 			Ok(Finished(_)) => return Ok($sum)
 			_ => return Err(1)

@@ -148,10 +148,19 @@ document a given number of times, stops the clock, and prints one JSON line:
 
 Process start-up, reading the input and printing are outside the timed region.
 Collection comparators build their in-memory result and fold over it into a
-checksum. CSV comparators labelled `consume` discard each completed record and
-reuse buffers where the library permits. Compare collection and consumption
-workloads separately. These drivers preload the source: their RSS includes the
-complete input and does not establish bounded file-source memory.
+checksum. Comparators labelled `consume` discard each completed record and
+reuse buffers where the library permits. Roc's CSV, QIF and OFX consumption
+drivers pass preloaded input through the public streaming APIs in 64 KiB
+chunks, validate each record, and consume the same decoded field checksums as
+their collection drivers without collecting a document. Compare collection
+and consumption workloads separately; the financial references currently
+provide collection comparisons only.
+
+These drivers preload the source: their RSS includes the complete input and
+does not establish bounded file-source memory. Use
+`bench/roc/csv-file-stream.roc` for a file/stdin source that retains bounded
+read buffers and includes reading in its timing. Its checksum weights raw
+field bytes directly, including bytes that are not valid UTF-8.
 
 QIF compares typed bank transactions with Quiffen and Rust `qif_parser`.
 Rust QIF retains borrowed strings and uses `f64` amounts rather than Roc’s

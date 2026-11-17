@@ -456,8 +456,9 @@ class Builder:
         self.versions["roc"] = tool_version([self.roc, "version"]) or tool_version([self.roc, "--version"])
         for fmt in formats:
             drivers = [(fmt, "roc-parser", "collect")]
-            if fmt == "csv":
-                drivers.append(("csv-stream", "roc-parser-consume", "consume: string fields, preloaded source"))
+            if fmt in {"csv", "qif", "ofx"}:
+                values = "string fields" if fmt == "csv" else "typed transactions"
+                drivers.append((f"{fmt}-stream", "roc-parser-consume", f"consume: {values}, preloaded 64 KiB chunks"))
             for driver, name, notes in drivers:
                 binary = self.out / "bin" / f"roc-{driver}"
                 binary.parent.mkdir(parents=True, exist_ok=True)

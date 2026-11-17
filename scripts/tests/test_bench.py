@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("bench", SCRIPTS / "bench.py")
@@ -123,12 +124,19 @@ class Reports(unittest.TestCase):
         self.assertAlmostEqual(rows[0]["speedup_vs_roc"], 2.0)
 
     def test_collection_and_consumption_ratios_use_matching_references(self):
-        results = [self.result("roc/roc-parser", "csv/a", 100),
-                   self.result("go/encoding-csv", "csv/a", 50),
-                   dict(self.result("roc/roc-parser-consume", "csv/a", 400), workload="consume"),
-                   dict(self.result("go/encoding-csv-consume", "csv/a", 100), workload="consume")]
-        ratios = {row["workload"]: row["speedup_vs_roc"] for row in bench.comparison(results)}
-        self.assertEqual(ratios, {"collect": 2, "consume": 4})
+        formats = ("csv", "qif", "ofx")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(bench, "tool_version", return_value="test-compiler"), \
+                patch.object(bench.Builder, "run", return_value=True) as build:
+            impls = bench.Builder(Path(tmp), "unused-roc", None, lambda _: None).roc_impls(formats)
+        self.assertTrue(all(Path(call.args[1][4]).is_file() for call in build.call_args_list))
+        results = [dict(self.result(impl.id, f"{impl.format}/a", 400 if impl.workload == "consume" else 100),
+                        workload=impl.workload) for impl in impls]
+        for fmt in formats:
+            results += [self.result("go/reference", f"{fmt}/a", 50),
+                        dict(self.result("go/reference-consume", f"{fmt}/a", 100), workload="consume")]
+        ratios = {(row["format"], row["workload"]): row["speedup_vs_roc"] for row in bench.comparison(results)}
+        self.assertEqual(ratios, {(fmt, workload): ratio for fmt in formats
+                                 for workload, ratio in (("collect", 2), ("consume", 4))})
 
     def test_semantically_different_results_are_excluded_from_ratios(self):
         rows = bench.comparison([self.result("roc/roc-parser", "csv/a", 100),

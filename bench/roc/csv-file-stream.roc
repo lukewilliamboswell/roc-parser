@@ -10,6 +10,7 @@ import cli.Path
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
+import Bench
 
 ## Read a real file (argument 1), or stdin, with bounded source buffers.
 ## Timing includes reads. The process never preloads or retains the document.
@@ -43,7 +44,7 @@ consume! = |chunks, start| {
 					$first_item_ns = start.elapsed!().to_nanos()
 					$seen = True
 				}
-				$sum = row.fold($sum + 1, |total, field| field.iter().with_index().fold(total, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))
+				$sum = row.fold($sum + 1, |total, field| total + Bench.weighted_bytes(field))
 			}
 			Finished(report) => return Ok({ checksum: $sum, records: report.emitted_items, first_item_ns: $first_item_ns })
 			Rejected(_) => return Err(InvalidInput)
