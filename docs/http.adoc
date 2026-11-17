@@ -290,7 +290,7 @@ completion in detail.
 == Use the parsers inside a larger grammar
 
 `HTTP.request` and `HTTP.response` are the same parsers as a
-`Parser(Utf8.Bytes, _)`, for when a message is one part of a larger format. They
+`Parser(Utf8.Bytes, _, HTTP.Problem)`, for when a message is one part of a larger format. They
 leave the bytes after the message for the next parser:
 
 [source,roc]
@@ -310,7 +310,7 @@ Output:
 health check: /health
 ----
 
-They fail with `ParseError({ message, offset })`. The message starts with
+They fail with `ParseError({ problem, offset })`. The message starts with
 `invalid HTTP request:` or `invalid HTTP response:`, and the offset is where
 the problem is, counted from the start of the whole input.
 
@@ -354,7 +354,7 @@ and at least `100`, and the space before the reason phrase may be left out
 when the phrase is empty.
 
 `parse_request` and `parse_response` fail with `InvalidHttp(Error)`, where an
-`Error` is `{ offset, message }`: the message says which rule was broken and
+`Error` is `{ offset, problem }`: the tag identifies the broken rule and
 the offset is the byte where the problem is. A framing error points at the
 start of the field line responsible; a missing `Host` field is reported at
 offset 0, the start of the message.

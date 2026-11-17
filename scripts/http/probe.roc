@@ -23,14 +23,14 @@ main! = |_| {
 				match HTTP.parse_request(bytes) {
 					Ok({ request: val, rest: input }) =>
 						"{\"status\":\"ok\",\"method\":${json_string(method_name(val.method))},\"target\":${json_string(val.target)},${version(val.version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
-					Err(InvalidHttp({ message, offset })) => error(message, offset)
+					Err(InvalidHttp({ problem, offset })) => error(Str.inspect(problem), offset)
 				}
 			}
 			Ok('S') => {
 				match HTTP.parse_response(bytes) {
 					Ok({ response: val, rest: input }) =>
 						"{\"status\":\"ok\",\"code\":${val.status_code.to_str()},\"reason\":${json_string(val.reason)},${version(val.version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
-					Err(InvalidHttp({ message, offset })) => error(message, offset)
+					Err(InvalidHttp({ problem, offset })) => error(Str.inspect(problem), offset)
 				}
 			}
 			_ => "{\"status\":\"bad_mode\"}"

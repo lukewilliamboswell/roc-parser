@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.HTTP
+import parser.Parser
 import parser.Utf8
 import HttpGen
 
@@ -52,7 +53,7 @@ test = |input| {
 	Fuzz.keep
 }
 
-check_request : List(U8), Try({ value : HTTP.Request, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), Try(HTTP.Request, _), List(U8) -> {}
+check_request : List(U8), Try({ value : HTTP.Request, rest : List(U8) }, [ParseError({ problem : Parser.Problem(HTTP.Problem), offset : U64 })]), Try(HTTP.Request, _), List(U8) -> {}
 check_request = |bytes, actual, expected, rest| {
 	match (actual, expected) {
 		(Ok({ value: val, rest: input }), Ok(want)) if val == want and input == rest => {}
@@ -60,7 +61,7 @@ check_request = |bytes, actual, expected, rest| {
 	}
 }
 
-check_response : List(U8), Try({ value : HTTP.Response, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), Try(HTTP.Response, _), List(U8) -> {}
+check_response : List(U8), Try({ value : HTTP.Response, rest : List(U8) }, [ParseError({ problem : Parser.Problem(HTTP.Problem), offset : U64 })]), Try(HTTP.Response, _), List(U8) -> {}
 check_response = |bytes, actual, expected, rest| {
 	match (actual, expected) {
 		(Ok({ value: val, rest: input }), Ok(want)) if val == want and input == rest => {}

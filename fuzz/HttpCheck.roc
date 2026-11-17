@@ -1,4 +1,5 @@
 import parser.HTTP
+import parser.Parser
 import parser.Utf8
 
 ## Invariants for arbitrary input to the HTTP parsers, shared by the raw
@@ -83,12 +84,12 @@ HttpCheck :: {}.{
 ## HTTP.parse_request/parse_response and the embeddable parsers accept the
 ## same inputs, leave the same rest, and fail at the same offset, which lies
 ## within the input.
-check_agree : List(U8), Try(List(U8), [ParseError({ message : Str, offset : U64 })]), Try(List(U8), [InvalidHttp(HTTP.Error)]) -> {}
+check_agree : List(U8), Try(List(U8), [ParseError({ problem : Parser.Problem(HTTP.Problem), offset : U64 })]), Try(List(U8), [InvalidHttp(HTTP.Error)]) -> {}
 check_agree = |bytes, embedded, direct| {
 	agree =
 		match (embedded, direct) {
 			(Ok(a), Ok(b)) => a == b
-			(Err(ParseError(a)), Err(InvalidHttp(b))) => a.offset == b.offset and b.offset <= bytes.len() and a.message.ends_with(b.message)
+			(Err(ParseError(a)), Err(InvalidHttp(b))) => a.offset == b.offset and b.offset <= bytes.len() and a.problem == b.problem
 			_ => False
 		}
 	if !agree {
@@ -104,7 +105,7 @@ consumed_prefix = |bytes, rest| {
 	bytes.sublist({ start: 0, len: bytes.len() - rest.len() })
 }
 
-same_request : Try({ value : HTTP.Request, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), HTTP.Request, List(U8), Str, List(U8) -> {}
+same_request : Try({ value : HTTP.Request, rest : List(U8) }, [ParseError({ problem : Parser.Problem(HTTP.Problem), offset : U64 })]), HTTP.Request, List(U8), Str, List(U8) -> {}
 same_request = |actual, expected, rest, what, original| {
 	match actual {
 		Ok({ value: val, rest: input }) if val == expected and input == rest => {}
@@ -112,7 +113,7 @@ same_request = |actual, expected, rest, what, original| {
 	}
 }
 
-same_response : Try({ value : HTTP.Response, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), HTTP.Response, List(U8), Str, List(U8) -> {}
+same_response : Try({ value : HTTP.Response, rest : List(U8) }, [ParseError({ problem : Parser.Problem(HTTP.Problem), offset : U64 })]), HTTP.Response, List(U8), Str, List(U8) -> {}
 same_response = |actual, expected, rest, what, original| {
 	match actual {
 		Ok({ value: val, rest: input }) if val == expected and input == rest => {}

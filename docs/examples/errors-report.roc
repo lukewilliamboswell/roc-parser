@@ -66,7 +66,7 @@ http_message : Str -> Str
 http_message = |source| {
 	match HTTP.parse_request(source.to_utf8()) {
 		Ok({ request, rest: _ }) => "request for ${request.target}"
-		Err(InvalidHttp({ message, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${message}"
+		Err(InvalidHttp({ problem, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${Str.inspect(problem)}"
 	}
 }
 
