@@ -12,7 +12,7 @@ main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	bytes = Stdin.read_to_end!()?
 	match OFX.parse_bytes(bytes, {}) {
-		Err(InvalidOfx(error)) => Stdout.line!(JsonValue.to_str(Object([{ key: "status", value: String("error") }, { key: "message", value: String(error.message) }, { key: "offset", value: Number(error.offset.to_str()) }])) ?? "{}")?
+		Err(InvalidOfx(error)) => Stdout.line!(JsonValue.to_str(Object([{ key: "status", value: String("error") }, { key: "message", value: String(Str.inspect(error.problem)) }, { key: "offset", value: Number(error.offset.to_str()) }])) ?? "{}")?
 		Ok(document) => {
 			mode = args.first().map_ok(OsStr.display) ?? "json"
 			if mode == "xml" or mode == "sgml" {

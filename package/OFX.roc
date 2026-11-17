@@ -13,7 +13,8 @@ OFX := { statements : List(OFX.Statement) }.{
 	to_hash : _
 
 	## Original encoded byte offset and one-based line and byte column.
-	Error : { offset : U64, line : U64, column : U64, message : Str }
+	Problem : [RecoveryRequiresReport, IncompleteDocument, UnfinishedStatement, HeaderTooLarge(U64), TokenTooLarge(U64), FieldTooLarge(U64), RecordTooLarge(U64), TrailingContent, NonAsciiHeader, SyntaxMismatch, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(U64), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestingTooDeep(U64), NestedScalar, NestedStatement, InvalidParent(Str), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag(Str), MalformedRecord, TooManyFields(U64), EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Str), MissingAccountId, MissingBankId, InvalidStartTimestamp(Str), InvalidEndTimestamp(Str), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Str), InvalidAmount(Str), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), ExtensionTooDeep(U64), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
+	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Writer wire syntax; readers detect either family.
 	Syntax : [Xml203, Sgml102]
@@ -86,7 +87,7 @@ OFX := { statements : List(OFX.Statement) }.{
 	parse_bytes : List(U8), Props -> Try(OFX, [InvalidOfx(Error)])
 	parse_bytes = |bytes, props| {
 		if props.errors.error_policy != FailFast {
-			return Err(InvalidOfx(write_error("parse_bytes is fail-fast; use parse_iter or parse_report for recovery")))
+			return Err(InvalidOfx(write_error(RecoveryRequiresReport)))
 		}
 		var $state = decoder(props)
 		var $at = 0
@@ -114,7 +115,7 @@ OFX := { statements : List(OFX.Statement) }.{
 				}
 				Failed(error) | RecordError(error) => return Err(InvalidOfx(error))
 				Done => return Ok(OFX.{ statements: $statements })
-				NeedInput => return Err(InvalidOfx(problem($state, "incomplete OFX document")))
+				NeedInput => return Err(InvalidOfx(located_problem($state, IncompleteDocument)))
 			}
 		}
 	}
@@ -124,11 +125,11 @@ OFX := { statements : List(OFX.Statement) }.{
 	parse_str = |source| parse_bytes(source.to_utf8(), { encoding: Utf8 })
 
 	## Complete OFX document as a byte combinator.
-	parser : Parser(Utf8.Bytes, OFX)
+	parser : Parser(Utf8.Bytes, OFX, Problem)
 	parser = Parser.custom(
 		|bytes| match parse_bytes(bytes, {}) {
 			Ok(value) => Ok({ value, rest: [] })
-			Err(InvalidOfx(error)) => Err(ParseError({ message: error.message, offset: error.offset }))
+			Err(InvalidOfx(error)) => Err(ParseError({ problem: error.problem, offset: error.offset }))
 		},
 	)
 
@@ -137,7 +138,7 @@ OFX := { statements : List(OFX.Statement) }.{
 
 	## Validate imported or quoted OFX.
 	validate : ValidationProps -> Try(OFX, [BadQuotedBytes(Str)])
-	validate = |props| parse_bytes(props.source.to_utf8(), { ..props.options, encoding: Utf8 }).map_err(|InvalidOfx(error)| Literal.error({ name: props.name, format: "OFX", line: error.line, column: error.column, message: error.message }))
+	validate = |props| parse_bytes(props.source.to_utf8(), { ..props.options, encoding: Utf8 }).map_err(|InvalidOfx(error)| Literal.error({ name: props.name, format: "OFX", line: error.line, column: error.column, message: Str.inspect(error.problem) }))
 
 	## Checked literal conversion.
 	from_quote : Str -> Try(OFX, [BadQuotedBytes(Str)])
@@ -158,7 +159,7 @@ OFX := { statements : List(OFX.Statement) }.{
 	finish : Writer -> Try(List(U8), [InvalidOfx(Error)])
 	finish = |state| {
 		if state.statement {
-			return Err(InvalidOfx(write_error("unfinished OFX statement")))
+			return Err(InvalidOfx(write_error(UnfinishedStatement)))
 		}
 		encode_text(if (state.opened) "</OFX>\n" else "${preamble(state.props, empty_header)}<OFX></OFX>\n", state.props.encoding).map_err(|error| InvalidOfx(error))
 	}
@@ -214,11 +215,11 @@ empty_statement = |context| { context, transactions: [], ledger_balance: Err(Mis
 initial : OFX.Props -> State
 initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: empty_context, started: False, in_statement: False, root_seen: False, root_closed: False, header_info: empty_header, wrapper_id: "", wrapper_status: { code: "", severity: "", message: "" }, status_seen: False, context_seen: [], balances_seen: [], terminal: False }
 
-problem : State, Str -> OFX.Error
-problem = |state, message| { offset: state.offset, line: state.line, column: state.column, message }
+located_problem : State, Parser.Problem(OFX.Problem) -> OFX.Error
+located_problem = |state, detail| { offset: state.offset, line: state.line, column: state.column, problem: detail }
 
-write_error : Str -> OFX.Error
-write_error = |message| { offset: 0, line: 0, column: 0, message }
+write_error : Parser.Problem(OFX.Problem) -> OFX.Error
+write_error = |detail| { offset: 0, line: 0, column: 0, problem: detail }
 
 move : State, U8 -> State
 move = |state, byte| {
@@ -255,13 +256,13 @@ advance = |state, bytes, ending| {
 			} else {
 				$s = { ..$s, header: $s.header.append(byte) }
 				if $s.header.len() > $s.props.max_token_bytes {
-					return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX header exceeds max_token_bytes")) }
+					return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, HeaderTooLarge(state.props.max_token_bytes))) }
 				}
 			}
 		} else if $s.token_mode {
 			$s = { ..$s, token: $s.token.append(byte) }
 			if $s.token.len() > $s.props.max_token_bytes {
-				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX token exceeds max_token_bytes")) }
+				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, TokenTooLarge($s.props.max_token_bytes))) }
 			}
 			if byte == '"' or byte == '\'' {
 				$s = { ..$s, quote: if ($s.quote == 0) byte else if ($s.quote == byte) 0 else $s.quote }
@@ -295,19 +296,19 @@ advance = |state, bytes, ending| {
 		} else {
 			$s = { ..$s, leaf: $s.leaf.append(byte) }
 			if $s.leaf.len() > $s.props.max_token_bytes {
-				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX field exceeds max_token_bytes")) }
+				return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, FieldTooLarge($s.props.max_token_bytes))) }
 			}
 		}
 		if $s.capture.len() + $s.leaf.len() > $s.props.max_record_bytes {
-			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "OFX record exceeds max_record_bytes")) }
+			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, RecordTooLarge($s.props.max_record_bytes))) }
 		}
 	}
 	if ending == Final {
 		if $s.token_mode or !$s.header_done or !$s.stack.is_empty() or !$s.root_closed {
-			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "incomplete OFX document")) }
+			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, IncompleteDocument)) }
 		}
 		if !Str.from_utf8_lossy($s.leaf).trim().is_empty() {
-			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(problem($s, "content after OFX root")) }
+			return { state: { ..$s, terminal: True }, consumed: $at, outcome: Failed(located_problem($s, TrailingContent)) }
 		}
 		{ state: { ..$s, terminal: True }, consumed: $at, outcome: Done }
 	} else {
@@ -337,18 +338,18 @@ lower = |text| Str.from_utf8_lossy(text.to_utf8().map(|b| if (b >= 'A' and b <= 
 read_header : State -> Try(State, OFX.Error)
 read_header = |state| {
 	header_bytes = if (state.header.starts_with([239, 187, 191])) state.header.drop_first(3) else state.header
-	text = Str.from_utf8(header_bytes).map_err(|_| problem(state, "OFX header must be ASCII"))?
+	text = Str.from_utf8(header_bytes).map_err(|_| located_problem(state, NonAsciiHeader))?
 	if text.to_utf8().any(|b| b > 127) {
-		return Err(problem(state, "OFX header must be ASCII"))
+		return Err(located_problem(state, NonAsciiHeader))
 	}
 	if text.trim().is_empty() {
 		if state.props.syntax == Sgml {
-			return Err(problem(state, "XML source contradicts SGML syntax override"))
+			return Err(located_problem(state, SyntaxMismatch))
 		}
 		return Ok({ ..state, header_done: True })
 	}
 	if state.props.syntax == Xml {
-		return Err(problem(state, "SGML source contradicts XML syntax override"))
+		return Err(located_problem(state, SyntaxMismatch))
 	}
 	var $encoding = Utf8
 	var $charset = "NONE"
@@ -358,20 +359,20 @@ read_header = |state| {
 	for line in text.replace_each("\r", "").split_on("\n").keep_if(|s| !s.trim().is_empty()) {
 		parts = line.split_on(":")
 		if parts.len() != 2 {
-			return Err(problem(state, "malformed OFX header field"))
+			return Err(located_problem(state, MalformedHeaderField(line)))
 		}
 		key = (parts.first() ?? "").trim()
 		value = (parts.last() ?? "").trim()
 		if $seen.contains(key) {
-			return Err(problem(state, "duplicate OFX header field"))
+			return Err(located_problem(state, DuplicateHeaderField(key)))
 		}
 		$seen = $seen.append(key)
 		match key {
 			"OFXHEADER" => if value != "100" {
-				return Err(problem(state, "unsupported OFX header"))
+				return Err(located_problem(state, UnsupportedHeader(value)))
 			}
 			"DATA" => if value != "OFXSGML" {
-				return Err(problem(state, "unsupported OFX data format"))
+				return Err(located_problem(state, UnsupportedDataFormat(value)))
 			}
 			"VERSION" => {
 				$version = value
@@ -383,13 +384,13 @@ read_header = |state| {
 				"utf-8" | "utf8" | "unicode" => {
 					$encoding = Utf8
 				}
-				_ => return Err(problem(state, "unsupported OFX encoding"))
+				_ => return Err(located_problem(state, UnsupportedEncoding(value)))
 			}
 			"CHARSET" => {
 				$charset = value
 			}
 			"SECURITY" | "COMPRESSION" => if value != "NONE" {
-				return Err(problem(state, "encrypted or compressed OFX is unsupported"))
+				return Err(located_problem(state, CompressionUnsupported))
 			}
 			"OLDFILEUID" => {
 				$header_info = { ..$header_info, old_uid: value }
@@ -397,22 +398,22 @@ read_header = |state| {
 			"NEWFILEUID" => {
 				$header_info = { ..$header_info, new_uid: value }
 			}
-			_ => return Err(problem(state, "unknown OFX header field"))
+			_ => return Err(located_problem(state, UnknownHeaderField(key)))
 		}
 	}
 	if !$seen.contains("OFXHEADER") or !$version.starts_with("1") {
-		return Err(problem(state, "missing or inconsistent OFX 1.x header"))
+		return Err(located_problem(state, InconsistentHeader))
 	}
 	if $charset == "1252" {
 		if $encoding != Ascii {
-			return Err(problem(state, "contradictory OFX encoding and charset"))
+			return Err(located_problem(state, EncodingCharsetMismatch))
 		}
 		$encoding = Windows1252
 	} else if $charset != "NONE" and $charset != "0" {
-		return Err(problem(state, "unsupported OFX charset"))
+		return Err(located_problem(state, UnsupportedCharset($charset)))
 	}
 	if (state.props.encoding == Utf8 and $encoding == Windows1252) or (state.props.encoding == Windows1252 and $encoding != Windows1252) {
-		return Err(problem(state, "encoding override contradicts OFX header"))
+		return Err(located_problem(state, HeaderEncodingMismatch))
 	}
 	Ok({ ..state, header_done: True, syntax: Sgml102, encoding: $encoding, header: [], header_info: $header_info })
 }
@@ -420,9 +421,9 @@ read_header = |state| {
 decode : State, List(U8) -> Try(Str, OFX.Error)
 decode = |state, bytes| {
 	if state.encoding == Ascii and bytes.any(|b| b > 127) {
-		return Err(problem(state, "non-ASCII byte in ASCII OFX"))
+		return Err(located_problem(state, NonAsciiByte))
 	}
-	Streaming.decode_text(bytes, if (state.encoding == Windows1252) Windows1252 else Utf8).map_err(|BadEncoding(error)| problem(state, error.message))
+	Streaming.decode_text(bytes, if (state.encoding == Windows1252) Windows1252 else Utf8).map_err(|BadEncoding(error)| located_problem(state, InvalidEncoding(error.index)))
 }
 
 consume_text : State -> Try(State, OFX.Error)
@@ -431,20 +432,20 @@ consume_text = |state| {
 	top = state.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !leaf_tag(top) {
 		if !text.trim().is_empty() {
-			return Err(problem(state, "text outside an OFX field"))
+			return Err(located_problem(state, UnexpectedText))
 		}
 		return Ok(state)
 	}
-	decoded = Xml.parse_str("<v>${text}</v>").map_err(|_| problem(state, "invalid OFX character data"))?.root.text().trim()
+	decoded = Xml.parse_str("<v>${text}</v>").map_err(|_| located_problem(state, InvalidCharacterData))?.root.text().trim()
 	if ["CURDEF", "DTSTART", "DTEND"].contains(top) {
 		if state.started or state.context_seen.contains(top) {
-			return Err(problem(state, "duplicate or late OFX context field"))
+			return Err(located_problem(state, ContextOrder(top)))
 		}
 	}
 	context = state.context
 	if ["DTSERVER", "LANGUAGE", "ORG", "FID"].contains(top) {
 		if state.started {
-			return Err(problem(state, "late OFX signon metadata"))
+			return Err(located_problem(state, SignonOrder))
 		}
 		header = state.header_info
 		next_header = match top {
@@ -462,7 +463,7 @@ consume_text = |state| {
 		"TRNUID" => Ok({ ..state, wrapper_id: decoded })
 		"CODE" => {
 			if decoded != "0" {
-				return Err(problem(state, "non-success OFX responses are unsupported"))
+				return Err(located_problem(state, UnsuccessfulResponse(decoded)))
 			}
 			Ok({ ..state, wrapper_status: { ..state.wrapper_status, code: decoded } })
 		}
@@ -480,66 +481,66 @@ consume_token : State -> Try(Consumed, OFX.Error)
 consume_token = |state| {
 	text = decode(state, state.token)?
 	if text.starts_with("<!DOCTYPE") or text.starts_with("<!ENTITY") {
-		return Err(problem(state, "DTDs and external entities are unsupported"))
+		return Err(located_problem(state, DtdUnsupported))
 	}
 	if text.starts_with("<!--") or text.starts_with("<![CDATA[") {
 		if text.starts_with("<![CDATA[") and ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(state.stack.last().map_ok(|frame| frame.name) ?? "") {
 			content = Str.from_utf8_lossy(text.to_utf8().sublist({ start: 9, len: text.count_utf8_bytes() - 12 }))
 			if content != content.trim() {
-				return Err(problem(state, "padded CDATA in typed OFX fields is unsupported"))
+				return Err(located_problem(state, PaddedCdataUnsupported))
 			}
 		}
-		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| problem(state, "malformed XML comment or CDATA"))?
+		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| located_problem(state, MalformedCommentOrCdata))?
 		if state.syntax == Sgml102 {
-			return Err(problem(state, "SGML comments and CDATA are unsupported"))
+			return Err(located_problem(state, SgmlCommentUnsupported))
 		}
 		if !state.capture_tag.is_empty() {
 			return Ok({ state: { ..state, capture: state.capture.concat(state.token) }, outcome: Quiet })
 		}
 		if text.starts_with("<![CDATA[") {
-			return Err(problem(state, "CDATA outside captured record is unsupported"))
+			return Err(located_problem(state, CdataPlacementUnsupported))
 		}
 		return Ok({ state, outcome: Quiet })
 	}
 	if text.starts_with("<?") {
 		if state.root_seen {
-			return Err(problem(state, "processing instruction inside OFX is unsupported"))
+			return Err(located_problem(state, ProcessingInstructionPlacement))
 		}
 		if state.syntax == Sgml102 {
-			return Err(problem(state, "XML prologue contradicts SGML header"))
+			return Err(located_problem(state, SyntaxMismatch))
 		}
 		low = lower(text)
 		marker = if (low.starts_with("<?xml ")) "xml" else "ofx"
 		if state.context_seen.contains(marker) or (marker == "xml" and state.context_seen.contains("ofx")) {
-			return Err(problem(state, "duplicate or out-of-order OFX prologue"))
+			return Err(located_problem(state, PrologueOrder))
 		}
 		if marker == "xml" {
-			_ = Xml.parse_str("${text}<v/>").map_err(|_| problem(state, "malformed XML declaration"))?
+			_ = Xml.parse_str("${text}<v/>").map_err(|_| located_problem(state, MalformedXmlDeclaration))?
 			if !state.header.is_empty() and state.header != [239, 187, 191] {
-				return Err(problem(state, "XML declaration must start the document"))
+				return Err(located_problem(state, XmlDeclarationOrder))
 			}
 		}
 		var $next = state
 		if low.starts_with("<?xml ") {
-			declared = xml_encoding(text).map_err(|message| problem(state, message))?
+			declared = xml_encoding(text).map_err(|detail| located_problem(state, detail))?
 			$next = { ..state, encoding: declared }
 			if (state.props.encoding == Utf8 and $next.encoding == Windows1252) or (state.props.encoding == Windows1252 and $next.encoding != Windows1252) {
-				return Err(problem(state, "encoding override contradicts XML declaration"))
+				return Err(located_problem(state, DeclarationEncodingMismatch))
 			}
 		} else if text.starts_with("<?OFX ") {
 			attrs = Str.from_utf8_lossy(state.token.sublist({ start: 6, len: state.token.len() - 8 }))
-			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| problem(state, "malformed OFX processing instruction"))?.root
+			node = Xml.parse_str("<p ${attrs}/>").map_err(|_| located_problem(state, MalformedProcessingInstruction))?.root
 			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
-				return Err(problem(state, "unsupported OFX XML header"))
+				return Err(located_problem(state, UnsupportedXmlHeader))
 			}
 			$next = { ..$next, header_info: { ..$next.header_info, old_uid: node.attribute("OLDFILEUID") ?? "NONE", new_uid: node.attribute("NEWFILEUID") ?? "NONE" } }
 		} else {
-			return Err(problem(state, "unknown OFX processing instruction"))
+			return Err(located_problem(state, UnknownProcessingInstruction))
 		}
 		return Ok({ state: { ..$next, context_seen: state.context_seen.append(marker) }, outcome: Quiet })
 	}
 	if text.starts_with("<!") {
-		return Err(problem(state, "unsupported OFX declaration"))
+		return Err(located_problem(state, UnsupportedDeclaration))
 	}
 	closing = text.starts_with("</")
 	self_closed = text.ends_with("/>")
@@ -547,7 +548,7 @@ consume_token = |state| {
 	end = text.count_utf8_bytes() - (if (self_closed) 2 else 1)
 	name = Str.from_utf8_lossy(state.token.sublist({ start, len: end - start })).trim()
 	if !valid_name(name) {
-		return Err(problem(state, "OFX tag names must be uppercase without attributes"))
+		return Err(located_problem(state, InvalidTagName(name)))
 	}
 	var $s = state
 	top = $s.stack.last().map_ok(|frame| frame.name) ?? ""
@@ -561,59 +562,59 @@ consume_token = |state| {
 		return close_tag($s, name, text)
 	}
 	if $s.root_closed {
-		return Err(problem($s, "content after OFX root"))
+		return Err(located_problem($s, TrailingContent))
 	}
 	if !$s.root_seen {
 		if name != "OFX" {
-			return Err(problem($s, "expected OFX root"))
+			return Err(located_problem($s, ExpectedRoot))
 		}
 		$s = { ..$s, root_seen: True }
 	} else if $s.stack.is_empty() {
-		return Err(problem($s, "multiple OFX roots"))
+		return Err(located_problem($s, MultipleRoots))
 	}
 	if name == "INVSTMTMSGSRSV1" or name == "INVSTMTRS" {
-		return Err(problem($s, "investment OFX is unsupported"))
+		return Err(located_problem($s, InvestmentUnsupported))
 	}
 	if $s.syntax == Xml203 and $s.capture_tag.is_empty() and !aggregate_tag(name) and !leaf_tag(name) {
-		return Err(problem($s, "unsupported OFX element outside transaction extension"))
+		return Err(located_problem($s, UnsupportedElement(name)))
 	}
 	if $s.syntax == Sgml102 and !aggregate_tag(name) and !leaf_tag(name) {
-		return Err(problem($s, "unknown SGML tag: closing behaviour is ambiguous"))
+		return Err(located_problem($s, UnknownSgmlTag(name)))
 	}
 	if $s.stack.len() >= $s.props.max_depth {
-		return Err(problem($s, "OFX exceeds max_depth"))
+		return Err(located_problem($s, NestingTooDeep($s.props.max_depth)))
 	}
 	if leaf_tag($s.stack.last().map_ok(|frame| frame.name) ?? "") {
-		return Err(problem($s, "nested content in OFX scalar field"))
+		return Err(located_problem($s, NestedScalar))
 	}
 	if name == "STMTTRNRS" or name == "CCSTMTTRNRS" {
 		$s = { ..$s, wrapper_id: "", wrapper_status: { code: "", severity: "", message: "" }, status_seen: False }
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if $s.in_statement {
-			return Err(problem($s, "nested OFX statements"))
+			return Err(located_problem($s, NestedStatement))
 		}
 		$s = { ..$s, context: { ..empty_context, kind: if (name == "STMTRS") Bank else CreditCard, transaction_id: $s.wrapper_id, status: $s.wrapper_status, header: $s.header_info }, started: False, in_statement: True, context_seen: [], balances_seen: [] }
 	}
 	parent = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !placement(name, parent) {
-		return Err(problem($s, "OFX element in invalid parent"))
+		return Err(located_problem($s, InvalidParent(name)))
 	}
 	if name == "BANKACCTFROM" or name == "CCACCTFROM" {
 		if $s.started or $s.context_seen.contains("account") {
-			return Err(problem($s, "duplicate or late OFX account"))
+			return Err(located_problem($s, AccountOrder))
 		}
 		$s = { ..$s, context_seen: $s.context_seen.append("account") }
 	}
 	if name == "LEDGERBAL" or name == "AVAILBAL" {
 		if $s.balances_seen.contains(name) or (name == "LEDGERBAL" and $s.balances_seen.contains("AVAILBAL")) {
-			return Err(problem($s, "duplicate OFX balance"))
+			return Err(located_problem($s, DuplicateBalance(name)))
 		}
 		$s = { ..$s, balances_seen: $s.balances_seen.append(name) }
 	}
 	if capture_tag(name) {
 		if !$s.capture_tag.is_empty() {
-			return Err(problem($s, "nested OFX record aggregate"))
+			return Err(located_problem($s, NestedRecord))
 		}
 		$s = { ..$s, capture_tag: name, capture_depth: $s.stack.len(), capture: [] }
 	}
@@ -626,10 +627,10 @@ consume_token = |state| {
 	}
 	if name == "STMTTRN" or name == "LEDGERBAL" or name == "AVAILBAL" {
 		if !$s.in_statement {
-			return Err(problem($s, "OFX record outside a statement"))
+			return Err(located_problem($s, RecordOutsideStatement))
 		}
 		if !$s.started {
-			validate_context($s.context).map_err(|message| problem($s, message))?
+			validate_context($s.context).map_err(|detail| located_problem($s, detail))?
 			$s = { ..$s, started: True }
 			return Ok({ state: $s, outcome: Emitted(StatementStart($s.context)) })
 		}
@@ -640,42 +641,42 @@ consume_token = |state| {
 close_tag : State, Str, Str -> Try(Consumed, OFX.Error)
 close_tag = |state, name, text| {
 	if state.stack.last().map_ok(|frame| frame.name) != Ok(name) {
-		return Err(problem(state, "mismatched OFX closing tag"))
+		return Err(located_problem(state, MismatchedClosingTag(name)))
 	}
 	var $s = { ..state, stack: state.stack.drop_last(1) }
 	if !$s.capture_tag.is_empty() {
 		$s = { ..$s, capture: $s.capture.concat(text.to_utf8()) }
 		if $s.stack.len() == $s.capture_depth {
 			if $s.capture.len() > $s.props.max_record_bytes {
-				return Err(problem($s, "OFX record exceeds max_record_bytes"))
+				return Err(located_problem($s, RecordTooLarge($s.props.max_record_bytes)))
 			}
 			captured = decode($s, $s.capture)?
-			root = Xml.parse_str(captured).map_err(|_| problem($s, "malformed OFX record"))?.root
+			root = Xml.parse_str(captured).map_err(|_| located_problem($s, MalformedRecord))?.root
 			$s = { ..$s, capture: [], capture_tag: "" }
 			if name == "STMTTRN" {
 				if children(root).len() > $s.props.max_fields {
-					return Err(problem($s, "OFX record exceeds max_fields"))
+					return Err(located_problem($s, TooManyFields($s.props.max_fields)))
 				}
 				match transaction(root) {
 					Ok(value) => return Ok({ state: $s, outcome: Emitted(Transaction(value)) })
-					Err(message) => return Ok({ state: $s, outcome: Rejected(problem($s, message)) })
+					Err(detail) => return Ok({ state: $s, outcome: Rejected(located_problem($s, detail)) })
 				}
 			} else if name == "BANKACCTFROM" or name == "CCACCTFROM" {
-				account = account_from(root).map_err(|message| problem($s, message))?
+				account = account_from(root).map_err(|detail| located_problem($s, detail))?
 				$s = { ..$s, context: { ..$s.context, account } }
 			} else {
-				balance = balance_from(root).map_err(|message| problem($s, message))?
+				balance = balance_from(root).map_err(|detail| located_problem($s, detail))?
 				return Ok({ state: $s, outcome: Emitted(if (name == "LEDGERBAL") LedgerBalance(balance) else AvailableBalance(balance)) })
 			}
 		}
 	}
 	if name == "BANKTRANLIST" and !$s.started {
-		validate_context($s.context).map_err(|message| problem($s, message))?
+		validate_context($s.context).map_err(|detail| located_problem($s, detail))?
 		return Ok({ state: { ..$s, started: True }, outcome: Emitted(StatementStart($s.context)) })
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if !$s.started {
-			return Err(problem($s, "OFX statement has no transaction list or balances"))
+			return Err(located_problem($s, EmptyStatement))
 		}
 		return Ok({ state: { ..$s, in_statement: False }, outcome: Emitted(StatementEnd) })
 	}
@@ -706,120 +707,120 @@ children = |node| match node {
 field : Xml.Node, Str -> Str
 field = |node, name| node.children_named(name).first().map_ok(|child| child.text().trim()) ?? ""
 
-unique : Xml.Node -> Try({}, Str)
+unique : Xml.Node -> Try({}, Parser.Problem(OFX.Problem))
 unique = |node| {
 	var $names = []
 	for child in children(node) {
 		name = child.name() ?? ""
 		if $names.contains(name) {
-			return Err("duplicate OFX field ${Str.from_utf8_lossy(name.to_utf8().take_first(64))}")
+			return Err(DuplicateField(name))
 		}
 		$names = $names.append(name)
 	}
 	Ok({})
 }
 
-account_from : Xml.Node -> Try(OFX.Account, Str)
+account_from : Xml.Node -> Try(OFX.Account, Parser.Problem(OFX.Problem))
 account_from = |node| {
 	unique(node)?
 	scalar_fields(node, if (node.name() == Ok("CCACCTFROM")) ["ACCTID", "ACCTKEY"] else ["BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY"])?
 	Ok({ bank_id: field(node, "BANKID"), branch_id: field(node, "BRANCHID"), account_id: field(node, "ACCTID"), account_type: field(node, "ACCTTYPE"), key: field(node, "ACCTKEY") })
 }
 
-transaction : Xml.Node -> Try(OFX.Transaction, Str)
+transaction : Xml.Node -> Try(OFX.Transaction, Parser.Problem(OFX.Problem))
 transaction = |node| {
 	unique(node)?
 	if !aggregate_whitespace(node) {
-		return Err("unexpected text between transaction fields")
+		return Err(UnexpectedTransactionText)
 	}
 	if children(node).any(|child| leaf_tag(child.name() ?? "") and !children(child).is_empty()) {
-		return Err("nested content in scalar transaction field")
+		return Err(NestedTransactionScalar)
 	}
 	value = { type: field(node, "TRNTYPE"), posted: field(node, "DTPOSTED"), amount: field(node, "TRNAMT"), id: field(node, "FITID"), name: field(node, "NAME"), memo: field(node, "MEMO"), check_number: field(node, "CHECKNUM"), extensions: children(node).keep_if(|child| !["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].contains(child.name() ?? "")) }
 	validate_transaction(value)?
 	Ok(value)
 }
 
-validate_context : OFX.Context -> Try({}, Str)
+validate_context : OFX.Context -> Try({}, Parser.Problem(OFX.Problem))
 validate_context = |context| {
 	if !timestamp(context.header.server_date) or context.header.language.count_utf8_bytes() != 3 or !context.header.language.to_utf8().all(|byte| byte >= 'A' and byte <= 'Z') {
-		return Err("invalid OFX signon date or language")
+		return Err(InvalidSignon)
 	}
 	if [context.account.bank_id, context.account.branch_id, context.account.account_id, context.account.account_type, context.account.key, context.transaction_id].any(|text| text != text.trim()) {
-		return Err("context identifiers must use normalized whitespace")
+		return Err(UnnormalizedContext)
 	}
 	if ![context.currency, context.account.bank_id, context.account.branch_id, context.account.account_id, context.account.account_type, context.account.key, context.transaction_id, context.status.message, context.header.org, context.header.fid].all(valid_text) {
-		return Err("invalid XML scalar in context")
+		return Err(InvalidContextCharacter)
 	}
 	if [context.header.old_uid, context.header.new_uid].any(|text| text.to_utf8().any(|byte| byte < 32 or byte > 126 or byte == '"' or byte == ':' or byte == '<' or byte == '>')) {
-		return Err("invalid OFX file UID")
+		return Err(InvalidUid)
 	}
 	if context.transaction_id.is_empty() or context.status.code != "0" or context.status.severity != "INFO" {
-		return Err("missing or unsupported OFX wrapper identity/status")
+		return Err(InvalidWrapper)
 	}
 	if context.currency.count_utf8_bytes() != 3 or !context.currency.to_utf8().all(|b| b >= 'A' and b <= 'Z') {
-		return Err("OFX currency must be three uppercase letters")
+		return Err(InvalidCurrency(context.currency))
 	}
 	if context.account.account_id.is_empty() {
-		return Err("missing OFX account identifier")
+		return Err(MissingAccountId)
 	}
 	if context.kind == Bank and context.account.bank_id.is_empty() {
-		return Err("missing OFX bank identifier")
+		return Err(MissingBankId)
 	}
 	if !context.start.is_empty() and !timestamp(context.start) {
-		return Err("invalid OFX statement start timestamp")
+		return Err(InvalidStartTimestamp(context.start))
 	}
 	if !context.end.is_empty() and !timestamp(context.end) {
-		return Err("invalid OFX statement end timestamp")
+		return Err(InvalidEndTimestamp(context.end))
 	}
 	Ok({})
 }
 
-validate_transaction : OFX.Transaction -> Try({}, Str)
+validate_transaction : OFX.Transaction -> Try({}, Parser.Problem(OFX.Problem))
 validate_transaction = |value| {
 	if [value.id, value.name, value.memo, value.check_number].any(|text| text != text.trim()) {
-		return Err("writer values must use normalized OFX whitespace")
+		return Err(UnnormalizedTransaction)
 	}
 	var $extension_names = []
 	var $rank = 0
 	for node in value.extensions {
-		name = node.name().map_err(|_| "transaction extensions must be elements")?
+		name = node.name().map_err(|_| ExpectedExtensionElement)?
 		if ["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].contains(name) or $extension_names.contains(name) {
-			return Err("duplicate transaction extension or core-field collision")
+			return Err(DuplicateExtension(name))
 		}
 		$extension_names = $extension_names.append(name)
 		if field_rank(name) < 999 {
 			if field_rank(name) < $rank {
-				return Err("OFX extension fields out of order")
+				return Err(ExtensionOrder(name))
 			}
 			$rank = field_rank(name)
 		}
 	}
 	if ![value.type, value.posted, value.amount, value.id, value.name, value.memo, value.check_number].all(valid_text) {
-		return Err("invalid XML scalar in transaction")
+		return Err(InvalidTransactionCharacter)
 	}
 	if !["CREDIT", "DEBIT", "INT", "DIV", "FEE", "SRVCHG", "DEP", "ATM", "POS", "XFER", "CHECK", "PAYMENT", "CASH", "DIRECTDEP", "DIRECTDEBIT", "REPEATPMT", "HOLD", "OTHER"].contains(value.type) {
-		return Err("invalid OFX transaction type")
+		return Err(InvalidTransactionType(value.type))
 	}
 	if !timestamp(value.posted) {
-		return Err("invalid OFX posted timestamp")
+		return Err(InvalidPostedTimestamp(value.posted))
 	}
 	if !decimal(value.amount) {
-		return Err("invalid OFX transaction amount")
+		return Err(InvalidAmount(value.amount))
 	}
 	if value.id.is_empty() {
-		return Err("missing OFX transaction identifier")
+		return Err(MissingTransactionId)
 	}
 	Ok({})
 }
 
-balance_from : Xml.Node -> Try(OFX.Balance, Str)
+balance_from : Xml.Node -> Try(OFX.Balance, Parser.Problem(OFX.Problem))
 balance_from = |node| {
 	unique(node)?
 	scalar_fields(node, ["BALAMT", "DTASOF"])?
 	value = { amount: field(node, "BALAMT"), as_of: field(node, "DTASOF") }
 	if !decimal(value.amount) or !timestamp(value.as_of) {
-		return Err("invalid OFX balance")
+		return Err(InvalidBalance(value))
 	}
 	Ok(value)
 }
@@ -892,21 +893,21 @@ escape = |value| value.replace_each("&", "&amp;").replace_each("<", "&lt;").repl
 scalar : Str, Str, OFX.Syntax -> Str
 scalar = |name, value, syntax| if (value.is_empty()) "" else "<${name}>${escape(value)}${if (syntax == Xml203) "</${name}>" else ""}\n"
 
-node_xml : Xml.Node, OFX.Syntax, U64 -> Try(Str, Str)
+node_xml : Xml.Node, OFX.Syntax, U64 -> Try(Str, Parser.Problem(OFX.Problem))
 node_xml = |node, syntax, depth| match node {
-	Text(value) => if (valid_text(value)) Ok(escape(value)) else Err("invalid XML text in extension")
+	Text(value) => if (valid_text(value)) Ok(escape(value)) else Err(InvalidExtensionText(value))
 	Element(element) => {
 		if depth >= 64 {
-			return Err("OFX extension exceeds maximum writer depth")
+			return Err(ExtensionTooDeep(64))
 		}
 		if !valid_name(element.name) {
-			return Err("invalid extension tag name")
+			return Err(InvalidExtensionName(element.name))
 		}
 		if !element.attributes.is_empty() {
-			return Err("OFX extension attributes are unsupported")
+			return Err(ExtensionAttributesUnsupported)
 		}
 		if syntax == Sgml102 and !aggregate_tag(element.name) and !leaf_tag(element.name) {
-			return Err("unknown SGML extension cannot be written")
+			return Err(UnknownSgmlExtension(element.name))
 		}
 		var $body = ""
 		for child in element.children {
@@ -955,7 +956,7 @@ encode_text = |text, encoding| {
 				$candidate = $candidate + 1
 			}
 			if !$found {
-				return Err(write_error("character cannot be encoded as Windows-1252"))
+				return Err(write_error(UnrepresentableCharacter(Str.from_utf8_lossy(encoded))))
 			}
 			$bytes = $bytes.drop_first(width)
 		}
@@ -971,11 +972,11 @@ write_event = |writer, event| {
 	match event {
 		StatementStart(context) => {
 			if writer.statement {
-				return Err(InvalidOfx(write_error("nested writer statement")))
+				return Err(InvalidOfx(write_error(NestedStatement)))
 			}
-			validate_context(context).map_err(|message| InvalidOfx(write_error(message)))?
+			validate_context(context).map_err(|detail| InvalidOfx(write_error(detail)))?
 			if writer.opened and writer.header != context.header {
-				return Err(InvalidOfx(write_error("statement header differs from the open document")))
+				return Err(InvalidOfx(write_error(HeaderChanged)))
 			}
 			if !writer.opened {
 				header = context.header
@@ -992,31 +993,31 @@ write_event = |writer, event| {
 		}
 		Transaction(value) => {
 			if !writer.statement or !writer.list_open {
-				return Err(InvalidOfx(write_error("transaction outside writer transaction list")))
+				return Err(InvalidOfx(write_error(TransactionOutsideList)))
 			}
-			validate_transaction(value).map_err(|message| InvalidOfx(write_error(message)))?
-			$text = Str.concat($text, transaction_text(value, syntax).map_err(|message| InvalidOfx(write_error(message)))?)
+			validate_transaction(value).map_err(|detail| InvalidOfx(write_error(detail)))?
+			$text = Str.concat($text, transaction_text(value, syntax).map_err(|detail| InvalidOfx(write_error(detail)))?)
 		}
 		LedgerBalance(balance) | AvailableBalance(balance) => {
 			if !writer.statement {
-				return Err(InvalidOfx(write_error("balance outside writer statement")))
+				return Err(InvalidOfx(write_error(BalanceOutsideStatement)))
 			}
 			if !decimal(balance.amount) or !timestamp(balance.as_of) {
-				return Err(InvalidOfx(write_error("invalid writer balance")))
+				return Err(InvalidOfx(write_error(InvalidBalance(balance))))
 			}
 			name = match event {
 				LedgerBalance(_) => "LEDGERBAL"
 				_ => "AVAILBAL"
 			}
 			if writer.balances.contains(name) or (name == "LEDGERBAL" and writer.balances.contains("AVAILBAL")) {
-				return Err(InvalidOfx(write_error("duplicate or out-of-order writer balance")))
+				return Err(InvalidOfx(write_error(BalanceOrder)))
 			}
 			$text = Str.concat($text, "${if (writer.list_open) "</BANKTRANLIST>" else ""}<${name}>${scalar("BALAMT", balance.amount, syntax)}${scalar("DTASOF", balance.as_of, syntax)}</${name}>\n")
 			$next = { ..writer, list_open: False, balances: writer.balances.append(name) }
 		}
 		StatementEnd => {
 			if !writer.statement {
-				return Err(InvalidOfx(write_error("writer statement already ended")))
+				return Err(InvalidOfx(write_error(StatementEnded)))
 			}
 			group = if (writer.kind == Bank) "BANKMSGSRSV1" else "CREDITCARDMSGSRSV1"
 			wrap = if (writer.kind == Bank) "STMTTRNRS" else "CCSTMTTRNRS"
@@ -1027,7 +1028,7 @@ write_event = |writer, event| {
 	}
 	bytes = encode_text($text, writer.props.encoding).map_err(|error| InvalidOfx(error))?
 	if bytes.len() > writer.props.max_record_bytes {
-		return Err(InvalidOfx(write_error("encoded record exceeds max_record_bytes")))
+		return Err(InvalidOfx(write_error(RecordTooLarge(writer.props.max_record_bytes))))
 	}
 	Ok({ writer: $next, bytes })
 }
@@ -1120,7 +1121,7 @@ expect {
 	OFX.write(opened.writer, Transaction({ ..value, name: "😀" })).is_err()
 }
 
-transaction_text : OFX.Transaction, OFX.Syntax -> Try(Str, Str)
+transaction_text : OFX.Transaction, OFX.Syntax -> Try(Str, Parser.Problem(OFX.Problem))
 transaction_text = |value, syntax| {
 	var $body = "<STMTTRN>"
 	var $extensions = value.extensions
@@ -1222,17 +1223,17 @@ aggregate_whitespace = |node| match node {
 	)
 }
 
-scalar_fields : Xml.Node, List(Str) -> Try({}, Str)
+scalar_fields : Xml.Node, List(Str) -> Try({}, Parser.Problem(OFX.Problem))
 scalar_fields = |node, allowed| {
 	if !aggregate_whitespace(node) {
-		return Err("unexpected text or attributes in OFX aggregate")
+		return Err(InvalidAggregate)
 	}
 	for child in children(node) {
 		if !allowed.contains(child.name() ?? "") or !children(child).is_empty() {
-			return Err("unsupported OFX account or balance field")
+			return Err(UnsupportedScalarField(child.name() ?? ""))
 		}
 		match child {
-			Element(element) if !element.attributes.is_empty() => return Err("unsupported field attributes")
+			Element(element) if !element.attributes.is_empty() => return Err(FieldAttributesUnsupported)
 			_ => {}
 		}
 	}
@@ -1242,17 +1243,17 @@ expect OFX.parse_str(sample_xml.replace_each("</BANKACCTFROM>", "<EXTRA>x</EXTRA
 expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "<EXTRA>x</EXTRA></LEDGERBAL>")).is_err()
 expect OFX.parse_str(sample_xml.replace_each("<STMTTRN>", "<STMTTRN>discarded")).is_err()
 
-xml_encoding : Str -> Try([Utf8, Windows1252, Ascii], Str)
+xml_encoding : Str -> Try([Utf8, Windows1252, Ascii], Parser.Problem(OFX.Problem))
 xml_encoding = |text| {
-	xml = Xml.parse_str("${text}<v/>").map_err(|_| "malformed XML declaration")?
+	xml = Xml.parse_str("${text}<v/>").map_err(|_| MalformedXmlDeclaration)?
 	match xml.declaration {
-		Err(_) => Err("missing XML declaration")
+		Err(_) => Err(MissingXmlDeclaration)
 		Ok(declaration) => match declaration.encoding {
 			Err(_) | Ok(Utf8Encoding) => Ok(Utf8)
 			Ok(OtherEncoding(value)) => match lower(value) {
 				"windows-1252" => Ok(Windows1252)
 				"us-ascii" => Ok(Ascii)
-				_ => Err("unsupported XML encoding")
+				_ => Err(UnsupportedEncoding(value))
 			}
 		}
 	}
