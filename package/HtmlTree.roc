@@ -56,8 +56,14 @@ HtmlTree :: [].{
 		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, context_class: HtmlNamespace, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		projected = project_selectedcontent(state, props).map_err(
 			|InvalidMarkup(e)| {
-				at = (parsed.source).position((Diagnostic.byte_offset(e.location) ?? 0))
-				InvalidMarkup({ ..e, location: Text({ offset: Diagnostic.byte_offset(e.location) ?? 0, line: at.line, column: at.column }) })
+				location = match Diagnostic.byte_offset(e.location) {
+					Ok(offset) => {
+						at = parsed.source.position(offset)
+						Text({ offset, line: at.line, column: at.column })
+					}
+					Err(NoByteOffset) => e.location
+				}
+				InvalidMarkup({ ..e, location })
 			},
 		)?
 		Ok({ parsed: { ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } }, clones: projected.clones })
@@ -277,15 +283,21 @@ HtmlTree :: [].{
 		match $spelling_failure {
 			Ok(detail) => {
 				at = Parser.Quotation.position(source, detail.span.start)
-				return Err(InvalidMarkup(Diagnostic.{ problem: NonCanonicalName(detail), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
+				return Err(InvalidMarkup(Diagnostic.{ problem: NonCanonicalName(detail), location: Text({ offset: detail.span.start, line: at.line, column: at.column }), path: [] }))
 			}
 			Err(None) => {}
 		}
 		if !context.defer_projection {
 			$state = project_selectedcontent($state, props).map_err(
 				|InvalidMarkup(e)| {
-					at = Parser.Quotation.position(source, (Diagnostic.byte_offset(e.location) ?? 0))
-					InvalidMarkup({ ..e, location: Text({ offset: Diagnostic.byte_offset(e.location) ?? 0, line: at.line, column: at.column }) })
+					location = match Diagnostic.byte_offset(e.location) {
+						Ok(offset) => {
+							at = Parser.Quotation.position(source, offset)
+							Text({ offset, line: at.line, column: at.column })
+						}
+						Err(NoByteOffset) => e.location
+					}
+					InvalidMarkup({ ..e, location })
 				},
 			)?
 		}
@@ -1041,7 +1053,7 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| 
 	match $failure {
 		Ok(detail) => {
 			at = Parser.Quotation.position(source, detail.span.start)
-			Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure(detail), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
+			Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure(detail), location: Text({ offset: detail.span.start, line: at.line, column: at.column }), path: [] }))
 		}
 		Err(_) => Ok({})
 	}
@@ -3889,7 +3901,7 @@ expect {
 }
 expect {
 	match HtmlTree.parse("<p>\n<div></div></p>", True, {}, { recovery: Browser, exact_structure: True }) {
-		Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure({ span, .. }), location: LineColumn({ line: line, column: column }), path: [] })) => span == { start: 4, end: 9 } and line == 2 and column == 1
+		Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure({ span, .. }), location: Text({ offset, line, column }), path: [] })) => offset == span.start and span == { start: 4, end: 9 } and line == 2 and column == 1
 		_ => False
 	}
 }
@@ -3958,7 +3970,7 @@ expect {
 # Foster merging must not blame the earlier text whose provenance changes.
 expect {
 	match HtmlTree.parse("before<table>outside<tr><td>inside</td></tr></table>", True, {}, { recovery: Browser, exact_structure: True }) {
-		Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure({ reason: ReparentedContent, span }), location: LineColumn({ line: line, column: column }), path: [] })) => span == { start: 13, end: 20 } and line == 1 and column == 14
+		Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure({ reason: ReparentedContent, span }), location: Text({ offset, line, column }), path: [] })) => offset == span.start and span == { start: 13, end: 20 } and line == 1 and column == 14
 		_ => False
 	}
 }

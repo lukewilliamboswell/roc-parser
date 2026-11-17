@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Diagnostic
 import XmlNsTypes
 import Streaming
@@ -156,7 +157,7 @@ XmlNsCore := {
 						}
 
 						Err(problem) => {
-							Failed(InvalidNamespace(Diagnostic.{ problem: problem, location: rest.metadata().location, path: [] }))
+							Failed(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: rest.metadata().location, path: [] }))
 						}
 					}
 
@@ -248,7 +249,7 @@ XmlNsCore := {
 		match folded {
 			Folded(state) => Ok(state.value)
 			Failed(error) => Err(widen(error))
-			Rejected(problem, at) => Err(InvalidNamespace(Diagnostic.{ problem: problem, location: at, path: [] }))
+			Rejected(problem, at) => Err(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: at, path: [] }))
 		}
 	}
 
@@ -437,6 +438,27 @@ empty_scope = { entries: [], active: Dict.empty(), frames: [], names: [] }
 # No shadowed binding.
 none : U64
 none = 18_446_744_073_709_551_615
+
+# Namespace failures retain complete identities without borrowing source buffers.
+own_problem : XmlNsCore.Problem -> XmlNsCore.Problem
+own_problem = |problem| match problem {
+	UndeclaredPrefix(value) => UndeclaredPrefix(DiagnosticOwnership.own_text(value))
+	ReservedPrefix(value) => ReservedPrefix(DiagnosticOwnership.own_text(value))
+	ReservedNamespace(value) => ReservedNamespace(DiagnosticOwnership.own_text(value))
+	EmptyNamespace(value) => EmptyNamespace(DiagnosticOwnership.own_text(value))
+	NotAQName(value) => NotAQName(DiagnosticOwnership.own_text(value))
+	DuplicateAttribute(name) => DuplicateAttribute({
+		namespace: match name.namespace {
+			Uri(value) => Uri(DiagnosticOwnership.own_text(value))
+			NoNamespace => NoNamespace
+		},
+		local: DiagnosticOwnership.own_text(name.local),
+		prefix: match name.prefix {
+			Prefix(value) => Prefix(DiagnosticOwnership.own_text(value))
+			Unprefixed => Unprefixed
+		},
+	})
+}
 
 widen : XmlCore.ReadError -> XmlNsCore.ReadError
 widen = |error| {
@@ -783,7 +805,7 @@ build_element = |reader, start| {
 		}
 
 		Rejected(Declares, _) => build_scoped(reader, start)
-		Rejected(Invalid(problem), at) => Failed(InvalidNamespace(Diagnostic.{ problem: problem, location: at, path: [] }))
+		Rejected(Invalid(problem), at) => Failed(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: at, path: [] }))
 		Failed(error) => Failed(widen(error))
 		NotAfterStart => NotAfterStart
 	}
@@ -821,7 +843,7 @@ build_scoped = |reader, start| {
 	match built {
 		Element(node, bound, rest) => Element(node, { inner: rest, scope: { entries: bound.entries, active: bound.active, frames: outer_frames, names: outer_names }, last_start: NotStarted })
 		Failed(error) => Failed(widen(error))
-		Rejected(problem, at) => Failed(InvalidNamespace(Diagnostic.{ problem: problem, location: at, path: [] }))
+		Rejected(problem, at) => Failed(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: at, path: [] }))
 		NotAfterStart => NotAfterStart
 	}
 }
@@ -840,8 +862,16 @@ Bound : {
 
 Work : [Enter(XmlNsCore.Node), Leave({ written : Str, mark : U64 })]
 
+own_encode_problem : XmlNsCore.EncodeProblem -> XmlNsCore.EncodeProblem
+own_encode_problem = |problem| match problem {
+	InvalidName(value) => InvalidName(DiagnosticOwnership.own_text(value))
+	UnboundNamespace(value) => UnboundNamespace(DiagnosticOwnership.own_text(value))
+	DuplicateAttribute(value) => DuplicateAttribute(DiagnosticOwnership.own_text(value))
+	InvalidChar(value) => InvalidChar(value)
+}
+
 unrenderable : XmlNsCore.EncodeProblem, List(Str) -> Try(_, EncodeError)
-unrenderable = |problem, path| Err(Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: (path).map(|part| Key(part)) }))
+unrenderable = |problem, path| Err(Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path((path).map(|part| Key(part))) }))
 
 bind : Bound, Str, XmlNsCore.Namespace -> Bound
 bind = |bound, key, namespace| {
@@ -910,7 +940,7 @@ render_as_read = |start, root, order| {
 			}
 
 			Enter(Text(text)) => {
-				$out = escape_text($out, text).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+				$out = escape_text($out, text).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 			}
 
 			Enter(Element(element)) => {
@@ -922,7 +952,7 @@ render_as_read = |start, root, order| {
 				for binding in element.bindings {
 					declared = check_binding(binding, $path)?
 					$bound = bind($bound, declared.key, binding.namespace)
-					$out = write_attribute($out, declared.attribute, namespace_str(binding.namespace)).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+					$out = write_attribute($out, declared.attribute, namespace_str(binding.namespace)).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 				}
 				key = match element.name.prefix {
 					Prefix(prefix) => prefix
@@ -933,7 +963,7 @@ render_as_read = |start, root, order| {
 				}
 				attributes = ordered(element.attributes, order)
 				if attributes.len() > 1 {
-					check_unique(attributes).map_err(|_| Unrenderable(Diagnostic.{ problem: DuplicateAttribute(written_name_of(attributes)), location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+					check_unique(attributes).map_err(|_| Unrenderable(Diagnostic.{ problem: own_encode_problem(DuplicateAttribute(written_name_of(attributes))), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 				}
 				for attribute in attributes {
 					check_name(attribute.name.prefix, attribute.name.local, $path)?
@@ -945,7 +975,7 @@ render_as_read = |start, root, order| {
 					if !in_scope {
 						return unrenderable(UnboundNamespace(namespace_str(attribute.name.namespace)), $path)
 					}
-					$out = write_attribute($out, written_name(attribute.name.prefix, attribute.name.local), attribute.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+					$out = write_attribute($out, written_name(attribute.name.prefix, attribute.name.local), attribute.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 				}
 				if element.children.is_empty() {
 					$out = $out.append('/').append('>')
@@ -1030,7 +1060,7 @@ render_with_table = |start, root, order, entries| {
 			}
 
 			Enter(Text(text)) => {
-				$out = escape_text($out, text).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+				$out = escape_text($out, text).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 			}
 
 			Enter(Element(element)) => {
@@ -1049,18 +1079,18 @@ render_with_table = |start, root, order, entries| {
 				$out = $out.append('<').concat(written.to_utf8())
 				outer_default = $default
 				if prefix == Ok("") and $default != element.name.namespace {
-					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 					$default = element.name.namespace
 				}
 				if $first {
 					for declared in $declarations {
-						$out = write_attribute($out, declared.name, declared.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+						$out = write_attribute($out, declared.name, declared.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 					}
 					$first = False
 				}
 				attributes = ordered(element.attributes, order)
 				if attributes.len() > 1 {
-					check_unique(attributes).map_err(|_| Unrenderable(Diagnostic.{ problem: DuplicateAttribute(written_name_of(attributes)), location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+					check_unique(attributes).map_err(|_| Unrenderable(Diagnostic.{ problem: own_encode_problem(DuplicateAttribute(written_name_of(attributes))), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 				}
 				for attribute in attributes {
 					if !is_ncname(attribute.name.local) {
@@ -1072,7 +1102,7 @@ render_with_table = |start, root, order, entries| {
 							Ok(p) => "${p}:${attribute.name.local}"
 							Err(_) => return unrenderable(UnboundNamespace(namespace_str(attribute.name.namespace)), $path)
 						}
-					$out = write_attribute($out, attribute_name, attribute.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: problem, location: Unavailable(GeneratedValue), path: ($path).map(|part| Key(part)) }))?
+					$out = write_attribute($out, attribute_name, attribute.value).map_err(|problem| Unrenderable(Diagnostic.{ problem: own_encode_problem(problem), location: Unavailable(GeneratedValue), path: DiagnosticOwnership.own_path(($path).map(|part| Key(part))) }))?
 				}
 				if element.children.is_empty() {
 					$out = $out.append('/').append('>')
@@ -1917,7 +1947,7 @@ namespace_chunk_step = |state, bytes, end| {
 			Ok(resolved) => { state: { ..updated, scope: resolved.scope }, consumed: next.consumed, outcome: Item(Start({ name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes })) }
 			Err(problem) => {
 				at = XmlCore.decoder_location(next.state)
-				{ state: { ..updated, done: True }, consumed: next.consumed, outcome: Failed(InvalidNamespace(Diagnostic.{ problem: problem, location: Text({ offset: at.offset, line: at.line, column: at.column }), path: [] })) }
+				{ state: { ..updated, done: True }, consumed: next.consumed, outcome: Failed(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: Text({ offset: at.offset, line: at.line, column: at.column }), path: [] })) }
 			}
 		}
 		Item(End(_)) => {

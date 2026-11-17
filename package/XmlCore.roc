@@ -1,3 +1,4 @@
+import DiagnosticOwnership
 import Diagnostic
 import XmlTypes
 import Streaming
@@ -62,10 +63,10 @@ XmlCore := {
 	## Input is already UTF-8, so a different declared encoding is suspicious.
 	validate : ValidationProps -> Try(XmlCore, [InvalidXml(Error)])
 	validate = |props| {
-		xml = XmlCore.parse_str(props.source).map_err(|InvalidXml(error)| InvalidXml({ ..error, path: error.path.append(Source(props.name)) }))?
+		xml = XmlCore.parse_str(props.source).map_err(|InvalidXml(error)| InvalidXml({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))?
 		if props.lints.non_utf8_declaration {
 			match xml.declaration {
-				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(InvalidXml(Diagnostic.{ problem: NonUtf8Encoding(encoding), location: Text({ offset: 0, line: 1, column: 1 }), path: [Source(props.name)] }))
+				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(InvalidXml(Diagnostic.{ problem: NonUtf8Encoding(DiagnosticOwnership.own_text(encoding)), location: Text({ offset: 0, line: 1, column: 1 }), path: [Source(DiagnosticOwnership.own_text(props.name))] }))
 				_ => {}
 			}
 		}
@@ -202,7 +203,7 @@ XmlCore := {
 				Err(XmlFail(failure)) => {
 					match decoded.encoding {
 						InvalidAt(index) if failure.offset >= decoded.bytes.len() or incomplete_source(failure.problem) => Err(ParseError(Diagnostic.{ problem: InvalidUtf8, location: InputOffset(index), path: [] }))
-						_ => Err(ParseError(Diagnostic.{ problem: failure.problem, location: InputOffset(failure.offset), path: [] }))
+						_ => Err(ParseError(Diagnostic.{ problem: own_problem(failure.problem), location: InputOffset(failure.offset), path: [] }))
 					}
 				}
 				Err(LimitFail(exceeded)) => Err(ParseError(Diagnostic.{ problem: LimitExceeded({ resource: exceeded.limit, max: exceeded.max, observed: AtLeast(exceeded.max + 1) }), location: InputOffset(exceeded.offset), path: [] }))
@@ -634,10 +635,76 @@ unbounded = |bytes| { depth: bytes.len(), elements: bytes.len(), attributes: byt
 no_start : U64
 no_start = 18_446_744_073_709_551_615
 
+# Diagnostic identifiers outlive their input; successful tree slices stay shared.
+own_problem : XmlCore.Problem -> XmlCore.Problem
+own_problem = |problem| match problem {
+	UnclosedElement(value) => UnclosedElement(DiagnosticOwnership.own_text(value))
+	ReservedInstructionTarget(value) => ReservedInstructionTarget(DiagnosticOwnership.own_text(value))
+	NamespacedInstructionTarget(value) => NamespacedInstructionTarget(DiagnosticOwnership.own_text(value))
+	ExpectedInstructionSpace(value) => ExpectedInstructionSpace(DiagnosticOwnership.own_text(value))
+	ExpectedStartTagClose(value) => ExpectedStartTagClose(DiagnosticOwnership.own_text(value))
+	ExpectedStartTagSpace(value) => ExpectedStartTagSpace(DiagnosticOwnership.own_text(value))
+	ExpectedAttributeName(value) => ExpectedAttributeName(DiagnosticOwnership.own_text(value))
+	DuplicateAttribute(value) => DuplicateAttribute(DiagnosticOwnership.own_text(value))
+	UnknownEntity(value) => UnknownEntity(DiagnosticOwnership.own_text(value))
+	NonUtf8Encoding(value) => NonUtf8Encoding(DiagnosticOwnership.own_text(value))
+	EndTagMismatch(names) => EndTagMismatch({ actual: DiagnosticOwnership.own_text(names.actual), expected: DiagnosticOwnership.own_text(names.expected) })
+	UnfinishedDocument(detail) => UnfinishedDocument({ ..detail, expected_end_tag: detail.expected_end_tag.map_ok(DiagnosticOwnership.own_text) })
+	InvalidBom(bytes) => InvalidBom(bytes.fold(List.with_capacity(bytes.len()), |copy, byte| copy.append(byte)))
+	UnexpectedEventAfterRoot => UnexpectedEventAfterRoot
+	MissingRootEvent => MissingRootEvent
+	MissingRootElement => MissingRootElement
+	TrailingContent => TrailingContent
+	ExpectedRoot => ExpectedRoot
+	RootText => RootText
+	DoctypeUnsupported => DoctypeUnsupported
+	UnclosedCData => UnclosedCData
+	ExpectedMarkupDeclaration => ExpectedMarkupDeclaration
+	ForbiddenCDataEnd => ForbiddenCDataEnd
+	ExpectedEndTagName => ExpectedEndTagName
+	ExpectedEndTagClose => ExpectedEndTagClose
+	ExpectedVersion => ExpectedVersion
+	ExpectedQuotedVersion => ExpectedQuotedVersion
+	BadVersion => BadVersion
+	VersionOverflow => VersionOverflow
+	ExpectedVersionEndQuote => ExpectedVersionEndQuote
+	ExpectedEncodingSpace => ExpectedEncodingSpace
+	ExpectedQuotedEncoding => ExpectedQuotedEncoding
+	BadEncodingStart => BadEncodingStart
+	ExpectedEncodingEndQuote => ExpectedEncodingEndQuote
+	ExpectedStandaloneSpace => ExpectedStandaloneSpace
+	ExpectedQuotedStandalone => ExpectedQuotedStandalone
+	BadStandalone => BadStandalone
+	ExpectedStandaloneEndQuote => ExpectedStandaloneEndQuote
+	ExpectedDeclarationClose => ExpectedDeclarationClose
+	ExpectedEquals => ExpectedEquals
+	CommentDoubleHyphen => CommentDoubleHyphen
+	UnclosedComment => UnclosedComment
+	ExpectedInstructionTarget => ExpectedInstructionTarget
+	DeclarationNotAtStart => DeclarationNotAtStart
+	UnclosedInstruction => UnclosedInstruction
+	ExpectedStartTagName => ExpectedStartTagName
+	ExpectedQuotedAttribute => ExpectedQuotedAttribute
+	AttributeContainsLt => AttributeContainsLt
+	UnclosedAttribute => UnclosedAttribute
+	ExpectedReference => ExpectedReference
+	ExpectedEntitySemicolon => ExpectedEntitySemicolon
+	ExpectedCharacterDigits(value) => ExpectedCharacterDigits(value)
+	ExpectedCharacterSemicolon => ExpectedCharacterSemicolon
+	InvalidCharacterReference(value) => InvalidCharacterReference(value)
+	InvalidUtf8 => InvalidUtf8
+	InvalidCharacter(value) => InvalidCharacter(value)
+	LimitExceeded(value) => LimitExceeded(value)
+	UnexpectedEndTag => UnexpectedEndTag
+	IncompleteMarkup => IncompleteMarkup
+	BadTextFragmentSize(value) => BadTextFragmentSize(value)
+	CDataOutsideRoot => CDataOutsideRoot
+}
+
 locate : List(U8), U64, XmlCore.Problem -> XmlCore.Error
 locate = |bytes, offset, problem| {
 	at = position(bytes, offset)
-	Diagnostic.{ problem: problem, location: Text({ offset, line: at.line, column: at.column }), path: [] }
+	Diagnostic.{ problem: own_problem(problem), location: Text({ offset, line: at.line, column: at.column }), path: [] }
 }
 
 position : List(U8), U64 -> { line : U64, column : U64 }
@@ -2765,7 +2832,7 @@ chunk_advance = |state, byte| {
 }
 
 chunk_error : ChunkAt, XmlCore.Problem -> XmlCore.StreamError
-chunk_error = |at, problem| Diagnostic.{ problem: problem, location: Text({ offset: at.offset, line: at.line, column: at.column }), path: [] }
+chunk_error = |at, problem| Diagnostic.{ problem: own_problem(problem), location: Text({ offset: at.offset, line: at.line, column: at.column }), path: [] }
 
 chunk_fail : ChunkState, U64, ChunkAt, XmlCore.Problem -> Streaming.Step(ChunkState, XmlCore.Event, XmlCore.StreamError)
 chunk_fail = |state, consumed, at, problem| { state: { ..state, done: True }, consumed, outcome: Failed(chunk_error(at, problem)) }
