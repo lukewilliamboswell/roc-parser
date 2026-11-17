@@ -967,15 +967,26 @@ capture_event = |input, event, span| match event {
 		{ reader, limits, nodes, frames, capture_base, capture_start, scalars, current, statements } = input
 		parent = frames.last().map_err(|_| UseStreaming)?
 		name = value.name
-		leaf = leaf_tag(name)
-		if !value.attributes.is_empty() or (!leaf and !aggregate_tag(name) and !valid_name(name)) or parent.leaf or capture_base + frames.len() >= limits.depth or !placement(name, parent.name) or capture_tag(name) {
+		core = if (!scalars.values.is_empty() and frames.len() == 1) core_slot(name) else 7
+		if !value.attributes.is_empty() or parent.leaf or capture_base + frames.len() >= limits.depth {
 			return Err(UseStreaming)
 		}
-		match name {
-			"OFX" | "STMTTRNRS" | "CCSTMTTRNRS" | "STMTRS" | "CCSTMTRS" | "STATUS" | "INVSTMTMSGSRSV1" | "INVSTMTRS" => return Err(UseStreaming)
-			_ => {}
+		# Scalars are initialized only for a STMTTRN capture root. These seven
+		# literal names are valid leaves placed directly under that root; none
+		# can open another capture or change the outer reader's control state.
+		leaf = if core < 7 {
+			True
+		} else {
+			known_leaf = leaf_tag(name)
+			if (!known_leaf and !aggregate_tag(name) and !valid_name(name)) or !placement(name, parent.name) or capture_tag(name) {
+				return Err(UseStreaming)
+			}
+			match name {
+				"OFX" | "STMTTRNRS" | "CCSTMTTRNRS" | "STMTRS" | "CCSTMTRS" | "STATUS" | "INVSTMTMSGSRSV1" | "INVSTMTRS" => return Err(UseStreaming)
+				_ => {}
+			}
+			known_leaf
 		}
-		core = if (!scalars.values.is_empty() and frames.len() == 1) core_slot(name) else 7
 		var $seen = scalars.seen
 		if core < 7 {
 			mask = (1.U8).shl_wrap(core)
@@ -2116,3 +2127,14 @@ expect ["", "2026010", "202601010", "20260101000", "2026010100000", "20260101000
 expect ["20260101[+1]", "20260101[-12:WEST]", "20260101[14:]", "20260101235960.001[-5:EST]", "20260101000000.5[5.5:IST]", "20260101[15]", "20260101[-13]", "20260101[5.]"].all(|value| timestamp(value) == timestamp_general(value)) and timestamp("20260101[+1]") and timestamp("20260101235960.001[-5:EST]") and !timestamp("20260101[15]") and !timestamp("20260101[-13]")
 
 expect ["DEBIT", "DIRECTDEBIT", "OTHER"].all(transaction_type) and ["", "credit", "DEBIT ", "INVALID"].all(|value| !transaction_type(value))
+
+expect ["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(|name| core_slot(name) < 7 and leaf_tag(name) and valid_name(name) and placement(name, "STMTTRN") and !capture_tag(name))
+
+expect {
+	source = sample_xml.replace_each("</STMTTRN>", "<CHECKNUM>00042</CHECKNUM></STMTTRN>")
+	["TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM"].all(
+		|name| {
+			[source.replace_each("<${name}>", "<${name} forbidden='attribute'>"), source.replace_each("</${name}>", "<INNER/></${name}>"), source.replace_each("</STMTTRN>", "<${name}/></STMTTRN>")].all(|invalid| xml_whole(invalid.to_utf8(), {}).is_err() and OFX.parse_str(invalid) == collect_bytes(invalid.to_utf8(), { encoding: Utf8 }))
+		},
+	)
+}
