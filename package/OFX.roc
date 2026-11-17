@@ -689,13 +689,22 @@ close_tag = |state, name, text| {
 }
 
 capture_tag : Str -> Bool
-capture_tag = |name| ["STMTTRN", "BANKACCTFROM", "CCACCTFROM", "LEDGERBAL", "AVAILBAL"].contains(name)
+capture_tag = |name| match name {
+	"STMTTRN" | "BANKACCTFROM" | "CCACCTFROM" | "LEDGERBAL" | "AVAILBAL" => True
+	_ => False
+}
 
 aggregate_tag : Str -> Bool
-aggregate_tag = |name| ["OFX", "SIGNONMSGSRSV1", "SONRS", "STATUS", "FI", "BANKMSGSRSV1", "STMTTRNRS", "STMTRS", "BANKACCTFROM", "BANKTRANLIST", "STMTTRN", "LEDGERBAL", "AVAILBAL", "CREDITCARDMSGSRSV1", "CCSTMTTRNRS", "CCSTMTRS", "CCACCTFROM", "CURRENCY", "ORIGCURRENCY", "PAYEE", "BANKACCTTO", "CCACCTTO"].contains(name)
+aggregate_tag = |name| match name {
+	"OFX" | "SIGNONMSGSRSV1" | "SONRS" | "STATUS" | "FI" | "BANKMSGSRSV1" | "STMTTRNRS" | "STMTRS" | "BANKACCTFROM" | "BANKTRANLIST" | "STMTTRN" | "LEDGERBAL" | "AVAILBAL" | "CREDITCARDMSGSRSV1" | "CCSTMTTRNRS" | "CCSTMTRS" | "CCACCTFROM" | "CURRENCY" | "ORIGCURRENCY" | "PAYEE" | "BANKACCTTO" | "CCACCTTO" => True
+	_ => False
+}
 
 leaf_tag : Str -> Bool
-leaf_tag = |name| ["CODE", "SEVERITY", "MESSAGE", "DTSERVER", "LANGUAGE", "ORG", "FID", "TRNUID", "CLTCOOKIE", "CURDEF", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "DTSTART", "DTEND", "TRNTYPE", "DTPOSTED", "DTUSER", "DTAVAIL", "TRNAMT", "FITID", "CORRECTFITID", "CORRECTACTION", "SRVRTID", "CHECKNUM", "REFNUM", "NAME", "MEMO", "SIC", "PAYEEID", "BALAMT", "DTASOF", "CURRENCYRATE", "CURSYM", "ADDR1", "ADDR2", "ADDR3", "CITY", "STATE", "POSTALCODE", "COUNTRY", "PHONE", "USERKEY", "INTU.BID"].contains(name)
+leaf_tag = |name| match name {
+	"CODE" | "SEVERITY" | "MESSAGE" | "DTSERVER" | "LANGUAGE" | "ORG" | "FID" | "TRNUID" | "CLTCOOKIE" | "CURDEF" | "BANKID" | "BRANCHID" | "ACCTID" | "ACCTTYPE" | "ACCTKEY" | "DTSTART" | "DTEND" | "TRNTYPE" | "DTPOSTED" | "DTUSER" | "DTAVAIL" | "TRNAMT" | "FITID" | "CORRECTFITID" | "CORRECTACTION" | "SRVRTID" | "CHECKNUM" | "REFNUM" | "NAME" | "MEMO" | "SIC" | "PAYEEID" | "BALAMT" | "DTASOF" | "CURRENCYRATE" | "CURSYM" | "ADDR1" | "ADDR2" | "ADDR3" | "CITY" | "STATE" | "POSTALCODE" | "COUNTRY" | "PHONE" | "USERKEY" | "INTU.BID" => True
+	_ => False
+}
 
 children : Xml.Node -> List(Xml.Node)
 children = |node| match node {
@@ -829,12 +838,26 @@ digits = |text| !text.is_empty() and text.to_utf8().all(|b| b >= '0' and b <= '9
 
 decimal : Str -> Bool
 decimal = |text| {
-	if text.count_utf8_bytes() > 128 {
+	bytes = text.to_utf8()
+	if bytes.len() > 128 {
 		return False
 	}
-	unsigned = if (text.starts_with("-") or text.starts_with("+")) Str.from_utf8_lossy(text.to_utf8().drop_first(1)) else text
-	parts = unsigned.split_on(".")
-	(parts.len() == 1 or parts.len() == 2) and parts.all(digits)
+	var $at = if (bytes.first() == Ok('-') or bytes.first() == Ok('+')) 1 else 0
+	var $digits = 0
+	var $point = False
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte >= '0' and byte <= '9' {
+			$digits = $digits + 1
+		} else if byte == '.' and !$point and $digits > 0 {
+			$point = True
+			$digits = 0
+		} else {
+			return False
+		}
+		$at = $at + 1
+	}
+	$digits > 0
 }
 
 timestamp : Str -> Bool
@@ -853,7 +876,15 @@ timestamp = |text| {
 		return False
 	}
 	bytes = date.to_utf8()
-	num = |at, count| U64.from_str(Str.from_utf8_lossy(bytes.sublist({ start: at, len: count }))) ?? 0
+	num = |at, count| {
+		var $value = 0.U64
+		var $pos = at
+		while $pos < at + count {
+			$value = $value * 10 + ((bytes.get($pos) ?? '0') - '0').to_u64()
+			$pos = $pos + 1
+		}
+		$value
+	}
 	year = num(0, 4)
 	month = num(4, 2)
 	day = num(6, 2)
@@ -1079,7 +1110,23 @@ expect decimal("-0.000001") and !decimal("NaN") and !decimal("1e3")
 expect timestamp("20240229120000.123[5.5:IST]") and !timestamp("20230229")
 
 valid_text : Str -> Bool
-valid_text = |value| Xml.parse_str("<v>${escape(value)}</v>").is_ok()
+valid_text = |value| {
+	# Str already guarantees UTF-8. XML 1.0 excludes ASCII controls other than
+	# tab/newline/CR, and the two BMP noncharacters U+FFFE and U+FFFF.
+	bytes = value.to_utf8()
+	var $at = 0
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte < 0x20 and byte != '\t' and byte != '\n' and byte != '\r' {
+			return False
+		}
+		if byte == 0xEF and bytes.get($at + 1) == Ok(0xBF) and (bytes.get($at + 2) == Ok(0xBE) or bytes.get($at + 2) == Ok(0xBF)) {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
+}
 
 placement : Str, Str -> Bool
 placement = |name, parent| match name {
@@ -1266,3 +1313,7 @@ expect {
 	document = OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "  ordinary  "))?
 	document.statements.first()?.transactions.first()?.name == "ordinary"
 }
+
+expect ["", "\t\r\n", "plain & < > ]]> text", "Café 日本", "\u(20)\u(D7FF)\u(E000)\u(FFFD)", "\u(10000)\u(10FFFF)", "\u(0)", "\u(8)", "\u(B)", "\u(C)", "\u(1F)", "\u(FFFE)", "\u(FFFF)"].all(|value| valid_text(value) == Xml.parse_str("<v>${escape(value)}</v>").is_ok())
+expect ["0", "+0", "-1", "123456789012345678901234567890.0001", "0.00"].all(decimal)
+expect ["", "+", "-", ".5", "1.", "1.2.3", "1e2", " 1", "1 ", "1\n"].all(|value| !decimal(value))
