@@ -216,7 +216,10 @@ QIF := { events : List(QIF.Event) }.{
 			return Err(InvalidQif({ offset: 0, line: 0, column: 0, message: "transactions is fail-fast; use transactions_report for recovery policies" }))
 		}
 		var $rows = []
-		for event in doc.events {
+		var $index = 0
+		while $index < doc.events.len() {
+			event = doc.events.get($index) ?? Header("")
+			$index = $index + 1
 			match event {
 				Header(_) => {}
 				Record(record) if record.section == "Account" or record.section == "Cat" or record.section == "Class" => {}
@@ -234,7 +237,10 @@ QIF := { events : List(QIF.Event) }.{
 		var $values = []
 		var $errors = []
 		var $rejected = 0.U64
-		for event in doc.events {
+		var $index = 0
+		while $index < doc.events.len() {
+			event = doc.events.get($index) ?? Header("")
+			$index = $index + 1
 			match event {
 				Header(_) => {}
 				Record(record) if record.section == "Account" or record.section == "Cat" or record.section == "Class" => {}
@@ -291,7 +297,11 @@ QIF := { events : List(QIF.Event) }.{
 		var $cleared : Try(Str, [Missing])
 		var $cleared = Err(Missing)
 		var $duplicate = False
-		for f in record.fields {
+		var $split_fields = False
+		var $index = 0
+		while $index < record.fields.len() {
+			f = record.fields.get($index) ?? { code: 0, value: "" }
+			$index = $index + 1
 			match f.code {
 				'D' => {
 					$duplicate = $duplicate or $date_text.is_ok()
@@ -316,6 +326,9 @@ QIF := { events : List(QIF.Event) }.{
 				'C' if $cleared.is_err() => {
 					$cleared = Ok(f.value)
 				}
+				'S' | 'E' | '$' => {
+					$split_fields = True
+				}
 				_ => {}
 			}
 		}
@@ -331,7 +344,10 @@ QIF := { events : List(QIF.Event) }.{
 		var $splits = []
 		var $split = { category: "", memo: "", amount: "" }
 		var $has_split = False
-		for f in record.fields {
+		var $split_index = 0
+		while $split_fields and $split_index < record.fields.len() {
+			f = record.fields.get($split_index) ?? { code: 0, value: "" }
+			$split_index = $split_index + 1
 			if f.code == 'S' {
 				if $has_split {
 					if !valid_amount($split.amount) {
@@ -496,6 +512,25 @@ process_line = |s, bytes| {
 	prefix = if (bom) 3 else 0
 	at = { offset: s.line_start + prefix, line: if (s.column == 1) s.line_number - 1 else s.line_number, column: prefix + 1 }
 	bad = |message| { state: s, result: Error({ offset: at.offset, line: at.line, column: at.column, message }) }
+	code = content.first() ?? 0
+	if code >= 33 and code <= 126 and code != '!' and code != '^' {
+		# An ASCII field indicator needs no conversion. Decode the payload once;
+		# malformed payloads still precede framing/context errors as before.
+		value = match Streaming.decode_text(content.drop_first(1), s.props.encoding) {
+			Ok(decoded) => decoded
+			Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + 1 + error.index, line: at.line, column: at.column + 1 + error.index, message: error.message }) }
+		}
+		if content.contains(0) {
+			return bad("NUL is not allowed in QIF fields")
+		}
+		if s.section == "" {
+			return bad("field requires a section header")
+		}
+		if s.fields.len() >= s.props.max_fields {
+			return bad("QIF field count limit exceeded")
+		}
+		return { state: { ..s, fields: s.fields.append({ code, value }), record_at: if (s.fields.is_empty()) at else s.record_at }, result: Continue }
+	}
 	text = match Streaming.decode_text(content, s.props.encoding) {
 		Ok(value) => value
 		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, message: error.message }) }
@@ -536,13 +571,7 @@ process_line = |s, bytes| {
 	if s.fields.len() >= s.props.max_fields {
 		return bad("QIF field count limit exceeded")
 	}
-	code = content.first() ?? 0
-	if code < 33 or code > 126 or code == '^' {
-		return bad("field indicator must be printable ASCII")
-	}
-	# The complete line was validated and decoded above; the indicator is ASCII.
-	value = Str.from_utf8_lossy(text.to_utf8().drop_first(1))
-	{ state: { ..s, fields: s.fields.append({ code, value }), record_at: if (s.fields.is_empty()) at else s.record_at }, result: Continue }
+	bad("field indicator must be printable ASCII")
 }
 
 has_break : Str -> Bool
@@ -551,33 +580,27 @@ has_break = |text| text.to_utf8().any(|b| b == '\r' or b == '\n' or b == 0)
 valid_amount : Str -> Bool
 valid_amount = |text| {
 	bytes = text.to_utf8()
-	unsigned = match bytes {
-		['+', .. as rest] | ['-', .. as rest] => rest
-		_ => bytes
-	}
-	var $digits = 0
-	var $dots = 0
-	for b in unsigned {
+	first = bytes.first() ?? 0
+	var $index = if (first == '+' or first == '-') 1 else 0
+	var $digits = False
+	var $dot = False
+	while $index < bytes.len() {
+		b = bytes.get($index) ?? 0
+		$index = $index + 1
 		if b >= '0' and b <= '9' {
-			$digits = $digits + 1
-		} else if b == '.' {
-			$dots = $dots + 1
+			$digits = True
+		} else if b == '.' and !$dot {
+			$dot = True
 		} else {
 			return False
 		}
 	}
-	$digits > 0 and $dots <= 1
+	$digits
 }
 
 parse_date : Str, QIF.DateOrder -> Try(QIF.Date, [InvalidDate])
 parse_date = |text, order| {
-	parts = Str.replace_each(Str.replace_each(text, "'", "/"), "-", "/").split_on("/")
-	if parts.len() != 3 {
-		return Err(InvalidDate)
-	}
-	a = U64.from_str((parts.get(0) ?? "").trim()).map_err(|_| InvalidDate)?
-	b = U64.from_str((parts.get(1) ?? "").trim()).map_err(|_| InvalidDate)?
-	c = U64.from_str((parts.get(2) ?? "").trim()).map_err(|_| InvalidDate)?
+	{ a, b, c } = date_components(text)?
 	date = match order {
 		YearFirst => { year: expand_year(a), month: b, day: c }
 		MonthFirst => { year: expand_year(c), month: a, day: b }
@@ -592,8 +615,57 @@ parse_date = |text, order| {
 	leap = date.year % 4 == 0 and (date.year % 100 != 0 or date.year % 400 == 0)
 	max_day = if date.month == 2 {
 		if (leap) 29 else 28
-	} else if ([4.U64, 6, 9, 11].contains(date.month)) 30 else 31
+	} else if (date.month == 4 or date.month == 6 or date.month == 9 or date.month == 11) 30 else 31
 	if (date.day > max_day) Err(InvalidDate) else Ok(date)
+}
+
+# Decimal components and every supported separator need no temporary strings.
+# The fallback retains U64.from_str and Unicode trim semantics for other input.
+date_components : Str -> Try({ a : U64, b : U64, c : U64 }, [InvalidDate])
+date_components = |text| {
+	bytes = text.to_utf8()
+	var $index = 0
+	var $part = 0
+	var $value = 0.U64
+	var $digits = False
+	var $a = 0.U64
+	var $b = 0.U64
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		$index = $index + 1
+		if byte >= '0' and byte <= '9' {
+			digit = (byte - '0').to_u64()
+			if $value > (U64.highest - digit) // 10 {
+				return date_components_slow(text)
+			}
+			$value = $value * 10 + digit
+			$digits = True
+		} else if (byte == '/' or byte == '-' or byte == '\'') and $digits and $part < 2 {
+			if $part == 0 {
+				$a = $value
+			} else {
+				$b = $value
+			}
+			$part = $part + 1
+			$value = 0
+			$digits = False
+		} else {
+			return date_components_slow(text)
+		}
+	}
+	if ($part == 2 and $digits) Ok({ a: $a, b: $b, c: $value }) else date_components_slow(text)
+}
+
+date_components_slow : Str -> Try({ a : U64, b : U64, c : U64 }, [InvalidDate])
+date_components_slow = |text| {
+	parts = Str.replace_each(Str.replace_each(text, "'", "/"), "-", "/").split_on("/")
+	if parts.len() != 3 {
+		return Err(InvalidDate)
+	}
+	a = U64.from_str((parts.get(0) ?? "").trim()).map_err(|_| InvalidDate)?
+	b = U64.from_str((parts.get(1) ?? "").trim()).map_err(|_| InvalidDate)?
+	c = U64.from_str((parts.get(2) ?? "").trim()).map_err(|_| InvalidDate)?
+	Ok({ a, b, c })
 }
 
 expand_year : U64 -> U64
@@ -807,6 +879,50 @@ expect {
 	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nD27/08/2024\n^\n")?
 	match doc.transactions({}) {
 		Err(InvalidQif(error)) => error.message == "duplicate date or amount field"
+		_ => False
+	}
+}
+
+expect {
+	texts = ["27/08/2024", "2024-02-29", "8'27'24", "27-08'2024", "00027/00008/0000002024", "18446744073709551615/1/1", "18446744073709551616/1/1", "1/1/18446744073709551615", "1/1/18446744073709551616", " 27 / 08 / 2024 ", "\u(a0)27/08/2024\u(2003)", "+27/+8/+2024", "0x1b/0b1000/2_024", "27/8/2.024e3", "27/8/2e3", "", "/1/2", "1//2", "1/2/", "1/2/3/4", "1/2/3x"]
+	texts.all(|text| date_components(text) == date_components_slow(text))
+}
+expect {
+	cases = [{ text: "", valid: False }, { text: "+", valid: False }, { text: "-.", valid: False }, { text: ".", valid: False }, { text: "+.1", valid: True }, { text: "-1.", valid: True }, { text: "1..0", valid: False }, { text: "1e2", valid: False }, { text: " 1", valid: False }, { text: "1\u(a0)", valid: False }, { text: "-000000000000000000000000.0000000000000000000001", valid: True }]
+	cases.all(|case| valid_amount(case.text) == case.valid)
+}
+expect {
+	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nEorphan\n^\n")?
+	match doc.transactions({}) {
+		Err(InvalidQif(error)) => error.message == "invalid or ambiguous date; configure date_order"
+		_ => False
+	}
+}
+expect {
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTinvalid\nEorphan\n^\n")?
+	match doc.transactions({}) {
+		Err(InvalidQif(error)) => error.message == "invalid decimal amount"
+		_ => False
+	}
+}
+expect {
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT1\nEorphan\n^\n")?
+	match doc.transactions({}) {
+		Err(InvalidQif(error)) => error.message == "split field without S category"
+		_ => False
+	}
+}
+expect {
+	bytes = ['P', 0, 0xff, '\n']
+	match QIF.parse_bytes(bytes, {}) {
+		Err(InvalidQif(error)) => error == { offset: 2, line: 1, column: 3, message: "invalid UTF-8" }
+		_ => False
+	}
+}
+expect {
+	bytes = "!Type:Bank\nP".to_utf8().concat([0xff, '\n'])
+	match QIF.parse_bytes(bytes, { max_fields: 0 }) {
+		Err(InvalidQif(error)) => error == { offset: 12, line: 2, column: 2, message: "invalid UTF-8" }
 		_ => False
 	}
 }
