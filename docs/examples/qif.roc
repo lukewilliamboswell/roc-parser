@@ -11,7 +11,7 @@ source = "!Type:Bank\nD27/08/2024\nT-12.3400\nPCafé\n^\n"
 main! = |_| {
 	# Each byte is a separate chunk, including the UTF-8 characters in Café.
 	chunks = source.to_utf8().map(|byte| [byte])
-	for result in QIF.decode_iter(chunks.iter(), {}) {
+	for result in Streaming.read_iter(chunks.iter(), QIF.transaction_decoder({})) {
 		match result {
 			Ok(Value(Transaction(row))) => Stdout.line!("${row.payee}: ${row.amount}")?
 			Ok(Finished(report)) => Stdout.line!("rejected: ${report.rejected_records.to_str()}")?
@@ -22,4 +22,4 @@ main! = |_| {
 	Ok({})
 }
 
-expect Streaming.collect(QIF.parse_iter([source.to_utf8()].iter(), {})).is_ok()
+expect Streaming.collect(Streaming.read_iter([source.to_utf8()].iter(), QIF.decoder({}))).is_ok()

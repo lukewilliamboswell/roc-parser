@@ -191,10 +191,10 @@ always the last message in a buffer.
 [#http-streaming]
 == Read messages from byte chunks
 
-Use `HTTP.stream_requests(chunks, props)` to process a request pipeline from a
+Use `Streaming.read_stream(chunks, HTTP.request_decoder(props))` to process a request pipeline from a
 file or socket without collecting its bodies. `chunks` is a
 `Stream(Try(List(U8), source_error))`; the pure equivalent is
-`HTTP.iter_requests(Iter(List(U8)), props)`. Empty chunks do not mean EOF, and
+`Streaming.read_iter(chunks, HTTP.request_decoder(props))`. Empty chunks do not mean EOF, and
 chunk boundaries may occur inside any HTTP line, UTF-8 header value, or body.
 
 The reader emits `Value(RequestHead(head))`, followed by zero or more
@@ -231,8 +231,8 @@ finished; protocol bytes: 0
 
 === Associate responses with requests
 
-`HTTP.stream_responses(chunks, methods, props)` and `HTTP.iter_responses`
-require an `Iter(HTTP.Method)` containing the request methods in response
+Use `Streaming.read_stream(chunks, HTTP.response_decoder(methods, props))`
+or `Streaming.read_iter` for responses. The decoder requires an `Iter(HTTP.Method)` containing the request methods in response
 order. A response without a matching method is an error. An informational
 response such as `100` or `103` produces its own head and `MessageEnd`, while
 retaining the method for the final response. Methods are pulled only when a
@@ -279,8 +279,8 @@ These limits do not bound the total body length, connection lifetime, or time
 spent waiting for input; enforce those in the application when needed.
 
 For a custom driver, `HTTP.request_decoder(props)` or
-`HTTP.response_decoder(methods, props)` returns a pure `HTTP.Decoder`.
-`HTTP.step(decoder, bytes, More)` returns at most one event and the number of
+`HTTP.response_decoder(methods, props)` returns a shared `Streaming.Decoder`.
+`decoder.step(bytes, More)` returns at most one event and the number of
 bytes consumed from that call. Supply `Final` only when the source has ended,
 and continue stepping to the terminal result. The shared
 xref:streaming.adoc#streaming[chunk reader contract] describes consumption and
@@ -310,9 +310,8 @@ Output:
 health check: /health
 ----
 
-They fail with `ParseError({ problem, offset })`. The message starts with
-`invalid HTTP request:` or `invalid HTTP response:`, and the offset is where
-the problem is, counted from the start of the whole input.
+They fail with `ParseError({ problem, offset })`, preserving the native
+`HTTP.Problem` tag and byte offset from the start of the whole input.
 
 [#http-security]
 == Rejected messages and request smuggling

@@ -12,12 +12,8 @@ import parser.Streaming
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	syntax = if (args.first().map_ok(OsStr.display) == Ok("sgml")) Sgml102 else Xml203
-	parsed = OFX.parse_stream(Stdin.chunks(), {})
-	for! bytes in OFX.write_stream(
-		Streaming.values_stream(parsed),
-		{ syntax: syntax },
-		65_536,
-	) {
+	parsed = Streaming.read_stream(Stdin.chunks(), OFX.decoder({}))
+	for! bytes in Streaming.write_stream(Streaming.values_stream(parsed), OFX.encoder({ syntax: syntax }).with_chunk_bytes(65_536)) {
 		Stdout.write_bytes!(bytes?)?
 	}
 	Ok({})

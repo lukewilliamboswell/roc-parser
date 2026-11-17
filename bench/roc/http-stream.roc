@@ -2,6 +2,7 @@ app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
 	parser: "../../package/main.roc",
 }
+import parser.Streaming
 import cli.OsStr
 import parser.HTTP
 import Bench
@@ -40,7 +41,7 @@ parse = |input, width, mode| {
 	props : HTTP.ReadProps
 	props = { max_head_bytes: 4_194_304, max_line_bytes: 1_048_576, max_headers: 16_384, max_trailer_bytes: 4_194_304, max_trailers: 16_384 }
 	responses = if (mode == "auto") input.starts_with("HTTP/") else mode != "requests"
-	events = if (responses) HTTP.iter_responses(chunks, methods, props) else HTTP.iter_requests(chunks, props)
+	events = if (responses) Streaming.read_iter(chunks, HTTP.response_decoder(methods, props)) else Streaming.read_iter(chunks, HTTP.request_decoder(props))
 	var $sum = 0.U64
 	var $finished = False
 	for result in events {

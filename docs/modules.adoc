@@ -52,11 +52,11 @@ parsers for data formats, web markup and Roc source.
 
 |{api}QIF/[`QIF`]
 |Read and write raw Quicken records and decode bank/cash/card transactions
-|`QIF.parse_str`, `QIF.decode_iter`, `QIF.parse_stream`, `QIF.write_stream`
+|`QIF.parse_str`, `QIF.decoder`, `QIF.transaction_decoder`, `QIF.encoder`
 
 |{api}OFX/[`OFX`]
 |Read and write bank/card statements in SGML or XML, with incremental events
-|`OFX.parse_str`, `OFX.parse_stream`, `OFX.write_stream`
+|`OFX.parse_str`, `OFX.decoder`, `OFX.encoder`
 
 |{api}HTTP/[`HTTP`]
 |Read one HTTP/1.1 request or response message, including its body

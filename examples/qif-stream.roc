@@ -11,8 +11,8 @@ import parser.Streaming
 ## Full success requires consuming the parser's Finished event.
 
 main! = |_| {
-	parsed = QIF.parse_stream(Stdin.chunks(), {})
-	for! chunk in QIF.write_stream(Streaming.values_stream(parsed), {}) {
+	parsed = Streaming.read_stream(Stdin.chunks(), QIF.decoder({}))
+	for! chunk in Streaming.write_stream(Streaming.values_stream(parsed), QIF.encoder({})) {
 		Stdout.write_bytes!(chunk?)?
 	}
 	Ok({})

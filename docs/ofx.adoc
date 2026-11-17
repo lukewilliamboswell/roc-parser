@@ -4,7 +4,7 @@
 `OFX` reads bank and credit-card statement responses from OFX 1.x SGML and
 2.x XML. Both dialects can be written: `WriteProps.syntax` defaults to
 `Xml203`; select `Sgml102` for legacy consumers. Runtime parsing returns
-`InvalidOfx` with an original byte offset, line, column, and bounded message.
+`InvalidOfx` with an original byte offset, line, column, and structured `OFX.Problem` tag.
 
 == Choose whole-document or incremental reading
 
@@ -14,8 +14,8 @@ An explicit `Props.encoding` must agree with a declaration. Undefined
 Windows-1252 bytes, unsupported encodings, and contradictory headers fail.
 A leading UTF-8 BOM is accepted, including when split across chunks.
 
-`OFX.parse_iter(chunks, props)` consumes an `Iter(List(U8))` lazily.
-`OFX.parse_stream(chunks, props)` accepts a `Stream(Try(List(U8), source_error))`.
+`Streaming.read_iter(chunks, OFX.decoder(props))` consumes an `Iter(List(U8))` lazily.
+`Streaming.read_stream(chunks, OFX.decoder(props))` accepts a `Stream(Try(List(U8), source_error))`.
 The source owns file and network I/O; the package never opens a connection.
 Byte boundaries may split tags, CRLF, references, and encoded characters.
 Empty chunks are ordinary input. Source exhaustion alone finalizes the parser.
@@ -27,16 +27,17 @@ A successful item does not establish validity of the entire document:
 consume the shared `Finished(report)` event to establish successful EOF.
 The report counts emitted logical items and rejected transactions.
 
-`Props.errors` defaults to `FailFast`. `SkipInvalidRecords` and
+Decoder error handling defaults to `FailFast`. Configure it with
+`.with_errors({ error_policy: ReportInvalidRecords })`. `SkipInvalidRecords` and
 `ReportInvalidRecords` recover only semantic failures in a fully delimited
 `STMTTRN`. Report mode also emits `Rejected(error)`. Syntax, encoding,
 context, source, and resource-limit failures remain terminal. The error budget
 allows 1,000 rejected transactions by default; the next is terminal and includes
 its diagnostic. Zero stops on the first rejected transaction.
 
-Whole-document `parse_bytes` is deliberately fail-fast and rejects a nondefault
-recovery policy. Use `OFX.parse_report` to collect events, diagnostics, and the
-completion report under a selected policy. The executable example is
+Whole-document `parse_bytes` uses fail-fast handling. Use
+`Streaming.collect_report` on the configured reader to collect events,
+diagnostics, and the completion report under a selected policy. The executable example is
 `docs/examples/ofx-guide.roc`.
 
 == Preserve financial values
@@ -63,17 +64,16 @@ constructs are rejected rather than silently interpreted as another format.
 
 == Write bounded output
 
-`OFX.writer(props)`, `OFX.write(writer, event)`, and `OFX.finish(writer)`
-implement contextual writing. Each write validates its entire logical item
-before returning bytes. A failed transaction cannot leave a partial record in
-the output. `finish` rejects an unfinished statement.
+`OFX.encoder(props)` configures contextual writing for `Streaming.write_iter`
+and `Streaming.write_stream`. Each item is validated before bytes are emitted;
+an invalid transaction cannot leave a partial record. Successful source completion
+closes the document, while an unfinished statement fails.
 
-`OFX.write_iter(events, props, chunk_bytes)` and `OFX.write_stream(events,
-props, chunk_bytes)` split validated output into bounded chunks. The effectful
-writer preserves source errors and does not finish a failed source. A zero
-chunk size fails. Windows-1252 writing rejects unrepresentable characters;
-there is no replacement or lossy fallback. `OFX.to_bytes(document, props)`
-collects the same writer for callers who want a complete output buffer.
+Use `.with_chunk_bytes(size)` on the encoder to bound output fragments. A zero
+chunk size fails. The effectful writer preserves source errors and does not
+finish a failed source. Windows-1252 writing rejects unrepresentable characters.
+`OFX.to_bytes(document, props)` collects the same encoding for callers who need
+a complete output buffer.
 
 The reader retains one unfinished record and its stack. Defaults bound tokens
 at 65,536 bytes, captured records at 4 MiB, nesting at 64, and transaction fields

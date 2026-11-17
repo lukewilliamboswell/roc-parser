@@ -9,26 +9,25 @@ available through raw parsing and rejected by typed decoding.
 
 == Read chunks
 
-Use `QIF.parse_iter(chunks, props)` for raw events and `QIF.decode_iter` for typed
-transactions. Their `Stream` counterparts accept an effectful source of fallible
-byte chunks. The package remains platform-independent. The complete program in
+Use `Streaming.read_iter(chunks, QIF.decoder(props))` for raw events and
+`QIF.transaction_decoder(props)` for typed transactions. `Streaming.read_stream`
+accepts an effectful source of fallible byte chunks. The package remains platform-independent. The complete program in
 `examples/qif-stream.roc` connects basic-cli stdin chunks to the incremental
 parser and writer; it never collects the document.
 
 Results use `Streaming`'s `Value`, `Rejected` and `Finished` events. Default
-handling stops on the first error. Set `props.errors.error_policy` to
-`ReportInvalidRecords` to receive diagnostics for fully framed records, or
+handling stops on the first error. Configure the decoder with
+`.with_errors({ error_policy: ReportInvalidRecords })` to receive diagnostics for fully framed records, or use
 `SkipInvalidRecords` to omit them. Both modes count rejected records and stop
 when the configured error budget is exceeded. Missing terminators, invalid
 encoding, resource limits and malformed account context remain terminal.
 Consume through `Finished` to validate the entire document.
 
 `QIF.parse_str` collects raw events into a document; `doc.transactions(props)`
-decodes its transactions and explicitly requires the fail-fast policy.
-Use `doc.transactions_report(props)` to collect typed values with recovery,
-diagnostics and counts. `QIF.parse_report` and `QIF.decode_report` similarly
-collect the public event streams under the configured error policy. `QIF.parser` composes complete raw parsing with other
-byte parsers. Quotations and `QIF.validate` use the same grammar and options.
+decodes its transactions with fail-fast handling. Use `Streaming.collect_report`
+on a configured reader to collect events, diagnostics, and completion counts.
+`QIF.parser` composes complete raw parsing with other byte parsers. Quotations
+and `QIF.validate` use the same grammar and options.
 
 == Decode dates and amounts
 
@@ -45,9 +44,9 @@ Identifiers such as check numbers remain strings, including leading zeroes.
 
 == Write incrementally
 
-`QIF.write_iter(events, props)` and `QIF.write_stream` validate each raw event
-before emitting its bytes, splitting output into chunks no larger than
-`props.chunk_bytes`. Supply ordered headers and records, as produced by raw
+`Streaming.write_iter(events, QIF.encoder(props))` and `Streaming.write_stream`
+validate each raw event before emitting its bytes. Configure output fragments
+with `.with_chunk_bytes(size)` on the encoder. Supply ordered headers and records, as produced by raw
 parsing. A zero chunk size is an error. Default output uses CRLF and UTF-8;
 `line_ending` also accepts `Lf` or `Cr`, and `encoding` accepts `Windows1252`.
 Unsupported Windows-1252 characters fail without replacement.

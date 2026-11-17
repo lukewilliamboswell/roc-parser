@@ -2,6 +2,7 @@ app [target] {
 	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.6.2/3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
 	parser: "../package/main.roc",
 }
+import parser.Streaming
 import fuzz.Fuzz
 import parser.HTTP
 
@@ -24,7 +25,7 @@ drain = |n, bodies| {
 	)
 	var $count = 0.U64
 	var $finished = False
-	for result in HTTP.iter_requests(chunks, {}) {
+	for result in Streaming.read_iter(chunks, HTTP.request_decoder({})) {
 		match result {
 			Ok(Value(Body(bytes))) => {
 				$count = $count + bytes.len()
@@ -65,7 +66,7 @@ drain_metadata = |n, many, fragmented| {
 		},
 	)
 	var $headers = 0.U64
-	for result in HTTP.iter_requests(chunks, { max_head_bytes: 262_144, max_line_bytes: 65_536, max_headers: 16_384 }) {
+	for result in Streaming.read_iter(chunks, HTTP.request_decoder({ max_head_bytes: 262_144, max_line_bytes: 65_536, max_headers: 16_384 })) {
 		match result {
 			Ok(Value(RequestHead(head))) => {
 				$headers = $headers + head.headers.len()

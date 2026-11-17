@@ -2,6 +2,7 @@ app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
 	parser: "../package/main.roc",
 }
+import parser.Streaming
 import cli.Stdin
 import cli.Stdout
 import cli.OsStr
@@ -12,10 +13,10 @@ import parser.HTTP
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	events = match args.first().map_ok(OsStr.display) {
-		Err(_) => HTTP.stream_requests(Stdin.chunks(), {})
-		Ok("get") => HTTP.stream_responses(Stdin.chunks(), [Get].iter(), {})
-		Ok("head") => HTTP.stream_responses(Stdin.chunks(), [Head].iter(), {})
-		Ok("connect") => HTTP.stream_responses(Stdin.chunks(), [Connect].iter(), {})
+		Err(_) => Streaming.read_stream(Stdin.chunks(), HTTP.request_decoder({}))
+		Ok("get") => Streaming.read_stream(Stdin.chunks(), HTTP.response_decoder([Get].iter(), {}))
+		Ok("head") => Streaming.read_stream(Stdin.chunks(), HTTP.response_decoder([Head].iter(), {}))
+		Ok("connect") => Streaming.read_stream(Stdin.chunks(), HTTP.response_decoder([Connect].iter(), {}))
 		_ => return Err(Usage("http-streaming.roc [get|head|connect]"))
 	}
 	var $body_bytes = 0.U64

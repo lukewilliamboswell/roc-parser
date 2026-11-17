@@ -20,10 +20,10 @@ test = |choices| {
 				crash "OFX semantic roundtrip changed values"
 			}
 		}
-		events = OfxGen.values(OFX.parse_iter(OfxGen.chunks(generated.bytes, choices).iter(), {}))
-		encoded_chunks = OfxGen.unwrap_bytes(OFX.write_iter(events, { syntax: syntax }, 7))
-		decoded = Streaming.collect(OFX.parse_iter(encoded_chunks, {})) ?? crash "OFX pipeline reparse failed"
-		baseline = Streaming.collect(OFX.parse_iter([generated.bytes].iter(), {})) ?? crash "baseline rejected"
+		events = OfxGen.values(Streaming.read_iter(OfxGen.chunks(generated.bytes, choices).iter(), OFX.decoder({})))
+		encoded_chunks = OfxGen.unwrap_bytes(Streaming.write_iter(events, OFX.encoder({ syntax: syntax }).with_chunk_bytes(7)))
+		decoded = Streaming.collect(Streaming.read_iter(encoded_chunks, OFX.decoder({}))) ?? crash "OFX pipeline reparse failed"
+		baseline = Streaming.collect(Streaming.read_iter([generated.bytes].iter(), OFX.decoder({}))) ?? crash "baseline rejected"
 		if decoded != baseline {
 			crash "incremental reader/writer pipeline changed events"
 		}

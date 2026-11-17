@@ -12,7 +12,7 @@ QIF := { events : List(QIF.Event) }.{
 	Location : { offset : U64, line : U64, column : U64 }
 
 	## A located syntax, encoding, limit or decoding failure.
-	Problem : [IncompleteInput, RecordTooLarge(U64), LineTooLarge(U64), MissingRecordTerminator, RecoveryRequiresReport, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Str, order : DateOrder }), InvalidAmount(Str), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ section : Str, account : Str }), NulCharacter, HeaderBeforeTerminator, ContextTooLarge(U64), MissingSection, TooManyFields(U64), InvalidFieldCode(U8), InvalidEncoding(TextEncoding)]
+	Problem : [IncompleteInput, RecordTooLarge(U64), LineTooLarge(U64), MissingRecordTerminator, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Str, order : DateOrder }), InvalidAmount(Str), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ section : Str, account : Str }), NulCharacter, HeaderBeforeTerminator, ContextTooLarge(U64), MissingSection, TooManyFields(U64), InvalidFieldCode(U8), InvalidEncoding(TextEncoding)]
 	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Supported byte encodings. ASCII is a subset of Utf8.
@@ -22,7 +22,7 @@ QIF := { events : List(QIF.Event) }.{
 	DateOrder : [RejectAmbiguous, MonthFirst, DayFirst, YearFirst]
 
 	## Limits apply to original bytes before decoding.
-	Props := { encoding : TextEncoding ?? Utf8, date_order : DateOrder ?? RejectAmbiguous, max_line_bytes : U64 ?? 1_048_576, max_record_bytes : U64 ?? 16_777_216, max_fields : U64 ?? 65_536, max_context_bytes : U64 ?? 65_536, errors : Streaming.ReadProps ?? {} }
+	Props := { encoding : TextEncoding ?? Utf8, date_order : DateOrder ?? RejectAmbiguous, max_line_bytes : U64 ?? 1_048_576, max_record_bytes : U64 ?? 16_777_216, max_fields : U64 ?? 65_536, max_context_bytes : U64 ?? 65_536 }
 
 	## A single ordered field, including repeated split/address/extension lines.
 	Field : { code : U8, value : Str }
@@ -43,7 +43,7 @@ QIF := { events : List(QIF.Event) }.{
 	Transaction : { raw : Record, date : Date, amount : Str, payee : Str, memo : Str, number : Str, category : Str, cleared : Str, splits : List(Split) }
 
 	## Writer layout and encoding. Invalid values fail before a record is emitted.
-	WriteProps := { encoding : TextEncoding ?? Utf8, line_ending : [Lf, CrLf, Cr] ?? CrLf, max_record_bytes : U64 ?? 16_777_216, chunk_bytes : U64 ?? 65_536 }
+	WriteProps := { encoding : TextEncoding ?? Utf8, line_ending : [Lf, CrLf, Cr] ?? CrLf, max_record_bytes : U64 ?? 16_777_216 }
 
 	## Quoted/imported source with the same parser options as runtime parsing.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
@@ -67,11 +67,11 @@ QIF := { events : List(QIF.Event) }.{
 	## Parse raw bytes with explicit encoding and resource limits.
 	parse_bytes : List(U8), Props -> Try(QIF, [InvalidQif(Error)])
 	parse_bytes = |bytes, props| {
-		var $decoder = decoder(props)
+		var $decoder = initial_qif(props)
 		var $pos = 0
 		var $events = []
 		while True {
-			result = $decoder.step(bytes.drop_first($pos), Final)
+			result = qif_step($decoder, bytes.drop_first($pos), Final)
 			$decoder = result.state
 			$pos = $pos + result.consumed
 			match result.outcome {
@@ -95,93 +95,22 @@ QIF := { events : List(QIF.Event) }.{
 	)
 
 	## An incremental decoder retains only context and the unfinished record.
-	Decoder :: { props : Props, offset : U64, line_number : U64, column : U64, line_start : U64, line_bytes : List(U8), skip_lf : Bool, fields : List(Field), section : Str, account : Str, record_at : Location, record_bytes : U64, done : Bool }.{
+	Reader : { props : Props, offset : U64, line_number : U64, column : U64, line_start : U64, line_bytes : List(U8), skip_lf : Bool, fields : List(Field), section : Str, account : Str, record_at : Location, record_bytes : U64, done : Bool }
 
-		## Consume up to one event. More never finalizes an unfinished line.
-		step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, Error)
-		step = |initial, bytes, end| {
-			if initial.done {
-				return { state: initial, consumed: 0, outcome: Done }
-			}
-			var $s = initial
-			var $pos = 0
-			while $pos < bytes.len() {
-				byte = bytes.get($pos) ?? 0
-				$pos = $pos + 1
-				additional = if (($s.skip_lf and byte == '\n' and $s.record_bytes == 0) or ((byte == '\r' or byte == '\n') and $s.line_bytes == ['^'])) 0 else 1
-				$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
-				if $s.record_bytes > $s.props.max_record_bytes {
-					return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, RecordTooLarge($s.props.max_record_bytes))) }
-				}
-				if $s.skip_lf and byte == '\n' {
-					$s = { ..$s, skip_lf: False, line_start: $s.offset }
-				} else if byte == '\r' or byte == '\n' {
-					line = $s.line_bytes
-					$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
-					processed = process_line($s, line)
-					$s = { ..processed.state, line_start: $s.offset }
-					match processed.result {
-						Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
-						Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
-						Continue => {}
-					}
-				} else {
-					$s = { ..$s, skip_lf: False, line_bytes: $s.line_bytes.append(byte), column: $s.column + 1 }
-					if $s.line_bytes.len() > $s.props.max_line_bytes {
-						return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, LineTooLarge($s.props.max_line_bytes))) }
-					}
-				}
-			}
-			if end == More {
-				return { state: $s, consumed: $pos, outcome: NeedInput }
-			}
-			if !$s.line_bytes.is_empty() {
-				line = $s.line_bytes
-				$s = { ..$s, line_bytes: [] }
-				processed = process_line($s, line)
-				$s = processed.state
-				match processed.result {
-					Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
-					Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
-					Continue => {}
-				}
-			}
-			if !$s.fields.is_empty() {
-				return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, MissingRecordTerminator)) }
-			}
-			{ state: terminal($s), consumed: $pos, outcome: Done }
-		}
-	}
+	## Configure raw events for Streaming.read_iter or Streaming.read_stream.
+	decoder : Props -> Streaming.Decoder(Reader, Event, Error)
+	decoder = |props| Streaming.decoder(initial_qif(props), qif_step)
 
-	## Start a raw decoder. Empty input is a valid empty document.
-	decoder : Props -> Decoder
-	decoder = |props| { props, offset: 0, line_number: 1, column: 1, line_start: 0, line_bytes: [], skip_lf: False, fields: [], section: "", account: "", record_at: { offset: 0, line: 1, column: 1 }, record_bytes: 0, done: False }
-
-	## Raw events from pure chunks, using the shared EOF/error/report protocol.
-	parse_iter : Iter(List(U8)), Props -> Iter(Try(Streaming.ReadEvent(Event, Error), Streaming.ReadError(Error)))
-	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), Decoder.step, props.errors)
-
-	## Raw events from a fallible effectful byte source.
-	parse_stream : Stream(Try(List(U8), source_error)), Props -> Stream(Try(Streaming.ReadEvent(Event, Error), [SourceErr(source_error), ParseErr(Error), ErrorLimitExceeded({ max : U64, error : Error }), DecoderProtocol(Str)]))
-	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), Decoder.step, props.errors)
-
-	## Typed transaction events retain headers and account context.
+	## Typed events retain section and account context.
 	TransactionEvent : [Header(Str), Account(Record), Context(Record), Transaction(Transaction)]
 
-	## Decode bank/cash/card records in encounter order. Only framed semantic errors recover.
-	decode_iter : Iter(List(U8)), Props -> Iter(Try(Streaming.ReadEvent(TransactionEvent, Error), Streaming.ReadError(Error)))
-	decode_iter = |chunks, props| Streaming.iter(chunks, decoder(props), typed_step, props.errors)
-
-	## Typed transaction events from an effectful source, with source errors preserved.
-	decode_stream : Stream(Try(List(U8), source_error)), Props -> Stream(Try(Streaming.ReadEvent(TransactionEvent, Error), [SourceErr(source_error), ParseErr(Error), ErrorLimitExceeded({ max : U64, error : Error }), DecoderProtocol(Str)]))
-	decode_stream = |chunks, props| Streaming.stream(chunks, decoder(props), typed_step, props.errors)
+	## Configure typed bank, cash, and card transactions.
+	transaction_decoder : Props -> Streaming.Decoder(Reader, TransactionEvent, Error)
+	transaction_decoder = |props| Streaming.decoder(initial_qif(props), typed_step)
 
 	## Decode a complete document's bank/cash/card records without losing raw fields.
 	transactions : QIF, Props -> Try(List(Transaction), [InvalidQif(Error)])
 	transactions = |doc, props| {
-		if props.errors.error_policy != FailFast {
-			return Err(InvalidQif({ offset: 0, line: 0, column: 0, problem: RecoveryRequiresReport }))
-		}
 		var $rows = []
 		for event in doc.events {
 			match event {
@@ -194,46 +123,6 @@ QIF := { events : List(QIF.Event) }.{
 		}
 		Ok($rows)
 	}
-
-	## Collect typed values and diagnostics under the configured recovery policy.
-	transactions_report : QIF, Props -> Try({ values : List(Transaction), errors : List(Error), report : Streaming.Report }, [InvalidQif(Error), ErrorLimitExceeded({ max : U64, error : Error })])
-	transactions_report = |doc, props| {
-		var $values = []
-		var $errors = []
-		var $rejected = 0.U64
-		for event in doc.events {
-			match event {
-				Header(_) => {}
-				Record(record) if record.section == "Account" or record.section == "Cat" or record.section == "Class" => {}
-				Record(record) => match decode(record, props) {
-					Ok(value) => {
-						$values = $values.append(value)
-					}
-					Err(InvalidQif(error)) => {
-						if props.errors.error_policy == FailFast {
-							return Err(InvalidQif(error))
-						}
-						if $rejected >= props.errors.max_errors {
-							return Err(ErrorLimitExceeded({ max: props.errors.max_errors, error }))
-						}
-						$rejected = $rejected + 1
-						if props.errors.error_policy == ReportInvalidRecords {
-							$errors = $errors.append(error)
-						}
-					}
-				}
-			}
-		}
-		Ok({ values: $values, errors: $errors, report: { emitted_items: $values.len(), rejected_records: $rejected } })
-	}
-
-	## Collect raw events with explicit successful completion and rejected-record counts.
-	parse_report : List(U8), Props -> Try({ values : List(Event), errors : List(Error), report : Streaming.Report }, [ReadFailed(Streaming.ReadError(Error)), MissingFinished])
-	parse_report = |bytes, props| Streaming.collect_report(parse_iter([bytes].iter(), props))
-
-	## Collect typed events with diagnostics and counts, honouring all error policies.
-	decode_report : List(U8), Props -> Try({ values : List(TransactionEvent), errors : List(Error), report : Streaming.Report }, [ReadFailed(Streaming.ReadError(Error)), MissingFinished])
-	decode_report = |bytes, props| Streaming.collect_report(decode_iter([bytes].iter(), props))
 
 	## Decode one completely framed bank, cash, or credit-card record.
 	decode : Record, Props -> Try(Transaction, [InvalidQif(Error)])
@@ -331,19 +220,15 @@ QIF := { events : List(QIF.Event) }.{
 		Ok(bytes)
 	}
 
-	## Encode complete raw events into bounded chunks. Each record validates atomically.
-	write_iter : Iter(Event), WriteProps -> Iter(Try(List(U8), [EncodeErr([InvalidQif(Error)]), InvalidChunkSize]))
-	write_iter = |events, props| Streaming.encode_state_iter(events, { section: "", account: "" }, |state, event| encode_event(state, event, props), |_| Ok([]), props.chunk_bytes)
-
-	## Encode a fallible effectful source; source and encoder errors terminate once.
-	write_stream : Stream(Try(Event, source_error)), WriteProps -> Stream(Try(List(U8), [SourceErr(source_error), EncodeErr([InvalidQif(Error)]), InvalidChunkSize]))
-	write_stream = |events, props| Streaming.encode_state_stream(events, { section: "", account: "" }, |state, event| encode_event(state, event, props), |_| Ok([]), props.chunk_bytes)
+	## Validate each complete event atomically before emitting bytes.
+	encoder : WriteProps -> Streaming.Encoder({ section : Str, account : Str }, Event, [InvalidQif(Error)])
+	encoder = |props| Streaming.encoder({ section: "", account: "" }, |state, event| encode_event(state, event, props), |_| Ok([]))
 
 	## Write a complete document; streaming writers use the same per-record encoder.
 	to_bytes : QIF, WriteProps -> Try(List(U8), [InvalidQif(Error)])
 	to_bytes = |doc, props| {
 		var $bytes = []
-		for result in write_iter(doc.events.iter(), props) {
+		for result in Streaming.write_iter(doc.events.iter(), encoder(props)) {
 			match result {
 				Ok(bytes) => {
 					$bytes = $bytes.concat(bytes)
@@ -359,6 +244,63 @@ QIF := { events : List(QIF.Event) }.{
 	to_str : QIF -> Try(Str, [InvalidQif(Error)])
 	to_str = |doc| to_bytes(doc, {}).map_ok(Str.from_utf8_lossy)
 }
+
+qif_step : QIF.Reader, List(U8), Streaming.InputEnd -> Streaming.Step(QIF.Reader, QIF.Event, QIF.Error)
+qif_step = |initial, bytes, end| {
+	if initial.done {
+		return { state: initial, consumed: 0, outcome: Done }
+	}
+	var $s = initial
+	var $pos = 0
+	while $pos < bytes.len() {
+		byte = bytes.get($pos) ?? 0
+		$pos = $pos + 1
+		additional = if (($s.skip_lf and byte == '\n' and $s.record_bytes == 0) or ((byte == '\r' or byte == '\n') and $s.line_bytes == ['^'])) 0 else 1
+		$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
+		if $s.record_bytes > $s.props.max_record_bytes {
+			return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, RecordTooLarge($s.props.max_record_bytes))) }
+		}
+		if $s.skip_lf and byte == '\n' {
+			$s = { ..$s, skip_lf: False, line_start: $s.offset }
+		} else if byte == '\r' or byte == '\n' {
+			line = $s.line_bytes
+			$s = { ..$s, line_bytes: [], line_number: $s.line_number + 1, column: 1, skip_lf: byte == '\r' }
+			processed = process_line($s, line)
+			$s = { ..processed.state, line_start: $s.offset }
+			match processed.result {
+				Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
+				Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
+				Continue => {}
+			}
+		} else {
+			$s = { ..$s, skip_lf: False, line_bytes: $s.line_bytes.append(byte), column: $s.column + 1 }
+			if $s.line_bytes.len() > $s.props.max_line_bytes {
+				return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, LineTooLarge($s.props.max_line_bytes))) }
+			}
+		}
+	}
+	if end == More {
+		return { state: $s, consumed: $pos, outcome: NeedInput }
+	}
+	if !$s.line_bytes.is_empty() {
+		line = $s.line_bytes
+		$s = { ..$s, line_bytes: [] }
+		processed = process_line($s, line)
+		$s = processed.state
+		match processed.result {
+			Emitted(event) => return { state: $s, consumed: $pos, outcome: Item(event) }
+			Error(error) => return { state: terminal($s), consumed: $pos, outcome: Failed(error) }
+			Continue => {}
+		}
+	}
+	if !$s.fields.is_empty() {
+		return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, MissingRecordTerminator)) }
+	}
+	{ state: terminal($s), consumed: $pos, outcome: Done }
+}
+
+initial_qif : QIF.Props -> QIF.Reader
+initial_qif = |props| { props, offset: 0, line_number: 1, column: 1, line_start: 0, line_bytes: [], skip_lf: False, fields: [], section: "", account: "", record_at: { offset: 0, line: 1, column: 1 }, record_bytes: 0, done: False }
 
 encode_event : { section : Str, account : Str }, QIF.Event, QIF.WriteProps -> Try({ state : { section : Str, account : Str }, bytes : List(U8) }, [InvalidQif(QIF.Error)])
 encode_event = |state, event, props| {
@@ -384,9 +326,9 @@ encode_event = |state, event, props| {
 	Ok({ state: next, bytes })
 }
 
-typed_step : QIF.Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(QIF.Decoder, QIF.TransactionEvent, QIF.Error)
+typed_step : QIF.Reader, List(U8), Streaming.InputEnd -> Streaming.Step(QIF.Reader, QIF.TransactionEvent, QIF.Error)
 typed_step = |state, bytes, end| {
-	raw = state.step(bytes, end)
+	raw = qif_step(state, bytes, end)
 	outcome = match raw.outcome {
 		Item(Header(header)) => Item(Header(header))
 		Item(Record(record)) if record.section == "Account" => Item(Account(record))
@@ -403,13 +345,13 @@ typed_step = |state, bytes, end| {
 	{ state: raw.state, consumed: raw.consumed, outcome }
 }
 
-terminal : QIF.Decoder -> QIF.Decoder
+terminal : QIF.Reader -> QIF.Reader
 terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done: True }
 
-located_problem : QIF.Decoder, Parser.Problem(QIF.Problem) -> QIF.Error
+located_problem : QIF.Reader, Parser.Problem(QIF.Problem) -> QIF.Error
 located_problem = |s, problem| { offset: s.offset, line: s.line_number, column: s.column, problem }
 
-process_line : QIF.Decoder, List(U8) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
+process_line : QIF.Reader, List(U8) -> { state : QIF.Reader, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
 process_line = |s, bytes| {
 	bom = s.line_start == 0 and s.props.encoding == Utf8 and bytes.take_first(3) == [0xef, 0xbb, 0xbf]
 	content = if (bom) bytes.drop_first(3) else bytes
@@ -607,7 +549,7 @@ expect {
 	var $valid = True
 	for split in (0).to(bytes.len() + 1) {
 		chunks = [bytes.take_first(split), [], bytes.drop_first(split)]
-		found = Streaming.collect(QIF.parse_iter(chunks.iter(), {}))?
+		found = Streaming.collect(Streaming.read_iter(chunks.iter(), QIF.decoder({})))?
 		expected = QIF.parse_str(sample)?
 		$valid = $valid and semantic_events(found) == semantic_events(expected.events)
 	}
@@ -616,13 +558,13 @@ expect {
 
 expect {
 	bad = "!Type:Bank\nD27/08/2024\nTbad\n^\nD27/08/2024\nT1\n^\n".to_utf8()
-	all = List.from_iter(QIF.decode_iter([bad].iter(), { errors: { error_policy: ReportInvalidRecords } }))
+	all = List.from_iter(Streaming.read_iter([bad].iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords })))
 	all.len() == 4 and all.last() == Ok(Ok(Finished({ emitted_items: 2, rejected_records: 1 })))
 }
 
 expect {
 	bad = "!Type:Bank\nD27/08/2024\nTbad\n^\n".to_utf8()
-	all = List.from_iter(QIF.decode_iter([bad].iter(), {}))
+	all = List.from_iter(Streaming.read_iter([bad].iter(), QIF.transaction_decoder({})))
 	match all.last() {
 		Ok(Err(ParseErr(_))) => all.len() == 2
 		_ => False
@@ -638,7 +580,7 @@ expect {
 	doc = QIF.parse_str(sample)?
 	var $bytes = []
 	var $valid = True
-	for result in QIF.write_iter(doc.events.iter(), { chunk_bytes: 1 }) {
+	for result in Streaming.write_iter(doc.events.iter(), QIF.encoder({}).with_chunk_bytes(1)) {
 		chunk = result?
 		$valid = $valid and chunk.len() <= 1
 		$bytes = $bytes.concat(chunk)
@@ -649,12 +591,12 @@ expect {
 
 expect {
 	events = [Header("!Type:Bank")]
-	List.from_iter(QIF.write_iter(events.iter(), { chunk_bytes: 0 })) == [Err(InvalidChunkSize)]
+	List.from_iter(Streaming.write_iter(events.iter(), QIF.encoder({}).with_chunk_bytes(0))) == [Err(InvalidChunkSize)]
 }
 
 expect {
 	bad = "!Type:Bank\nD27/08/2024\nTbad\n^\n".to_utf8()
-	all = List.from_iter(QIF.decode_iter([bad].iter(), { errors: { error_policy: ReportInvalidRecords, max_errors: 0 } }))
+	all = List.from_iter(Streaming.read_iter([bad].iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords, max_errors: 0 })))
 	match all.last() {
 		Ok(Err(ErrorLimitExceeded({ max: 0, .. }))) => True
 		_ => False
@@ -673,18 +615,18 @@ expect {
 
 expect QIF.amount_to_dec("0.0000000000000000001").is_err()
 expect {
-	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTbad\n^\nD27/08/2024\nT1\n^\n")?
-	report = doc.transactions_report({ errors: { error_policy: ReportInvalidRecords } })?
-	report.values.len() == 1 and report.errors.len() == 1 and report.report == { emitted_items: 1, rejected_records: 1 }
+	source = "!Type:Bank\nD27/08/2024\nTbad\n^\nD27/08/2024\nT1\n^\n"
+	report = Streaming.collect_report(Streaming.read_iter([source.to_utf8()].iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords })))?
+	report.values.len() == 2 and report.errors.len() == 1 and report.report == { emitted_items: 2, rejected_records: 1 }
 }
 expect {
 	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTbad\n^\n")?
-	doc.transactions({ errors: { error_policy: SkipInvalidRecords } }).is_err()
+	doc.transactions({}).is_err()
 }
 
 expect {
 	bytes = [0xef, 0xbb, 0xbf].concat("!Type:Bank\r\nD27/08/2024\r\nT1\r\n^\r\n".to_utf8())
-	found = Streaming.collect(QIF.parse_iter(bytes.map(|byte| [byte]).iter(), {}))?
+	found = Streaming.collect(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), QIF.decoder({})))?
 	expected = QIF.parse_str("!Type:Bank\r\nD27/08/2024\r\nT1\r\n^\r\n")?
 	semantic_events(found) == semantic_events(expected.events)
 }

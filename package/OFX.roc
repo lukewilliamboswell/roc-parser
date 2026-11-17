@@ -13,7 +13,7 @@ OFX := { statements : List(OFX.Statement) }.{
 	to_hash : _
 
 	## Original encoded byte offset and one-based line and byte column.
-	Problem : [RecoveryRequiresReport, IncompleteDocument, UnfinishedStatement, HeaderTooLarge(U64), TokenTooLarge(U64), FieldTooLarge(U64), RecordTooLarge(U64), TrailingContent, NonAsciiHeader, SyntaxMismatch, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(U64), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestingTooDeep(U64), NestedScalar, NestedStatement, InvalidParent(Str), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag(Str), MalformedRecord, TooManyFields(U64), EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Str), MissingAccountId, MissingBankId, InvalidStartTimestamp(Str), InvalidEndTimestamp(Str), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Str), InvalidAmount(Str), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), ExtensionTooDeep(U64), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
+	Problem : [IncompleteDocument, UnfinishedStatement, HeaderTooLarge(U64), TokenTooLarge(U64), FieldTooLarge(U64), RecordTooLarge(U64), TrailingContent, NonAsciiHeader, SyntaxMismatch, MalformedHeaderField(Str), DuplicateHeaderField(Str), UnsupportedHeader(Str), UnsupportedDataFormat(Str), UnsupportedEncoding(Str), CompressionUnsupported, UnknownHeaderField(Str), InconsistentHeader, EncodingCharsetMismatch, UnsupportedCharset(Str), HeaderEncodingMismatch, NonAsciiByte, UnexpectedText, InvalidCharacterData, InvalidEncoding(U64), DtdUnsupported, PaddedCdataUnsupported, MalformedCommentOrCdata, SgmlCommentUnsupported, CdataPlacementUnsupported, ProcessingInstructionPlacement, PrologueOrder, MalformedXmlDeclaration, XmlDeclarationOrder, DeclarationEncodingMismatch, MalformedProcessingInstruction, UnsupportedXmlHeader, UnknownProcessingInstruction, UnsupportedDeclaration, InvalidTagName(Str), ExpectedRoot, MultipleRoots, InvestmentUnsupported, UnsupportedElement(Str), UnknownSgmlTag(Str), NestingTooDeep(U64), NestedScalar, NestedStatement, InvalidParent(Str), AccountOrder, DuplicateBalance(Str), NestedRecord, RecordOutsideStatement, MismatchedClosingTag(Str), MalformedRecord, TooManyFields(U64), EmptyStatement, UnexpectedTransactionText, NestedTransactionScalar, InvalidSignon, UnnormalizedContext, InvalidContextCharacter, InvalidUid, InvalidWrapper, InvalidCurrency(Str), MissingAccountId, MissingBankId, InvalidStartTimestamp(Str), InvalidEndTimestamp(Str), UnnormalizedTransaction, ExpectedExtensionElement, DuplicateExtension(Str), ExtensionOrder(Str), InvalidTransactionCharacter, InvalidTransactionType(Str), InvalidPostedTimestamp(Str), InvalidAmount(Str), MissingTransactionId, InvalidBalance(Balance), InvalidExtensionText(Str), ExtensionTooDeep(U64), InvalidExtensionName(Str), ExtensionAttributesUnsupported, UnknownSgmlExtension(Str), UnrepresentableCharacter(Str), HeaderChanged, TransactionOutsideList, BalanceOutsideStatement, BalanceOrder, StatementEnded, InvalidAggregate, UnsupportedScalarField(Str), FieldAttributesUnsupported, MissingXmlDeclaration, ContextOrder(Str), SignonOrder, UnsuccessfulResponse(Str), DuplicateField(Str)]
 	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Writer wire syntax; readers detect either family.
@@ -23,7 +23,7 @@ OFX := { statements : List(OFX.Statement) }.{
 	TextEncoding : [Auto, Utf8, Windows1252]
 
 	## Bounded parser resources; limits are terminal errors.
-	Props := { syntax : [Auto, Xml, Sgml] ?? Auto, encoding : TextEncoding ?? Auto, errors : Streaming.ReadProps ?? {}, max_token_bytes : U64 ?? 65_536, max_record_bytes : U64 ?? 4_194_304, max_depth : U64 ?? 64, max_fields : U64 ?? 1024 }
+	Props := { syntax : [Auto, Xml, Sgml] ?? Auto, encoding : TextEncoding ?? Auto, max_token_bytes : U64 ?? 65_536, max_record_bytes : U64 ?? 4_194_304, max_depth : U64 ?? 64, max_fields : U64 ?? 1024 }
 
 	## XML 2.03 and UTF-8 are the default output.
 	WriteProps := { syntax : Syntax ?? Xml203, encoding : Streaming.TextEncoding ?? Utf8, max_record_bytes : U64 ?? 4_194_304 }
@@ -52,49 +52,23 @@ OFX := { statements : List(OFX.Statement) }.{
 	## Whole-document convenience representation.
 	Statement : { context : Context, transactions : List(Transaction), ledger_balance : Try(Balance, [Missing]), available_balance : Try(Balance, [Missing]) }
 
-	## Persistent state retaining at most one unfinished record.
-	Decoder : State
+	## Configure bounded statement events for the common streaming API.
+	decoder : Props -> Streaming.Decoder(State, Event, Error)
+	decoder = |props| Streaming.decoder(initial(props), advance)
 
-	## Construct an incremental decoder.
-	decoder : Props -> Decoder
-	decoder = initial
-
-	## Read at most one logical event and return the consumed byte count.
-	step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, Error)
-	step = advance
-
-	## Decode pure byte chunks lazily; all records are checked on consumption.
-	parse_iter : Iter(List(U8)), Props -> Iter(Try(Streaming.ReadEvent(Event, Error), Streaming.ReadError(Error)))
-	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), step, props.errors)
-
-	## Decode effectful chunks, preserving source errors.
-	parse_stream : Stream(Try(List(U8), source_error)), Props -> _
-	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), step, props.errors)
-
-	## Collect events, rejected-record diagnostics, and the successful completion report.
-	parse_report : List(U8), Props -> _
-	parse_report = |bytes, props| Streaming.collect_report(parse_iter([bytes].iter(), props))
-
-	## Encode logical events lazily, splitting output only after full validation.
-	write_iter : Iter(Event), WriteProps, U64 -> _
-	write_iter = |events, props, chunk_bytes| Streaming.encode_state_iter(events, writer(props), |state, event| write(state, event).map_ok(|result| { state: result.writer, bytes: result.bytes }), finish, chunk_bytes)
-
-	## Encode a fallible effectful source; source failure does not close the file.
-	write_stream : Stream(Try(Event, source_error)), WriteProps, U64 -> _
-	write_stream = |events, props, chunk_bytes| Streaming.encode_state_stream(events, writer(props), |state, event| write(state, event).map_ok(|result| { state: result.writer, bytes: result.bytes }), finish, chunk_bytes)
+	## Configure atomic item validation and document finalization.
+	encoder : WriteProps -> Streaming.Encoder(WriteState, Event, [InvalidOfx(Error)])
+	encoder = |props| Streaming.encoder(initial_writer(props), |state, event| write_event(state, event).map_ok(|result| { state: result.writer, bytes: result.bytes }), finish_writer)
 
 	## Collect a complete encoded document with encounter-order fail-fast errors.
 	parse_bytes : List(U8), Props -> Try(OFX, [InvalidOfx(Error)])
 	parse_bytes = |bytes, props| {
-		if props.errors.error_policy != FailFast {
-			return Err(InvalidOfx(write_error(RecoveryRequiresReport)))
-		}
-		var $state = decoder(props)
+		var $state = initial(props)
 		var $at = 0
 		var $statements = []
 		var $current = empty_statement(empty_context)
 		while True {
-			result = step($state, bytes.drop_first($at), Final)
+			result = advance($state, bytes.drop_first($at), Final)
 			$state = result.state
 			$at = $at + result.consumed
 			match result.outcome {
@@ -144,30 +118,10 @@ OFX := { statements : List(OFX.Statement) }.{
 	from_quote : Str -> Try(OFX, [BadQuotedBytes(Str)])
 	from_quote = |source| validate({ source: source })
 
-	## Stateful writer: validates complete logical items before returning bytes.
-	Writer : WriteState
-
-	## Begin a writer. Call write for each item and finish after StatementEnd.
-	writer : WriteProps -> Writer
-	writer = |props| { props, opened: False, statement: False, list_open: False, kind: Bank, balances: [], header: empty_header }
-
-	## Validate and encode one complete item atomically.
-	write : Writer, Event -> Try({ writer : Writer, bytes : List(U8) }, [InvalidOfx(Error)])
-	write = write_event
-
-	## Close a successfully completed document.
-	finish : Writer -> Try(List(U8), [InvalidOfx(Error)])
-	finish = |state| {
-		if state.statement {
-			return Err(InvalidOfx(write_error(UnfinishedStatement)))
-		}
-		encode_text(if (state.opened) "</OFX>\n" else "${preamble(state.props, empty_header)}<OFX></OFX>\n", state.props.encoding).map_err(|error| InvalidOfx(error))
-	}
-
 	## Collect encoded output; event writing remains bounded by record size.
 	to_bytes : OFX, WriteProps -> Try(List(U8), [InvalidOfx(Error)])
 	to_bytes = |document, props| {
-		var $writer = writer(props)
+		var $writer = initial_writer(props)
 		var $bytes = []
 		for statement in document.statements {
 			var $events = [StatementStart(statement.context)].concat(statement.transactions.map(|value| Transaction(value)))
@@ -185,13 +139,24 @@ OFX := { statements : List(OFX.Statement) }.{
 			}
 			$events = $events.append(StatementEnd)
 			for event in $events {
-				next = write($writer, event)?
+				next = write_event($writer, event)?
 				$writer = next.writer
 				$bytes = $bytes.concat(next.bytes)
 			}
 		}
-		Ok($bytes.concat(finish($writer)?))
+		Ok($bytes.concat(finish_writer($writer)?))
 	}
+}
+
+initial_writer : OFX.WriteProps -> WriteState
+initial_writer = |props| { props, opened: False, statement: False, list_open: False, kind: Bank, balances: [], header: empty_header }
+
+finish_writer : WriteState -> Try(List(U8), [InvalidOfx(OFX.Error)])
+finish_writer = |state| {
+	if state.statement {
+		return Err(InvalidOfx(write_error(UnfinishedStatement)))
+	}
+	encode_text(if (state.opened) "</OFX>\n" else "${preamble(state.props, empty_header)}<OFX></OFX>\n", state.props.encoding).map_err(|error| InvalidOfx(error))
 }
 
 Frame : { name : Str, offset : U64 }
@@ -964,7 +929,7 @@ encode_text = |text, encoding| {
 	Ok($out)
 }
 
-write_event : OFX.Writer, OFX.Event -> Try({ writer : OFX.Writer, bytes : List(U8) }, [InvalidOfx(OFX.Error)])
+write_event : WriteState, OFX.Event -> Try({ writer : WriteState, bytes : List(U8) }, [InvalidOfx(OFX.Error)])
 write_event = |writer, event| {
 	var $next = writer
 	var $text = ""
@@ -1058,15 +1023,15 @@ expect {
 
 expect {
 	bytes = sample_xml.to_utf8()
-	expected = List.from_iter(OFX.parse_iter([bytes].iter(), {}))
-	actual = List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), {}))
+	expected = List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({})))
+	actual = List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({})))
 	expected == actual and expected.last() == Ok(Ok(Finished({ emitted_items: 4, rejected_records: 0 })))
 }
 
 expect {
 	invalid = sample_xml.replace_each("-12.30", "bad")
-	reported = List.from_iter(OFX.parse_iter([invalid.to_utf8()].iter(), { errors: { error_policy: ReportInvalidRecords } }))
-	skipped = List.from_iter(OFX.parse_iter([invalid.to_utf8()].iter(), { errors: { error_policy: SkipInvalidRecords } }))
+	reported = List.from_iter(Streaming.read_iter([invalid.to_utf8()].iter(), OFX.decoder({}).with_errors({ error_policy: ReportInvalidRecords })))
+	skipped = List.from_iter(Streaming.read_iter([invalid.to_utf8()].iter(), OFX.decoder({}).with_errors({ error_policy: SkipInvalidRecords })))
 	reported.len() == 5 and skipped.len() == 4 and reported.last() == Ok(Ok(Finished({ emitted_items: 3, rejected_records: 1 }))) and OFX.parse_str(invalid).is_err()
 }
 
@@ -1117,8 +1082,8 @@ expect {
 	document = OFX.parse_str(sample_xml)?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
-	opened = OFX.write(OFX.writer({ encoding: Windows1252 }), StatementStart(statement.context))?
-	OFX.write(opened.writer, Transaction({ ..value, name: "😀" })).is_err()
+	opened = write_event(initial_writer({ encoding: Windows1252 }), StatementStart(statement.context))?
+	write_event(opened.writer, Transaction({ ..value, name: "😀" })).is_err()
 }
 
 transaction_text : OFX.Transaction, OFX.Syntax -> Try(Str, Parser.Problem(OFX.Problem))
@@ -1152,9 +1117,9 @@ expect {
 	document = OFX.parse_str(sample_xml)?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
-	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	collision = Element({ name: "FITID", attributes: [], children: [Text("duplicate")] })
-	OFX.write(opened.writer, Transaction({ ..value, extensions: [collision] })).is_err()
+	write_event(opened.writer, Transaction({ ..value, extensions: [collision] })).is_err()
 }
 
 expect {
@@ -1171,27 +1136,27 @@ expect {
 	document = OFX.parse_str(sample_xml)?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
-	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	nul = Element({ name: "VENDOR", attributes: [], children: [Text("\u(0)")] })
-	OFX.write(opened.writer, Transaction({ ..value, extensions: [nul] })).is_err()
+	write_event(opened.writer, Transaction({ ..value, extensions: [nul] })).is_err()
 }
 expect {
 	document = OFX.parse_str(sample_xml)?
 	context = document.statements.first()?.context
-	OFX.write(OFX.writer({ syntax: Sgml102 }), StatementStart({ ..context, header: { ..context.header, old_uid: "a:b" } })).is_err() and OFX.write(OFX.writer({ syntax: Sgml102 }), StatementStart({ ..context, header: { ..context.header, old_uid: "a<b" } })).is_err()
+	write_event(initial_writer({ syntax: Sgml102 }), StatementStart({ ..context, header: { ..context.header, old_uid: "a:b" } })).is_err() and write_event(initial_writer({ syntax: Sgml102 }), StatementStart({ ..context, header: { ..context.header, old_uid: "a<b" } })).is_err()
 }
 expect {
 	bytes = "\u(feff)${sample_xml}".to_utf8()
-	List.from_iter(OFX.parse_iter([bytes].iter(), {})) == List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), {}))
+	List.from_iter(Streaming.read_iter([bytes].iter(), OFX.decoder({}))) == List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), OFX.decoder({})))
 }
 
 expect {
 	document = OFX.parse_str(sample_xml)?
 	statement = document.statements.first()?
-	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	opened = write_event(initial_writer({}), StatementStart(statement.context))?
 	balance = statement.ledger_balance?
-	once = OFX.write(opened.writer, LedgerBalance(balance))?
-	OFX.write(once.writer, LedgerBalance(balance)).is_err()
+	once = write_event(opened.writer, LedgerBalance(balance))?
+	write_event(once.writer, LedgerBalance(balance)).is_err()
 }
 expect !timestamp("20260101[5:EST:extra]") and !timestamp("20260101[5:EST]extra]")
 
@@ -1207,8 +1172,8 @@ expect {
 	document = OFX.parse_str(sample_xml)?
 	statement = document.statements.first()?
 	value = statement.transactions.first()?
-	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
-	["1EXT", ".EXT"].all(|name| OFX.write(opened.writer, Transaction({ ..value, extensions: [Element({ name, attributes: [], children: [Text("x")] })] })).is_err())
+	opened = write_event(initial_writer({}), StatementStart(statement.context))?
+	["1EXT", ".EXT"].all(|name| write_event(opened.writer, Transaction({ ..value, extensions: [Element({ name, attributes: [], children: [Text("x")] })] })).is_err())
 }
 expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><1EXT></1EXT>")).is_err()
 

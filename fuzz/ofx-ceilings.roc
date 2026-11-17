@@ -2,6 +2,7 @@ app [target] {
 	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.6.2/3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
 	parser: "../package/main.roc",
 }
+import parser.Streaming
 import fuzz.Fuzz
 import parser.OFX
 
@@ -26,7 +27,7 @@ drain = |count| {
 		},
 	)
 	var $count = 0.U64
-	for event in OFX.parse_iter(chunks, {}) {
+	for event in Streaming.read_iter(chunks, OFX.decoder({})) {
 		match event {
 			Ok(Value(Transaction(_))) => {
 				$count = $count + 1
@@ -65,7 +66,7 @@ retain_id = |count| {
 	)
 	var $id = ""
 	var $count = 0.U64
-	for event in OFX.parse_iter(chunks, { max_token_bytes: 524288 }) {
+	for event in Streaming.read_iter(chunks, OFX.decoder({ max_token_bytes: 524288 })) {
 		match event {
 			Ok(Value(Transaction(transaction))) => {
 				if $count == 0 {

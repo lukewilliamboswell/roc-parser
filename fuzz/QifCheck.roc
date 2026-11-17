@@ -29,15 +29,15 @@ QifCheck :: [].{
 
 	## Compare the same bytes under one-byte, scheduled, empty and whole chunks.
 	raw = |bytes| {
-		one = List.from_iter(QIF.parse_iter([bytes].iter(), {}))
+		one = List.from_iter(Streaming.read_iter([bytes].iter(), QIF.decoder({})))
 		chunks = bytes.map(|byte| [byte])
-		many = List.from_iter(QIF.parse_iter(chunks.iter(), {}))
+		many = List.from_iter(Streaming.read_iter(chunks.iter(), QIF.decoder({})))
 		if one != many {
 			crash "QIF chunk scheduling changed results"
 		}
 		match QIF.parse_bytes(bytes, {}) {
 			Ok(doc) => {
-				got = Streaming.collect(QIF.parse_iter([[], bytes, []].iter(), {})) ?? crash "raw/iter acceptance mismatch"
+				got = Streaming.collect(Streaming.read_iter([[], bytes, []].iter(), QIF.decoder({}))) ?? crash "raw/iter acceptance mismatch"
 				if got != doc.events {
 					crash "raw/iter event mismatch"
 				}
@@ -69,7 +69,7 @@ QifCheck :: [].{
 		}
 		chunk_bytes = (bytes.first() ?? 0).to_u64() % 64 + 1
 		var $written = []
-		for chunk in QIF.write_iter(doc.events.iter(), { line_ending: line_ending, chunk_bytes: chunk_bytes }) {
+		for chunk in Streaming.write_iter(doc.events.iter(), QIF.encoder({ line_ending: line_ending }).with_chunk_bytes(chunk_bytes)) {
 			encoded = chunk ?? crash "valid generated QIF cannot be written"
 			if encoded.len() > chunk_bytes {
 				crash "encoder exceeded configured chunk size"
@@ -77,11 +77,11 @@ QifCheck :: [].{
 			$written = $written.concat(encoded)
 		}
 		written = $written
-		parsed = Streaming.collect(QIF.parse_iter(written.map(|byte| [byte]).iter(), {})) ?? crash "valid generated QIF cannot be read"
+		parsed = Streaming.collect(Streaming.read_iter(written.map(|byte| [byte]).iter(), QIF.decoder({}))) ?? crash "valid generated QIF cannot be read"
 		if model(doc.events) != model(parsed) {
 			crash "generated QIF differs from independent model"
 		}
-		decoded = Streaming.collect(QIF.decode_iter([written].iter(), {})) ?? crash "valid generated QIF cannot be decoded"
+		decoded = Streaming.collect(Streaming.read_iter([written].iter(), QIF.transaction_decoder({}))) ?? crash "valid generated QIF cannot be decoded"
 		if decoded.len() != doc.events.len() {
 			crash "typed stream lost records"
 		}
@@ -96,7 +96,7 @@ QifCheck :: [].{
 				if unrepresentable {
 					crash "Windows-1252 writer silently changed characters"
 				}
-				parsed_legacy = Streaming.collect(QIF.parse_iter(legacy.map(|byte| [byte]).iter(), { encoding: Windows1252 })) ?? crash "legacy QIF rejected"
+				parsed_legacy = Streaming.collect(Streaming.read_iter(legacy.map(|byte| [byte]).iter(), QIF.decoder({ encoding: Windows1252 }))) ?? crash "legacy QIF rejected"
 				if model(parsed_legacy) != model(doc.events) {
 					crash "Windows-1252 QIF semantic roundtrip changed values"
 				}
@@ -118,7 +118,7 @@ QifCheck :: [].{
 		}
 		raw(truncated)
 		bad = "!Type:Bank\nD27/08/2024\nTbad\n^\nD27/08/2024\nT1\n^\n".to_utf8()
-		results = List.from_iter(QIF.decode_iter(bad.map(|byte| [byte]).iter(), { errors: { error_policy: ReportInvalidRecords } }))
+		results = List.from_iter(Streaming.read_iter(bad.map(|byte| [byte]).iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords })))
 		if results.last() != Ok(Ok(Finished({ emitted_items: 2, rejected_records: 1 }))) {
 			crash "recovery report counts differ"
 		}

@@ -12,7 +12,7 @@ source = "<OFX><BANKMSGSRSV1><STMTTRNRS><TRNUID>0</TRNUID><STATUS><CODE>0</CODE>
 main! : List(OsStr) => Try({}, _)
 main! = |_| {
 	chunks = source.to_utf8().map(|byte| [byte]).iter()
-	for item in OFX.parse_iter(chunks, {}) {
+	for item in Streaming.read_iter(chunks, OFX.decoder({})) {
 		match item {
 			Ok(Value(Transaction(transaction))) => Stdout.line!("${transaction.id}: ${transaction.amount} ${transaction.name}")?
 			Ok(Finished(report)) => Stdout.line!("finished: ${report.emitted_items.to_str()} items, ${report.rejected_records.to_str()} rejected")?

@@ -43,7 +43,7 @@ methods = [Get, Head, Connect, Post]
 
 read : List(List(U8)), Bool, HTTP.ReadProps -> List(Observation)
 read = |chunks, responses, props| {
-	reader = if (responses) HTTP.iter_responses(chunks.iter(), methods.iter(), props) else HTTP.iter_requests(chunks.iter(), props)
+	reader = if (responses) Streaming.read_iter(chunks.iter(), HTTP.response_decoder(methods.iter(), props)) else Streaming.read_iter(chunks.iter(), HTTP.request_decoder(props))
 	var $out = []
 	var $count = 0.U64
 	for result in reader {
@@ -79,7 +79,7 @@ prefix = |bytes, responses, props| {
 	var $used = 0.U64
 	var $out = []
 	while True {
-		next = HTTP.step($decoder, bytes.drop_first($used), More)
+		next = $decoder.step(bytes.drop_first($used), More)
 		if next.consumed > bytes.len() - $used {
 			crash "HTTP consumed beyond input"
 		}
@@ -105,7 +105,7 @@ check_source! : List(U8), Bool, HTTP.ReadProps => {}
 check_source! = |bytes, responses, props| {
 	source : Stream(Try(List(U8), [Injected]))
 	source = [Ok(bytes), Err(Injected), Ok("unread".to_utf8())].iter().stream()
-	reader = if (responses) HTTP.stream_responses(source, methods.iter(), props) else HTTP.stream_requests(source, props)
+	reader = if (responses) Streaming.read_stream(source, HTTP.response_decoder(methods.iter(), props)) else Streaming.read_stream(source, HTTP.request_decoder(props))
 	var $out = []
 	for! result in reader {
 		match result {

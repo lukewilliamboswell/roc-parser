@@ -2,6 +2,7 @@ app [target] {
 	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.6.2/3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
 	parser: "../package/main.roc",
 }
+import parser.Streaming
 import fuzz.Fuzz
 import parser.QIF
 
@@ -24,7 +25,7 @@ drain = |n| {
 		},
 	)
 	var $count = 0.U64
-	for result in QIF.parse_iter(chunks, {}) {
+	for result in Streaming.read_iter(chunks, QIF.decoder({})) {
 		match result {
 			Ok(Value(Record(_))) => {
 				$count = $count + 1

@@ -152,39 +152,14 @@ HTTP :: [].{
 	## successful CONNECT, `ProtocolSwitch` precedes uninterpreted `ProtocolData`.
 	Event : [RequestHead(RequestHead), ResponseHead(ResponseHead), Body(List(U8)), Trailer(Header), MessageEnd, ProtocolSwitch, ProtocolData(List(U8))]
 
-	## Incremental state. Retain only the latest state to release consumed bytes.
-	Decoder : IncrementalState
+	## Configure request events for Streaming.read_iter or Streaming.read_stream.
+	request_decoder : ReadProps -> Streaming.Decoder(IncrementalState, Event, Error)
+	request_decoder = |props| Streaming.decoder(incremental_initial(props, Requests, [].iter()), incremental_step)
 
-	## Begin a request pipeline. Construction does not read a source.
-	request_decoder : ReadProps -> Decoder
-	request_decoder = |props| incremental_initial(props, Requests, [].iter())
-
-	## Begin responses associated with request methods in encounter order.
-	## Informational responses retain the current method. A final response
-	## consumes it; unused methods are not pulled at source EOF.
-	response_decoder : Iter(Method), ReadProps -> Decoder
-	response_decoder = |methods, props| incremental_initial(props, Responses, methods)
-
-	## Consume bytes until one event, failure, or a request for more input.
-	## Broken framing and resource limits are terminal; records are never skipped.
-	step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, Error)
-	step = incremental_step
-
-	## Lazily read a pure request pipeline from arbitrary byte chunks.
-	iter_requests : Iter(List(U8)), ReadProps -> Iter(Try(Streaming.ReadEvent(Event, Error), Streaming.ReadError(Error)))
-	iter_requests = |chunks, props| Streaming.iter(chunks, request_decoder(props), step, {})
-
-	## Lazily read effectful request chunks, preserving source errors.
-	stream_requests : Stream(Try(List(U8), source_error)), ReadProps -> _
-	stream_requests = |chunks, props| Streaming.stream(chunks, request_decoder(props), step, {})
-
-	## Read pure response chunks using the matching request method queue.
-	iter_responses : Iter(List(U8)), Iter(Method), ReadProps -> Iter(Try(Streaming.ReadEvent(Event, Error), Streaming.ReadError(Error)))
-	iter_responses = |chunks, methods, props| Streaming.iter(chunks, response_decoder(methods, props), step, {})
-
-	## Read effectful response chunks using the matching request method queue.
-	stream_responses : Stream(Try(List(U8), source_error)), Iter(Method), ReadProps -> _
-	stream_responses = |chunks, methods, props| Streaming.stream(chunks, response_decoder(methods, props), step, {})
+	## Associate responses with request methods in encounter order.
+	## Informational responses retain the method; a final response consumes it.
+	response_decoder : Iter(Method), ReadProps -> Streaming.Decoder(IncrementalState, Event, Error)
+	response_decoder = |methods, props| Streaming.decoder(incremental_initial(props, Responses, methods), incremental_step)
 
 	## The value of the first header with this name, compared
 	## case-insensitively, or `Err(Missing)`.
@@ -1633,11 +1608,11 @@ normalize_http_test = |input| {
 http_split_requests : Str -> Bool
 http_split_requests = |text| {
 	bytes = text.to_utf8()
-	want = normalize_http_test(HTTP.iter_requests([bytes].iter(), {}))
-	var $same = normalize_http_test(HTTP.iter_requests(bytes.map(|byte| [byte]).iter(), {})) == want
+	want = normalize_http_test(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({})))
+	var $same = normalize_http_test(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), HTTP.request_decoder({}))) == want
 	for split in (0.U64).to(bytes.len() + 1) {
 		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
-		if normalize_http_test(HTTP.iter_requests(parts.iter(), {})) != want {
+		if normalize_http_test(Streaming.read_iter(parts.iter(), HTTP.request_decoder({}))) != want {
 			$same = False
 		}
 	}
@@ -1647,11 +1622,11 @@ http_split_requests = |text| {
 http_split_responses : Str, List(HTTP.Method) -> Bool
 http_split_responses = |text, methods| {
 	bytes = text.to_utf8()
-	want = normalize_http_test(HTTP.iter_responses([bytes].iter(), methods.iter(), {}))
-	var $same = normalize_http_test(HTTP.iter_responses(bytes.map(|byte| [byte]).iter(), methods.iter(), {})) == want
+	want = normalize_http_test(Streaming.read_iter([bytes].iter(), HTTP.response_decoder(methods.iter(), {})))
+	var $same = normalize_http_test(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), HTTP.response_decoder(methods.iter(), {}))) == want
 	for split in (0.U64).to(bytes.len() + 1) {
 		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
-		if normalize_http_test(HTTP.iter_responses(parts.iter(), methods.iter(), {})) != want {
+		if normalize_http_test(Streaming.read_iter(parts.iter(), HTTP.response_decoder(methods.iter(), {}))) != want {
 			$same = False
 		}
 	}
@@ -1660,14 +1635,14 @@ http_split_responses = |text, methods| {
 
 expect {
 	text = "POST /one HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhelloGET /two HTTP/1.1\r\nHost: a\r\n\r\n"
-	events = Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({})))?
 	events == [RequestHead({ method: Post, target: "/one", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }, { name: "Content-Length", value: "5" }] }), Body("hello".to_utf8()), MessageEnd, RequestHead({ method: Get, target: "/two", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }] }), MessageEnd]
 		and http_split_requests(text)
 }
 
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b;c=\"q\\\"\"\r\nhello\r\n6\r\n world\r\n0\r\nX-Trailer: t\r\n\r\n"
-	events = Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({})))?
 	events.drop_first(1) == [Body("hello".to_utf8()), Body(" world".to_utf8()), Trailer({ name: "X-Trailer", value: "t" }), MessageEnd]
 		and http_split_requests(text)
 }
@@ -1679,7 +1654,7 @@ expect [
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nab",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n",
-].all(|text| Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {})).is_err() and http_split_requests(text))
+].all(|text| Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({}))).is_err() and http_split_requests(text))
 
 expect [
 	"GET / HTTP/1.1\r\nHost: a\r\n\r\ninvalid suffix",
@@ -1691,77 +1666,77 @@ expect [
 	"GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 1, 2\r\n\r\n",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;=bad\r\na\r\n0\r\n\r\n",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nContent-Length: 2\r\n\r\n",
-].all(|text| Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {})).is_err() and http_split_requests(text))
+].all(|text| Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({}))).is_err() and http_split_requests(text))
 
 expect {
 	text = "HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\nHTTP/1.1 204 Empty\r\n\r\nHTTP/1.1 304 Cached\r\n\r\n"
-	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Head, Get, Get].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Head, Get, Get].iter(), {})))?
 	events.len() == 6 and events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and http_split_responses(text, [Head, Get, Get])
 }
 
 expect {
 	text = "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
-	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Post].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Post].iter(), {})))?
 	events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and events.drop_first(5) == [Body("hi".to_utf8()), MessageEnd] and http_split_responses(text, [Post])
 }
 
 expect {
 	text = "HTTP/1.1 200 OK\r\n\r\nbody\r\nHTTP/1.1 is body text"
-	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Get].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Get].iter(), {})))?
 	events.drop_first(1) == [Body("body\r\nHTTP/1.1 is body text".to_utf8()), MessageEnd] and http_split_responses(text, [Get])
 }
 
 expect {
 	text = "HTTP/1.1 200 Connected\r\n\r\ntunnel\r\nnot HTTP"
-	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Connect].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Connect].iter(), {})))?
 	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("tunnel\r\nnot HTTP".to_utf8())] and http_split_responses(text, [Connect])
 }
 
 expect {
 	text = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\nraw"
-	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Get].iter(), {}))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Get].iter(), {})))?
 	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("raw".to_utf8())] and http_split_responses(text, [Get])
 }
 
 expect {
 	text = "HTTP/1.1 403 Forbidden\r\nContent-Length: 2\r\n\r\nnoHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
-	Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Connect, Get].iter(), {})).is_ok() and http_split_responses(text, [Connect, Get])
+	Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Connect, Get].iter(), {}))).is_ok() and http_split_responses(text, [Connect, Get])
 }
 
 expect {
 	text = "HTTP/1.1 100 Continue\r\n\r\n"
-	Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Post].iter(), {})).is_err() and http_split_responses(text, [Post])
+	Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Post].iter(), {}))).is_err() and http_split_responses(text, [Post])
 }
 
 expect {
 	bytes = "HTTP/1.1 204 Empty\r\n\r\n".to_utf8()
-	Streaming.collect(HTTP.iter_responses([bytes].iter(), [].iter(), {})).is_err()
-		and Streaming.collect(HTTP.iter_responses([bytes.concat(bytes)].iter(), [Get].iter(), {})).is_err()
+	Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.response_decoder([].iter(), {}))).is_err()
+		and Streaming.collect(Streaming.read_iter([bytes.concat(bytes)].iter(), HTTP.response_decoder([Get].iter(), {}))).is_err()
 }
 
 expect {
 	bytes = "GET / HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
-	Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_head_bytes: bytes.len() })).is_ok()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_head_bytes: bytes.len() - 1 })).is_err()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_line_bytes: 14, max_headers: 1 })).is_ok()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_line_bytes: 13 })).is_err()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_headers: 0 })).is_err()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_headers: U64.highest, max_line_bytes: U64.highest })).is_ok()
+	Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_head_bytes: bytes.len() }))).is_ok()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_head_bytes: bytes.len() - 1 }))).is_err()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_line_bytes: 14, max_headers: 1 }))).is_ok()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_line_bytes: 13 }))).is_err()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_headers: 0 }))).is_err()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_headers: U64.highest, max_line_bytes: U64.highest }))).is_ok()
 }
 
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n\r\n"
 	bytes = text.to_utf8()
-	Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_trailer_bytes: 8, max_trailers: 1 })).is_ok()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_trailer_bytes: 7 })).is_err()
-		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_trailers: 0 })).is_err()
+	Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_trailer_bytes: 8, max_trailers: 1 }))).is_ok()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_trailer_bytes: 7 }))).is_err()
+		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_trailers: 0 }))).is_err()
 }
 
 expect {
 	text = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n0123456789"
-	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Get].iter(), { max_body_chunk_bytes: 3 }))?
+	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Get].iter(), { max_body_chunk_bytes: 3 })))?
 	events.drop_first(1) == [Body("012".to_utf8()), Body("345".to_utf8()), Body("678".to_utf8()), Body("9".to_utf8()), MessageEnd]
-		and Streaming.collect(HTTP.iter_requests([[]].iter(), { max_body_chunk_bytes: 0 })).is_err()
+		and Streaming.collect(Streaming.read_iter([[]].iter(), HTTP.request_decoder({ max_body_chunk_bytes: 0 }))).is_err()
 }
 
 expect {
@@ -1769,7 +1744,7 @@ expect {
 	# source chunks or the next request context.
 	chunks = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled body source before demand" else Ok(("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\n".to_utf8(), True)))
 	methods = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled next method before demand" else Ok((Get, True)))
-	match HTTP.iter_responses(chunks, methods, {}).next() {
+	match Streaming.read_iter(chunks, HTTP.response_decoder(methods, {})).next() {
 		One({ item: Ok(Value(ResponseHead(head))), .. }) => head.status_code == 200
 		_ => False
 	}
@@ -1778,12 +1753,12 @@ expect {
 expect {
 	# Completion validates only consumed responses; surplus context is lazy.
 	methods = Iter.custom({}, Err(Unknown), |_| crash "pulled unused context at EOF")
-	Streaming.collect(HTTP.iter_responses([[], []].iter(), methods, {})) == Ok([])
+	Streaming.collect(Streaming.read_iter([[], []].iter(), HTTP.response_decoder(methods, {}))) == Ok([])
 }
 
 expect {
 	chunks = Iter.custom({}, Err(Unknown), |_| crash "read source with invalid fragment limit")
-	match HTTP.iter_requests(chunks, { max_body_chunk_bytes: 0 }).next() {
+	match Streaming.read_iter(chunks, HTTP.request_decoder({ max_body_chunk_bytes: 0 })).next() {
 		One({ item: Err(ParseErr(_)), .. }) => True
 		_ => False
 	}
@@ -1791,8 +1766,8 @@ expect {
 
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;abcdefghijklmnop=abcdefghijklmnop\r\nx\r\n0\r\n\r\n"
-	Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), { max_line_bytes: 35 })).is_ok()
-		and Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), { max_line_bytes: 34 })).is_err()
+	Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({ max_line_bytes: 35 }))).is_ok()
+		and Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({ max_line_bytes: 34 }))).is_err()
 }
 
 # Fixed SIMD masks must recognize the complete HTTP byte classes, including
@@ -1821,8 +1796,8 @@ expect {
 		|value| {
 			bytes = prefix.concat(List.repeat('a', 32)).concat(value).concat("\r\n\r\n".to_utf8())
 			HTTP.parse_request(bytes).is_err()
-				and Streaming.collect(HTTP.iter_requests([bytes].iter(), {})).is_err()
-				and Streaming.collect(HTTP.iter_requests(bytes.map(|byte| [byte]).iter(), {})).is_err()
+				and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({}))).is_err()
+				and Streaming.collect(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), HTTP.request_decoder({}))).is_err()
 		},
 	)
 }

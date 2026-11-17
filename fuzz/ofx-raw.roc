@@ -9,7 +9,7 @@ import OfxGen
 
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
-	results = List.from_iter(OFX.parse_iter(OfxGen.chunks(bytes, bytes).iter(), {}))
+	results = List.from_iter(Streaming.read_iter(OfxGen.chunks(bytes, bytes).iter(), OFX.decoder({})))
 	for event in results {
 		match event {
 			Err(ParseErr(error)) | Err(ErrorLimitExceeded({ error, .. })) => {
