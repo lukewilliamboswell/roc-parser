@@ -1,6 +1,5 @@
+import Diagnostic
 import Parser
-import Utf8
-import Literal as Quotation
 import Streaming
 import CSVReader
 
@@ -35,8 +34,8 @@ import CSVReader
 ## ```roc
 ## Person : { name : Str, age : U64 }
 ##
-## people : Try(List(Person), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-## people = CSV.parse("name,age\nAda,36\nAlan,41\n")
+## people : Try(List(Person), [InvalidCsv(CSV.Error)])
+## people = CSV.decode_str("name,age\nAda,36\nAlan,41\n", {})
 ##
 ## expect people == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 ## ```
@@ -55,16 +54,16 @@ CSV := { records : List(CSV.Record) }.{
 	Record : List(List(U8))
 
 	## Native CSV failures. Payload bytes are bounded excerpts of source data.
-	Problem(p) : [Syntax(CSVReader.Problem), ExpectedValue({ expected : ValueType, bytes : List(U8) }), MissingField, WidthMismatch({ found : U64, expected : U64 }), EmptyHeader, DuplicateHeader(Str), UnsupportedCell([Record, Tuple, TagPayload]), InvalidValue, UnknownTag(List(U8)), ..p]
+	Problem(p) : [Syntax(CSVReader.Problem), ExpectedValue({ expected : ValueType, bytes : List(U8) }), MissingField, WidthMismatch({ found : U64, expected : U64 }), EmptyHeader, DuplicateHeader(Str), MissingRequiredField(Str), UnsupportedCell([Record, Tuple, TagPayload]), InvalidValue, UnknownTag(List(U8)), ..p]
 
 	## The scalar type expected by a cell decoder.
 	ValueType : [Text, Boolean, Empty, U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, Dec, F32, F64]
 
 	## One-based record, field, physical line and byte column; unknown positions are zero.
-	Located(problem) : { record : U64, field : U64, line : U64, column : U64, problem : problem }
+	Located(problem) : Diagnostic(problem)
 
 	## A CSV syntax or type-directed decoding failure.
-	Error : Located(Parser.Problem(Problem([])))
+	Error : Located(Problem([]))
 
 	## A custom positional parser failure, preserving its own tagged problem.
 	RowError(problem) : Located([ParserFailure(Parser.Problem(problem)), UnreadFields({ found : U64, read : U64 })])
@@ -85,7 +84,7 @@ CSV := { records : List(CSV.Record) }.{
 	## Check quoted CSV during compilation. Access raw records with `.records`.
 	## The first record is data unless configured validation selects a header.
 	from_quote : Str -> Try(CSV, [BadQuotedBytes(Str)])
-	from_quote = |source| CSV.validate({ source: source }).map_ok(|records| CSV.{ records })
+	from_quote = |source| CSV.validate({ source: source }).map_ok(|records| CSV.{ records }).map_err(|InvalidCsv(error)| checked_error("<literal>", error))
 
 	## A quotation of typed CSV rows. Access the rows with `.value`.
 	Decoded(row) : CsvDecoded(row)
@@ -93,36 +92,24 @@ CSV := { records : List(CSV.Record) }.{
 	## Validate raw CSV records, rejecting selected header checks as well as
 	## malformed CSV. Header checks compare normalized names in `Normalized`
 	## mode; `Absent` does not interpret any record as column names.
-	validate : ValidationProps -> Try(List(Record), [BadQuotedBytes(Str)])
-	validate = |props| checked_records(props.source, props.name, props.header, props.lints)
+	validate : ValidationProps -> Try(List(Record), [InvalidCsv(Error)])
+	validate = |props| checked_records(props.source, props.header, props.lints)
 
 	## Validate and decode rows into the inferred Roc type. `Exact` and
 	## `Normalized` use a header; `Absent` decodes headerless tuples.
-	validate_as : DecodeValidationProps -> Try(List(row), [BadQuotedBytes(Str)])
+	validate_as : DecodeValidationProps -> Try(List(row), [InvalidCsv(Error), ..errs])
 		where [row.Parseable([InvalidCsv(Error), ..errs])]
 	validate_as = |props| {
-		records = checked_records(props.source, props.name, props.header, props.lints)?
+		records = checked_records(props.source, props.header, props.lints)?
 		Row : row
-		match decode_records(props.source.to_utf8(), records, Row.parser_for(Format.Default), decoding_mode(props.header)) {
-			Ok(values) => Ok(values)
-			Err(InvalidCsv(problem)) => Err(checked_error(props.name, problem))
-			Err(other) => Err(Quotation.error({ name: props.name, format: "CSV", message: "decoding failed: ${Str.inspect(other)}" }))
-		}
+		decode_records(props.source.to_utf8(), records, Row.parser_for(CsvFormat.Default), decoding_mode(props.header))
 	}
 
 	## Parse CSV text into raw records without decoding them.
 	##
 	## ```roc
-	## expect CSV.parse_records("a,\"b,c\"\n") == Ok([["a".to_utf8(), "b,c".to_utf8()]])
+	## expect CSV.parse_str("a,\"b,c\"\n", {}).map_ok(|document| document.records) == Ok([["a".to_utf8(), "b,c".to_utf8()]])
 	## ```
-	parse_records : Str -> Try(List(Record), [InvalidCsv(Error)])
-	parse_records = |text| {
-		bytes = text.to_utf8()
-		match scan_table(bytes) {
-			Ok(records) => Ok(records)
-			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
-		}
-	}
 
 	## Parse every field as text, including the header as an ordinary record.
 	##
@@ -131,10 +118,16 @@ CSV := { records : List(CSV.Record) }.{
 	## Uses the same grammar and syntax diagnostics as [CSV.parse_records].
 	##
 	## ```roc
-	## expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n") == Ok([["name", "note"], ["Ada", "said \"hello\""]])
+	## expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n", {}) == Ok([["name", "note"], ["Ada", "said \"hello\""]])
 	## ```
-	parse_string_records : Str -> Try(List(List(Str)), [InvalidCsv(Error)])
-	parse_string_records = |text| {
+	parse_string_records : Str, Props -> Try(List(List(Str)), [InvalidCsv(Error)])
+	parse_string_records = |text, props| {
+		match props.validation {
+			SyntaxOnly => {}
+			Checked(lints) => {
+				_ = checked_records(text, props.header, lints)?
+			}
+		}
 		bytes = text.to_utf8()
 		len = bytes.len()
 		match scan_table_as(bytes, |field_bytes, start, next, quoted| string_field(text, len, field_bytes, start, next, quoted)) {
@@ -147,12 +140,12 @@ CSV := { records : List(CSV.Record) }.{
 	##
 	## It reads records until its input ends, so it consumes all of it or fails
 	## with the offset of the malformed field. It accepts any bytes.
-	parser : {} -> Parser(Utf8.Bytes, List(Record), Problem(p))
-	parser = |_| Parser.custom(
+	parser : Props -> Parser(Parser.Utf8.Bytes, CSV, [InvalidCsv(Error)])
+	parser = |props| Parser.custom(
 		|bytes| {
-			match scan_table(bytes) {
-				Ok(records) => Ok({ value: records, rest: [] })
-				Err(bad) => Err(ParseError({ problem: Syntax(scanner_problem(bad.problem)), offset: bad.at }))
+			match CSV.parse_bytes(bytes, props) {
+				Ok(value) => Ok({ value, rest: [] })
+				Err(InvalidCsv(error)) => Err(ParseError(Diagnostic.{ problem: InvalidCsv(error), location: error.location, path: error.path }))
 			}
 		},
 	)
@@ -164,7 +157,7 @@ CSV := { records : List(CSV.Record) }.{
 	##
 	## ```roc
 	## expect {
-	##     records = CSV.parse_records("name,age\nAda,36\n")?
+	##     records = CSV.parse_str("name,age\nAda,36\n", {}).map_ok(|document| document.records)?
 	##     CSV.split_header(records) == { header: ["name", "age"], rows: [["Ada".to_utf8(), "36".to_utf8()]] }
 	## }
 	## ```
@@ -186,67 +179,13 @@ CSV := { records : List(CSV.Record) }.{
 	## user : Parser(CSV.Record, { name : Str, age : U64 }, _)
 	## user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.u64({})))
 	##
-	## expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+	## expect CSV.rows_parser({row:user}).parse_str("Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 	## ```
-	parse_with : Parser(Record, a, p), Str -> Try(List(a), [InvalidCsv(Error), InvalidRow(RowError(p))])
-	parse_with = |record_parser, text| {
-		bytes = text.to_utf8()
-		var $values = []
-		var $pos = 0.U64
-		var $index = 0.U64
-		var $field_capacity = 0.U64
-		while $pos < bytes.len() {
-			match scan_record_sized(bytes, $pos, $field_capacity) {
-				Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
-				Ok({ fields, next }) => {
-					$field_capacity = smaller(fields.len(), 64)
-					match record_parser.run(fields) {
-						Ok({ value, rest }) if rest.is_empty() => {
-							$values = $values.append(value)
-						}
-						Ok({ rest, .. }) => {
-							# Rebuild the row only for this error, so successful decoding
-							# can consume its fields without keeping another list alias.
-							match scan_record(bytes, $pos) {
-								Ok({ fields: again, .. }) => return Err(InvalidRow(locate(bytes, leftover_error(record_parser, again, rest.len(), $index + 1))))
-								Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
-							}
-						}
-						Err(ParseError({ problem, offset })) => return Err(InvalidRow(locate(bytes, { record: $index + 1, field: offset + 1, line: 0, column: 0, problem: ParserFailure(problem) })))
-					}
-					$pos = after_break(bytes, next)
-					$index = $index + 1
-				}
-			}
-		}
-		Ok($values)
-	}
 
 	## Decode already parsed records with a hand-built record parser.
 	##
 	## Errors are as for [CSV.parse_with], numbered from the first record given,
 	## with `line` and `column` set to `0`.
-	decode : Parser(Record, a, p), List(Record) -> Try(List(a), [InvalidCsv(Error), InvalidRow(RowError(p))])
-	decode = |record_parser, records| {
-		var $values = List.with_capacity(records.len())
-		var $index = 0
-		while $index < records.len() {
-			fields = records.get($index) ?? []
-			match record_parser.run(fields) {
-				Ok({ value, rest }) if rest.is_empty() => {
-					$values = $values.append(value)
-				}
-				Ok({ value: _, rest }) => {
-					return Err(InvalidRow(leftover_error(record_parser, fields, rest.len(), $index + 1)))
-				}
-				Err(ParseError({ problem, offset })) => {
-					return Err(InvalidRow({ record: $index + 1, field: offset + 1, line: 0, column: 0, problem: ParserFailure(problem) }))
-				}
-			}
-			$index = $index + 1
-		}
-		Ok($values)
-	}
 
 	## Start a record parser with a curried constructor for the desired value.
 	##
@@ -258,7 +197,7 @@ CSV := { records : List(CSV.Record) }.{
 	## name : Parser(CSV.Record, Name, _)
 	## name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.string({})))
 	##
-	## expect CSV.parse_with(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
+	## expect CSV.rows_parser({row:name}).parse_str("Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
 	## ```
 	record : a -> Parser(Record, a, p)
 	record = |f| {
@@ -269,19 +208,19 @@ CSV := { records : List(CSV.Record) }.{
 	##
 	## The field parser must consume the whole field. Fails when the record has
 	## no fields left.
-	field : Parser(Utf8.Bytes, a, p) -> Parser(Record, a, [MissingField, UnconsumedField(U64), FieldProblem({ offset : U64, problem : Parser.Problem(p) })])
+	field : Parser(Parser.Utf8.Bytes, a, p) -> Parser(Record, a, [MissingField, UnconsumedField(U64), FieldProblem(Diagnostic(Parser.Problem(p)))])
 	field = |field_parser| {
 		Parser.custom(
 			|fields| {
 				match fields.first() {
 					Err(_) =>
-						Err(ParseError({ problem: MissingField, offset: 0 }))
+						Err(ParseError(Diagnostic.{ problem: MissingField, location: InputOffset(0), path: [] }))
 
 					Ok(bytes) => {
 						match field_parser.run(bytes) {
 							Ok({ value, rest }) if rest.is_empty() => Ok({ value, rest: fields.drop_first(1) })
-							Ok({ rest, .. }) => Err(ParseError({ problem: UnconsumedField(rest.len()), offset: 0 }))
-							Err(ParseError({ problem, offset })) => Err(ParseError({ problem: FieldProblem({ offset, problem }), offset: 0 }))
+							Ok({ rest, .. }) => Err(ParseError(Diagnostic.{ problem: UnconsumedField(rest.len()), location: InputOffset(0), path: [] }))
+							Err(ParseError(error)) => Err(ParseError(Diagnostic.{ problem: FieldProblem(decoded_error(error)), location: InputOffset(0), path: error.path }))
 						}
 					}
 				}
@@ -290,12 +229,12 @@ CSV := { records : List(CSV.Record) }.{
 	}
 
 	## Parse one field as a valid UTF-8 string, kept verbatim (no trimming).
-	string : {} -> Parser(Utf8.Bytes, Str, Problem(p))
+	string : {} -> Parser(Parser.Utf8.Bytes, Str, Problem(p))
 	string = |_| Parser.custom(
 		|bytes| {
 			match Str.from_utf8(bytes) {
 				Ok(text) => Ok({ value: text, rest: [] })
-				Err(_) => Err(ParseError({ problem: expected_problem(Text, bytes), offset: 0 }))
+				Err(_) => Err(ParseError(Diagnostic.{ problem: expected_problem(Text, bytes), location: InputOffset(0), path: [] }))
 			}
 		},
 	)
@@ -305,12 +244,12 @@ CSV := { records : List(CSV.Record) }.{
 	## The field must be ASCII decimal digits with an optional leading `+`, and
 	## fit in a U64 (the grammar of Rust's `u64::from_str`). Whitespace,
 	## underscores, signs other than `+` and `0x`-style prefixes are rejected.
-	u64 : {} -> Parser(Utf8.Bytes, U64, Problem(p))
+	u64 : {} -> Parser(Parser.Utf8.Bytes, U64, Problem(p))
 	u64 = |_| Parser.custom(
 		|bytes| {
 			match int_from_bytes(bytes, U64.from_str, False) {
 				Ok(value) => Ok({ value, rest: [] })
-				Err(_) => Err(ParseError({ problem: expected_problem(U64, bytes), offset: 0 }))
+				Err(_) => Err(ParseError(Diagnostic.{ problem: expected_problem(U64, bytes), location: InputOffset(0), path: [] }))
 			}
 		},
 	)
@@ -323,12 +262,12 @@ CSV := { records : List(CSV.Record) }.{
 	## Rust's `f64::from_str`. Magnitudes too large for an F64 become infinity
 	## and too small ones become zero. Whitespace, underscores and hexadecimal
 	## forms are rejected.
-	f64 : {} -> Parser(Utf8.Bytes, F64, Problem(p))
+	f64 : {} -> Parser(Parser.Utf8.Bytes, F64, Problem(p))
 	f64 = |_| Parser.custom(
 		|bytes| {
 			match decimal_f64(bytes) {
 				Ok(value) => Ok({ value, rest: [] })
-				Err(_) => Err(ParseError({ problem: expected_problem(F64, bytes), offset: 0 }))
+				Err(_) => Err(ParseError(Diagnostic.{ problem: expected_problem(F64, bytes), location: InputOffset(0), path: [] }))
 			}
 		},
 	)
@@ -338,300 +277,85 @@ CSV := { records : List(CSV.Record) }.{
 	## and state types.
 	row.Parseable(errs) :
 		where [
-			row.parser_for : Format -> (State -> Try({ value : row, rest : State }, errs)),
+			row.parser_for : CsvFormat -> (State -> Try({ value : row, rest : State }, errs)),
 		]
 
-	## Decode CSV text whose first record is a header row into rows of an
-	## inferred type, usually a record.
-	##
-	## Each record field reads the column whose header is exactly its name;
-	## columns no field names are ignored, and when two columns share a name
-	## the last one wins. A field of type `Try(a, [Missing])` is
-	## `Err(Missing)` when its column is absent, and a field of type
-	## `Try(a, [Null])` is `Err(Null)` when its cell is empty. A required field
-	## with no column fails with `MissingRequiredField(name)`, which the
-	## compiler adds to the error type.
-	##
-	## Cells decode as `Str` (verbatim), `Bool` (`true` or `false` in any
-	## letter case), integers (ASCII digits with an optional sign, `-` only for
-	## signed types), `Dec` (an optional sign, digits and an optional fraction),
-	## `F32` and `F64` (as [CSV.f64]), and tags without payloads (the cell is
-	## the tag name). A field that is a record, a tuple or a tag with a payload
-	## fails when it is decoded; a field that is a list or a dictionary does not
-	## compile.
-	##
-	## Blank lines are skipped. Every other record must have exactly as many
-	## fields as the header; a shorter or longer record is an error naming it.
-	##
-	## ```roc
-	## Item : { sku : Str, count : U64, note : Try(Str, [Missing]), price : Try(Dec, [Null]) }
-	##
-	## items : Try(List(Item), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	## items = CSV.parse("price,sku,count\n1.50,A1,3\n,B2,0\n")
-	##
-	## expect items == Ok([
-	##     { sku: "A1", count: 3, note: Err(Missing), price: Ok(1.50) },
-	##     { sku: "B2", count: 0, note: Err(Missing), price: Err(Null) },
-	## ])
-	## ```
-	parse : Str -> Try(List(row), [InvalidCsv(Error), ..errs])
-		where [row.Parseable([InvalidCsv(Error), ..errs])]
-	parse = |text| {
-		Row : row
-		decode_table(text, Row.parser_for(Format.Default), HeaderExact)
+	## Typed rows use exact headers unless another mode is explicitly selected.
+	DecodeProps := { header : HeaderMode ?? Exact }
+
+	## Parse a complete CSV document and retain its raw records.
+	Props := { header : HeaderMode ?? Absent, validation : [SyntaxOnly, Checked(Lints)] ?? SyntaxOnly }
+	parse_str : Str, Props -> Try(CSV, [InvalidCsv(Error)])
+	parse_str = |source, props| CSV.parse_bytes(source.to_utf8(), props)
+
+	## Parse raw CSV bytes without imposing an encoding on field payloads.
+	parse_bytes : List(U8), Props -> Try(CSV, [InvalidCsv(Error)])
+	parse_bytes = |bytes, props| {
+		records = scan_table(bytes).map_err(|bad| InvalidCsv(syntax_error(bytes, bad)))?
+		match props.validation {
+			SyntaxOnly => {}
+			Checked(lints) => check_headers(bytes, records, props.header, lints)?
+		}
+		Ok(CSV.{ records })
 	}
 
-	## Like [CSV.parse], but header names are normalized before they are
-	## matched: surrounding spaces are removed, ASCII letters are lowercased,
-	## and runs of spaces, `-` and `_` become one `_`. A column headed
-	## `First Name`, `first-name` or `FIRST_NAME` fills a field `first_name`.
-	##
-	## ```roc
-	## names : Try(List({ first_name : Str }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	## names = CSV.parse_normalized(" First Name \nAda\n")
-	##
-	## expect names == Ok([{ first_name: "Ada" }])
-	## ```
-	parse_normalized : Str -> Try(List(row), [InvalidCsv(Error), ..errs])
-		where [row.Parseable([InvalidCsv(Error), ..errs])]
-	parse_normalized = |text| {
+	## Decode typed rows directly from source using the existing whole-input scanner.
+	decode_str : Str, DecodeProps -> Try(List(row), [InvalidCsv(Error), ..errs]) where [row.Parseable([InvalidCsv(Error), ..errs])]
+	decode_str = |source, props| {
 		Row : row
-		decode_table(text, Row.parser_for(Format.Default), HeaderNormalized)
+		decode_table(source, Row.parser_for(CsvFormat.Default), decoding_mode(props.header))
 	}
 
-	## Decode CSV text without a header row into tuples, one element per
-	## column.
-	##
-	## Every record (blank lines excepted) must have exactly as many fields as
-	## the tuple has elements. Cells decode as in [CSV.parse].
-	##
-	## ```roc
-	## pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	## pairs = CSV.parse_headerless("Ada,36\nAlan,41\n")
-	##
-	## expect pairs == Ok([("Ada", 36), ("Alan", 41)])
-	## ```
-	parse_headerless : Str -> Try(List(row), [InvalidCsv(Error), ..errs])
-		where [row.Parseable([InvalidCsv(Error), ..errs])]
-	parse_headerless = |text| {
+	## Decode an already parsed document without inventing physical coordinates.
+	decode : CSV, DecodeProps -> Try(List(row), [InvalidCsv(Error), ..errs]) where [row.Parseable([InvalidCsv(Error), ..errs])]
+	decode = |document, props| {
 		Row : row
-		decode_table(text, Row.parser_for(Format.Default), Headerless)
+		decode_records([], document.records, Row.parser_for(CsvFormat.Default), decoding_mode(props.header))
 	}
 
-	## The CSV format for type-directed decoding. Used through [CSV.parse];
-	## you do not need to name it.
-	Format :: [Default].{
+	## Decode this document with a positional row grammar.
+	decode_rows : CSV, RowsProps(row, problem) -> Try(List(row), [InvalidCsv(Error), InvalidRow(RowError(problem))])
+	decode_rows = |document, props| decode_rows_core(props.row, document.records)
 
-		## Field names are matched as written; [CSV.parse_normalized] normalizes the header instead.
-		rename_field : Format, Str -> Str
-		rename_field = |_, name| name
-
-		## Read the cell as UTF-8 text, verbatim.
-		parse_str : Format, State -> Try({ value : Str, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_str = |_, state| {
-			bytes = current_cell(state)?
+	## A configured whole-document parser for hand-built positional row grammars.
+	RowsProps(row, problem) := { row : Parser(Record, row, problem) }
+	rows_parser : RowsProps(row, problem) -> Parser(Parser.Utf8.Bytes, List(row), [InvalidCsv(Error), InvalidRow(RowError(problem))])
+	rows_parser = |props| Parser.custom(
+		|bytes| {
 			match Str.from_utf8(bytes) {
-				Ok(value) => Ok({ value, rest: state })
-				Err(_) => Err(cell_error(state, expected_problem(Text, bytes)))
+				Ok(source) => match parse_rows_core(props.row, source) {
+					Ok(value) => Ok({ value, rest: [] })
+					Err(InvalidCsv(error)) => Err(ParseError(Diagnostic.{ problem: InvalidCsv(error), location: error.location, path: error.path }))
+					Err(InvalidRow(error)) => Err(ParseError(Diagnostic.{ problem: InvalidRow(error), location: error.location, path: error.path }))
+				}
+				Err(BadUtf8(problem)) => Err(ParseError(Diagnostic.{ problem: InvalidCsv(Diagnostic.{ problem: ExpectedValue({ expected: Text, bytes: [] }), location: ByteOffset(problem.index), path: [] }), location: InputOffset(problem.index), path: [] }))
 			}
-		}
+		},
+	)
 
-		## Read `true` or `false` in any letter case.
-		parse_bool : Format, State -> Try({ value : Bool, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_bool = |_, state| {
-			bytes = current_cell(state)?
-			word = lowercase_ascii(bytes)
-			if word == "true".to_utf8() {
-				Ok({ value: True, rest: state })
-			} else if word == "false".to_utf8() {
-				Ok({ value: False, rest: state })
-			} else {
-				Err(cell_error(state, expected_problem(Boolean, bytes)))
-			}
-		}
-
-		## Read ASCII digits with an optional `+` as a U8.
-		parse_u8 : Format, State -> Try({ value : U8, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_u8 = |_, state| cell_int(state, U8.from_str, False, U8)
-
-		## Read ASCII digits with an optional sign as a I8.
-		parse_i8 : Format, State -> Try({ value : I8, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_i8 = |_, state| cell_int(state, I8.from_str, True, I8)
-
-		## Read ASCII digits with an optional `+` as a U16.
-		parse_u16 : Format, State -> Try({ value : U16, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_u16 = |_, state| cell_int(state, U16.from_str, False, U16)
-
-		## Read ASCII digits with an optional sign as a I16.
-		parse_i16 : Format, State -> Try({ value : I16, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_i16 = |_, state| cell_int(state, I16.from_str, True, I16)
-
-		## Read ASCII digits with an optional `+` as a U32.
-		parse_u32 : Format, State -> Try({ value : U32, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_u32 = |_, state| cell_int(state, U32.from_str, False, U32)
-
-		## Read ASCII digits with an optional sign as a I32.
-		parse_i32 : Format, State -> Try({ value : I32, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_i32 = |_, state| cell_int(state, I32.from_str, True, I32)
-
-		## Read ASCII digits with an optional `+` as a U64.
-		parse_u64 : Format, State -> Try({ value : U64, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_u64 = |_, state| cell_int(state, U64.from_str, False, U64)
-
-		## Read ASCII digits with an optional sign as a I64.
-		parse_i64 : Format, State -> Try({ value : I64, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_i64 = |_, state| cell_int(state, I64.from_str, True, I64)
-
-		## Read ASCII digits with an optional `+` as a U128.
-		parse_u128 : Format, State -> Try({ value : U128, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_u128 = |_, state| cell_int(state, U128.from_str, False, U128)
-
-		## Read ASCII digits with an optional sign as a I128.
-		parse_i128 : Format, State -> Try({ value : I128, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_i128 = |_, state| cell_int(state, I128.from_str, True, I128)
-
-		## Read an optional sign, digits and an optional fraction.
-		parse_dec : Format, State -> Try({ value : Dec, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_dec = |_, state| {
-			bytes = current_cell(state)?
-			match dec_from_bytes(bytes) {
-				Ok(value) => Ok({ value, rest: state })
-				Err(_) => Err(cell_error(state, expected_problem(Dec, bytes)))
-			}
-		}
-
-		## Read a float with the grammar of [CSV.f64].
-		parse_f32 : Format, State -> Try({ value : F32, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_f32 = |_, state| {
-			bytes = current_cell(state)?
-			match decimal_f64(bytes) {
-				Ok(value) => Ok({ value: value.to_f32_wrap(), rest: state })
-				Err(_) => Err(cell_error(state, expected_problem(F32, bytes)))
-			}
-		}
-
-		## Read a float with the grammar of [CSV.f64].
-		parse_f64 : Format, State -> Try({ value : F64, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_f64 = |_, state| {
-			bytes = current_cell(state)?
-			match decimal_f64(bytes) {
-				Ok(value) => Ok({ value, rest: state })
-				Err(_) => Err(cell_error(state, expected_problem(F64, bytes)))
-			}
-		}
-
-		## An empty cell is null, so a `Try(a, [Null])` field is `Err(Null)`.
-		parse_null : Format, State -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_null = |_, state| {
-			bytes = current_cell(state)?
-			if (bytes.is_empty()) Ok(state) else Err(cell_error(state, expected_problem(Empty, bytes)))
-		}
-
-		## A row is one record; a record inside a row is rejected.
-		parse_record_start : Format, State -> Try([Counted({ len : U64, rest : State }), Uncounted(State)], [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_record_start = |_, state| {
-			if state.nested {
-				Err(cell_error(state, UnsupportedCell(Record)))
-			} else {
-				Ok(Uncounted(State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True }))
-			}
-		}
-
-		## Offer the next header name as the field to fill.
-		parse_record_field : Format,
-		Encoding.FieldName.FieldNames(_shape),
-		State -> Try(
-			[
-				Field({ field : Encoding.FieldName(_shape), rest : State }),
-				TryField({ name : Str, rest : State }),
-				TryFieldCaseless({ name : Str, rest : State }),
-				Continue(State),
-				Done(State),
-			],
-			[InvalidCsv(Error), MissingRequiredField(Str)],
-		)
-		parse_record_field = |_, _, state| {
-			match state.header.get(state.column) {
-				Err(_) => Ok(Done(state))
-				Ok(name) => Ok(TryField({ name, rest: State.{ row: state.row, header: state.header, column: state.column + 1, cell: state.column, record: state.record, nested: True } }))
-			}
-		}
-
-		## The record ends after the last header column.
-		parse_record_after_field : Format, State -> Try([Continue(State), Done(State)], [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_record_after_field = |_, state| {
-			if (state.column >= state.header.len()) Ok(Done(state)) else Ok(Continue(state))
-		}
-
-		## The cell to skip is chosen by the column, so nothing is consumed.
-		skip_record_field : Format, State -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
-		skip_record_field = |_, state| Ok(state)
-
-		## A headerless row is a tuple with one element per field.
-		parse_tuple_start : Format, State, U64 -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_tuple_start = |_, state, len| {
-			if state.nested {
-				Err(cell_error(state, UnsupportedCell(Tuple)))
-			} else if state.row.len() != len {
-				Err(InvalidCsv({ record: state.record, field: smaller(state.row.len(), len) + 1, line: 0, column: 0, problem: width_problem(state.row.len(), len) }))
-			} else {
-				Ok(State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True })
-			}
-		}
-
-		## Move to the cell of the next tuple element.
-		parse_tuple_next : Format, State, U64, U64 -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_tuple_next = |_, state, index, _| Ok(State.{ row: state.row, header: state.header, column: index, cell: index, record: state.record, nested: True })
-
-		## The error for a cell that holds no valid value.
-		invalid_value : Format, State -> [InvalidCsv(Error), MissingRequiredField(Str)]
-		invalid_value = |_, state| cell_error(state, InvalidValue)
-
-		## Finish a tuple row.
-		parse_tuple_end : Format, State, U64 -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_tuple_end = |_, state, _| Ok(state)
-
-		## Report a required field absent from the input.
-		missing_field : Format, Str -> [InvalidCsv(Error), MissingRequiredField(Str)]
-		missing_field = |_, name| MissingRequiredField(name)
-
-		## A tag without a payload is read from its name.
-		parse_tag_union : Format, Encoding.ParseTagUnionSpec(a, Format, State, [InvalidCsv(Error), MissingRequiredField(Str)]), State -> Try({ value : a, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
-		parse_tag_union = |format, spec, state| {
-			bytes = current_cell(state)?
-			Encoding.ParseTagUnionSpec.parse(
-				spec,
-				{
-					tag: Str.from_utf8_lossy(bytes),
-					encoding: format,
-					state,
-					start_payloads: |s, count| if (count == 0) Ok(s) else Err(cell_error(s, UnsupportedCell(TagPayload))),
-					next_payload: |s, _, _| Ok(s),
-					finish_payloads: |s, _| Ok(s),
-					missing: cell_error(state, UnknownTag(error_excerpt(bytes))),
-				},
-			)
-		}
-	}
+	## The format value for custom parser_for implementations.
+	Format : CsvFormat
 
 	## Limits for one unfinished record; completed rows leave the decoder.
 	ReaderProps : CSVReader.Props
 
 	## Decode raw byte records with the shared streaming API.
-	decoder : ReaderProps -> Streaming.Decoder(CSVReader.State, Record, Error)
-	decoder = |props| Streaming.decoder(CSVReader.new(props), raw_step)
+	decoder : ReaderProps -> Streaming.Decoder(CSVReader.State, Record, [InvalidCsv(Error)])
+	decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(props), step: |state, bytes, end| Streaming.map_step_error(raw_step(state, bytes, end), |error| InvalidCsv(error)), errors: props.errors })
 
 	## Decode safely framed rows with a custom positional parser.
-	positional_decoder : Parser(Record, row, p), ReaderProps -> Streaming.Decoder(CSVReader.State, row, [InvalidCsv(Error), InvalidRow(RowError(p))])
-	positional_decoder = |parse_row, props| Streaming.decoder(CSVReader.new(props), |state, bytes, end| positional_step(parse_row, state, bytes, end))
+	PositionalProps(row, p) := { row : Parser(Record, row, p), reader : ReaderProps ?? {} }
+	positional_decoder : PositionalProps(row, p) -> Streaming.Decoder(CSVReader.State, row, [InvalidCsv(Error), InvalidRow(RowError(p))])
+	positional_decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(props.reader), step: |state, bytes, end| positional_step(props.row, state, bytes, end), errors: props.reader.errors })
 
 	## Decode rows into the inferred type using the chosen header mode.
-	typed_decoder : HeaderMode, ReaderProps -> Streaming.Decoder(TypedState, row, [InvalidCsv(Error), ..errs])
+	TypedProps := { header : HeaderMode ?? Exact, reader : ReaderProps ?? {} }
+	typed_decoder : TypedProps -> Streaming.Decoder(TypedState, row, [InvalidCsv(Error), ..errs])
 		where [row.Parseable([InvalidCsv(Error), ..errs])]
-	typed_decoder = |header, props| {
+	typed_decoder = |props| {
 		Row : row
-		parse_row = Row.parser_for(Format.Default)
-		Streaming.decoder(typed_state(header, props), |state, bytes, end| typed_step(parse_row, state, bytes, end))
+		parse_row = Row.parser_for(CsvFormat.Default)
+		Streaming.decoder({ initial_state: typed_state(props.header, props.reader), step: |state, bytes, end| typed_step(parse_row, state, bytes, end), errors: props.reader.errors })
 	}
 
 	## Writer options. Each emitted chunk is bounded; records are validated first.
@@ -641,7 +365,7 @@ CSV := { records : List(CSV.Record) }.{
 	Quoting : [Necessary, Always]
 
 	## Writer byte limits and output dialect.
-	WriteProps := { line_ending : LineEnding ?? CrLf, quoting : Quoting ?? Necessary, max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536 }
+	WriteProps := { line_ending : LineEnding ?? CrLf, quoting : Quoting ?? Necessary, max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536, chunk_bytes : U64 ?? 65_536 }
 
 	## Invalid writer input or configured record bounds.
 	WriteProblem : [EmptyRecord, FieldCountExceeded({ max : U64 }), FieldBytesExceeded({ max : U64 }), RecordBytesExceeded({ max : U64 })]
@@ -698,12 +422,271 @@ CSV := { records : List(CSV.Record) }.{
 
 	## Encode validated records through the shared streaming writer.
 	encoder : WriteProps -> Streaming.Encoder({}, Record, WriteProblem)
-	encoder = |props| Streaming.encoder({}, |state, fields| encode_record(fields, props).map_ok(|bytes| { state, bytes }), |_| Ok([]))
+	encoder = |props| Streaming.encoder({ initial_state: {}, encode: |state, fields| encode_record(fields, props).map_ok(|bytes| { state, bytes }), finish: |_| Ok([]), chunk_bytes: props.chunk_bytes })
 
 	## The cursor for type-directed decoding: one record, the header names,
 	## and indices into them. Used through [CSV.parse]; you do not need to name
 	## it.
 	State :: { row : Record, header : List(Str), column : U64, cell : U64, record : U64, nested : Bool }
+}
+
+CsvFormat :: [Default].{
+
+	## Field names are matched as written; [CSV.parse_normalized] normalizes the header instead.
+	rename_field : CsvFormat, Str -> Str
+	rename_field = |_, name| name
+
+	## Read the cell as UTF-8 text, verbatim.
+	parse_str : CsvFormat, CSV.State -> Try({ value : Str, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_str = |_, state| {
+		bytes = current_cell(state)?
+		match Str.from_utf8(bytes) {
+			Ok(value) => Ok({ value, rest: state })
+			Err(_) => Err(cell_error(state, expected_problem(Text, bytes)))
+		}
+	}
+
+	## Read `true` or `false` in any letter case.
+	parse_bool : CsvFormat, CSV.State -> Try({ value : Bool, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_bool = |_, state| {
+		bytes = current_cell(state)?
+		word = lowercase_ascii(bytes)
+		if word == "true".to_utf8() {
+			Ok({ value: True, rest: state })
+		} else if word == "false".to_utf8() {
+			Ok({ value: False, rest: state })
+		} else {
+			Err(cell_error(state, expected_problem(Boolean, bytes)))
+		}
+	}
+
+	## Read ASCII digits with an optional `+` as a U8.
+	parse_u8 : CsvFormat, CSV.State -> Try({ value : U8, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_u8 = |_, state| cell_int(state, U8.from_str, False, U8)
+
+	## Read ASCII digits with an optional sign as a I8.
+	parse_i8 : CsvFormat, CSV.State -> Try({ value : I8, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_i8 = |_, state| cell_int(state, I8.from_str, True, I8)
+
+	## Read ASCII digits with an optional `+` as a U16.
+	parse_u16 : CsvFormat, CSV.State -> Try({ value : U16, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_u16 = |_, state| cell_int(state, U16.from_str, False, U16)
+
+	## Read ASCII digits with an optional sign as a I16.
+	parse_i16 : CsvFormat, CSV.State -> Try({ value : I16, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_i16 = |_, state| cell_int(state, I16.from_str, True, I16)
+
+	## Read ASCII digits with an optional `+` as a U32.
+	parse_u32 : CsvFormat, CSV.State -> Try({ value : U32, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_u32 = |_, state| cell_int(state, U32.from_str, False, U32)
+
+	## Read ASCII digits with an optional sign as a I32.
+	parse_i32 : CsvFormat, CSV.State -> Try({ value : I32, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_i32 = |_, state| cell_int(state, I32.from_str, True, I32)
+
+	## Read ASCII digits with an optional `+` as a U64.
+	parse_u64 : CsvFormat, CSV.State -> Try({ value : U64, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_u64 = |_, state| cell_int(state, U64.from_str, False, U64)
+
+	## Read ASCII digits with an optional sign as a I64.
+	parse_i64 : CsvFormat, CSV.State -> Try({ value : I64, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_i64 = |_, state| cell_int(state, I64.from_str, True, I64)
+
+	## Read ASCII digits with an optional `+` as a U128.
+	parse_u128 : CsvFormat, CSV.State -> Try({ value : U128, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_u128 = |_, state| cell_int(state, U128.from_str, False, U128)
+
+	## Read ASCII digits with an optional sign as a I128.
+	parse_i128 : CsvFormat, CSV.State -> Try({ value : I128, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_i128 = |_, state| cell_int(state, I128.from_str, True, I128)
+
+	## Read an optional sign, digits and an optional fraction.
+	parse_dec : CsvFormat, CSV.State -> Try({ value : Dec, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_dec = |_, state| {
+		bytes = current_cell(state)?
+		match dec_from_bytes(bytes) {
+			Ok(value) => Ok({ value, rest: state })
+			Err(_) => Err(cell_error(state, expected_problem(Dec, bytes)))
+		}
+	}
+
+	## Read a float with the grammar of [CSV.f64].
+	parse_f32 : CsvFormat, CSV.State -> Try({ value : F32, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_f32 = |_, state| {
+		bytes = current_cell(state)?
+		match decimal_f64(bytes) {
+			Ok(value) => Ok({ value: value.to_f32_wrap(), rest: state })
+			Err(_) => Err(cell_error(state, expected_problem(F32, bytes)))
+		}
+	}
+
+	## Read a float with the grammar of [CSV.f64].
+	parse_f64 : CsvFormat, CSV.State -> Try({ value : F64, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_f64 = |_, state| {
+		bytes = current_cell(state)?
+		match decimal_f64(bytes) {
+			Ok(value) => Ok({ value, rest: state })
+			Err(_) => Err(cell_error(state, expected_problem(F64, bytes)))
+		}
+	}
+
+	## An empty cell is null, so a `Try(a, [Null])` field is `Err(Null)`.
+	parse_null : CsvFormat, CSV.State -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	parse_null = |_, state| {
+		bytes = current_cell(state)?
+		if (bytes.is_empty()) Ok(state) else Err(cell_error(state, expected_problem(Empty, bytes)))
+	}
+
+	## A row is one record; a record inside a row is rejected.
+	parse_record_start : CsvFormat, CSV.State -> Try([Counted({ len : U64, rest : CSV.State }), Uncounted(CSV.State)], [InvalidCsv(CSV.Error)])
+	parse_record_start = |_, state| {
+		if state.nested {
+			Err(cell_error(state, UnsupportedCell(Record)))
+		} else {
+			Ok(Uncounted(CSV.State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True }))
+		}
+	}
+
+	## Offer the next header name as the field to fill.
+	parse_record_field : CsvFormat,
+	Encoding.FieldName.FieldNames(_shape),
+	CSV.State -> Try(
+		[
+			Field({ field : Encoding.FieldName(_shape), rest : CSV.State }),
+			TryField({ name : Str, rest : CSV.State }),
+			TryFieldCaseless({ name : Str, rest : CSV.State }),
+			Continue(CSV.State),
+			Done(CSV.State),
+		],
+		[InvalidCsv(CSV.Error)],
+	)
+	parse_record_field = |_, _, state| {
+		match state.header.get(state.column) {
+			Err(_) => Ok(Done(state))
+			Ok(name) => Ok(TryField({ name, rest: CSV.State.{ row: state.row, header: state.header, column: state.column + 1, cell: state.column, record: state.record, nested: True } }))
+		}
+	}
+
+	## The record ends after the last header column.
+	parse_record_after_field : CsvFormat, CSV.State -> Try([Continue(CSV.State), Done(CSV.State)], [InvalidCsv(CSV.Error)])
+	parse_record_after_field = |_, state| {
+		if (state.column >= state.header.len()) Ok(Done(state)) else Ok(Continue(state))
+	}
+
+	## The cell to skip is chosen by the column, so nothing is consumed.
+	skip_record_field : CsvFormat, CSV.State -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	skip_record_field = |_, state| Ok(state)
+
+	## A headerless row is a tuple with one element per field.
+	parse_tuple_start : CsvFormat, CSV.State, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	parse_tuple_start = |_, state, len| {
+		if state.nested {
+			Err(cell_error(state, UnsupportedCell(Tuple)))
+		} else if state.row.len() != len {
+			Err(InvalidCsv(csv_error({ record: state.record, field: smaller(state.row.len(), len) + 1, line: 0, column: 0, problem: width_problem(state.row.len(), len) })))
+		} else {
+			Ok(CSV.State.{ row: state.row, header: state.header, column: 0, cell: 0, record: state.record, nested: True })
+		}
+	}
+
+	## Move to the cell of the next tuple element.
+	parse_tuple_next : CsvFormat, CSV.State, U64, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	parse_tuple_next = |_, state, index, _| Ok(CSV.State.{ row: state.row, header: state.header, column: index, cell: index, record: state.record, nested: True })
+
+	## The error for a cell that holds no valid value.
+	invalid_value : CsvFormat, CSV.State -> [InvalidCsv(CSV.Error)]
+	invalid_value = |_, state| cell_error(state, InvalidValue)
+
+	## Finish a tuple row.
+	parse_tuple_end : CsvFormat, CSV.State, U64 -> Try(CSV.State, [InvalidCsv(CSV.Error)])
+	parse_tuple_end = |_, state, _| Ok(state)
+
+	## Report a required field absent from the input.
+	missing_field : CsvFormat, Str -> [InvalidCsv(CSV.Error)]
+	missing_field = |_, name| InvalidCsv(Diagnostic.{ problem: MissingRequiredField(name), location: Unavailable(NotRetained), path: [Key(name)] })
+
+	## A tag without a payload is read from its name.
+	parse_tag_union : CsvFormat, Encoding.ParseTagUnionSpec(a, CsvFormat, CSV.State, [InvalidCsv(CSV.Error)]), CSV.State -> Try({ value : a, rest : CSV.State }, [InvalidCsv(CSV.Error)])
+	parse_tag_union = |format, spec, state| {
+		bytes = current_cell(state)?
+		Encoding.ParseTagUnionSpec.parse(
+			spec,
+			{
+				tag: Str.from_utf8_lossy(bytes),
+				encoding: format,
+				state,
+				start_payloads: |s, count| if (count == 0) Ok(s) else Err(cell_error(s, UnsupportedCell(TagPayload))),
+				next_payload: |s, _, _| Ok(s),
+				finish_payloads: |s, _| Ok(s),
+				missing: cell_error(state, UnknownTag(error_excerpt(bytes))),
+			},
+		)
+	}
+}
+
+parse_records_core : Str -> Try(List(CSV.Record), [InvalidCsv(CSV.Error)])
+parse_records_core = |text| {
+	bytes = text.to_utf8()
+	match scan_table(bytes) {
+		Ok(records) => Ok(records)
+		Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
+	}
+}
+
+parse_rows_core : Parser(CSV.Record, a, p), Str -> Try(List(a), [InvalidCsv(CSV.Error), InvalidRow(CSV.RowError(p))])
+parse_rows_core = |record_parser, text| {
+	bytes = text.to_utf8()
+	var $values = []
+	var $pos = 0.U64
+	var $index = 0.U64
+	var $field_capacity = 0.U64
+	while $pos < bytes.len() {
+		match scan_record_sized(bytes, $pos, $field_capacity) {
+			Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
+			Ok({ fields, next }) => {
+				$field_capacity = smaller(fields.len(), 64)
+				match record_parser.run(fields) {
+					Ok({ value, rest }) if rest.is_empty() => {
+						$values = $values.append(value)
+					}
+					Ok({ rest, .. }) => {
+						# Rebuild the row only for this error, so successful decoding
+						# can consume its fields without keeping another list alias.
+						match scan_record(bytes, $pos) {
+							Ok({ fields: again, .. }) => return Err(InvalidRow(locate(bytes, leftover_error(record_parser, again, rest.len(), $index + 1))))
+							Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
+						}
+					}
+					Err(ParseError(failure)) => return Err(InvalidRow(locate(bytes, row_error($index + 1, failure))))
+				}
+				$pos = after_break(bytes, next)
+				$index = $index + 1
+			}
+		}
+	}
+	Ok($values)
+}
+
+decode_rows_core : Parser(CSV.Record, a, p), List(CSV.Record) -> Try(List(a), [InvalidCsv(CSV.Error), InvalidRow(CSV.RowError(p))])
+decode_rows_core = |record_parser, records| {
+	var $values = List.with_capacity(records.len())
+	var $index = 0
+	while $index < records.len() {
+		fields = records.get($index) ?? []
+		match record_parser.run(fields) {
+			Ok({ value, rest }) if rest.is_empty() => {
+				$values = $values.append(value)
+			}
+			Ok({ value: _, rest }) => {
+				return Err(InvalidRow(leftover_error(record_parser, fields, rest.len(), $index + 1)))
+			}
+			Err(ParseError(failure)) => {
+				return Err(InvalidRow(row_error($index + 1, failure)))
+			}
+		}
+		$index = $index + 1
+	}
+	Ok($values)
 }
 
 TypedState : { reader : CSVReader.State, header : List(Str), header_read : Bool, mode : CSV.HeaderMode }
@@ -713,8 +696,11 @@ typed_state = |mode, props| { reader: CSVReader.new(props), header: [], header_r
 
 stream_location : CSVReader.State, CSV.Located(p) -> CSV.Located(p)
 stream_location = |reader, problem| {
-	at = reader.last_starts.get(if (problem.field == 0) 0 else problem.field - 1) ?? (reader.last_starts.first() ?? reader.last_end)
-	{ ..problem, line: at.line, column: at.column }
+	if csv_coordinates(problem).field == 0 {
+		return problem
+	}
+	at = reader.last_starts.get(if (csv_coordinates(problem).field == 0) 0 else csv_coordinates(problem).field - 1) ?? (reader.last_starts.first() ?? reader.last_end)
+	{ ..problem, location: Text(at) }
 }
 
 raw_step : CSVReader.State, List(U8), Streaming.InputEnd -> Streaming.Step(CSVReader.State, CSV.Record, CSV.Error)
@@ -722,8 +708,8 @@ raw_step = |state, bytes, end| {
 	next = CSVReader.step(state, bytes, end)
 	outcome = match next.outcome {
 		Item(fields) => Item(fields)
-		RecordError(error) => RecordError({ record: error.record, field: error.field, line: error.line, column: error.column, problem: Syntax(error.problem) })
-		Failed(error) => Failed({ record: error.record, field: error.field, line: error.line, column: error.column, problem: Syntax(error.problem) })
+		RecordError(error) => RecordError(Diagnostic.{ problem: Syntax(error.problem), location: Text({ offset: error.offset, line: error.line, column: error.column }), path: [Record(error.record), Field(error.field)] })
+		Failed(error) => Failed(Diagnostic.{ problem: Syntax(error.problem), location: Text({ offset: error.offset, line: error.line, column: error.column }), path: [Record(error.record), Field(error.field)] })
 		NeedInput => NeedInput
 		Done => Done
 	}
@@ -737,7 +723,7 @@ positional_step = |parse_row, reader, bytes, end| {
 		Item(fields) => match parse_row.run(fields) {
 			Ok({ value, rest }) if rest.is_empty() => Item(value)
 			Ok({ rest, .. }) => RecordError(InvalidRow(stream_location(next.state, leftover_error(parse_row, fields, rest.len(), next.state.record - 1))))
-			Err(ParseError({ problem, offset })) => RecordError(InvalidRow(stream_location(next.state, { record: next.state.record - 1, field: offset + 1, line: 0, column: 0, problem: ParserFailure(problem) })))
+			Err(ParseError(failure)) => RecordError(InvalidRow(stream_location(next.state, row_error(next.state.record - 1, failure))))
 		}
 		RecordError(error) => RecordError(InvalidCsv(error))
 		Failed(error) => Failed(InvalidCsv(error))
@@ -761,7 +747,7 @@ typed_step = |parse_row, initial, bytes, end| {
 					$state = { ..$state, header: fields.map(|cell| if ($state.mode == Normalized) normalize_name(cell) else Str.from_utf8_lossy(cell)), header_read: True }
 				} else if fields != [[]] {
 					if $state.mode != Absent and fields.len() != $state.header.len() {
-						error = stream_location(next.state, { record: next.state.record - 1, field: smaller(fields.len(), $state.header.len()) + 1, line: 0, column: 0, problem: width_problem(fields.len(), $state.header.len()) })
+						error = stream_location(next.state, csv_error({ record: next.state.record - 1, field: smaller(fields.len(), $state.header.len()) + 1, line: 0, column: 0, problem: width_problem(fields.len(), $state.header.len()) }))
 						return { state: $state, consumed: $consumed, outcome: RecordError(InvalidCsv(error)) }
 					}
 					parsed = parse_row(CSV.State.{ row: fields, header: $state.header, column: 0, cell: 0, record: next.state.record - 1, nested: False })
@@ -786,7 +772,7 @@ CsvDecoded(row) := { value : List(row) }.{
 	## Decode quoted CSV using exact header names and enabled header checks.
 	from_quote : Str -> Try(CSV.Decoded(row), [BadQuotedBytes(Str)])
 		where [row.CSV.Parseable([InvalidCsv(CSV.Error), ..errs])]
-	from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| CSV.Decoded.{ value })
+	from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| CSV.Decoded.{ value }).map_err(|failure| Parser.Quotation.error({ format: "CSV", message: Str.inspect(failure) }))
 }
 
 ## Decode every data record of `text` with a row parser built by `parser_for`.
@@ -807,7 +793,7 @@ decode_table = |text, parse_row, mode| {
 					$header = row.map(|field| if (mode == HeaderNormalized) normalize_name(field) else Str.from_utf8_lossy(field))
 				} else if row != [[]] {
 					if mode != Headerless and row.len() != $header.len() {
-						return Err(InvalidCsv(locate(bytes, { record: $index + 1, field: smaller(row.len(), $header.len()) + 1, line: 0, column: 0, problem: width_problem(row.len(), $header.len()) })))
+						return Err(InvalidCsv(locate(bytes, csv_error({ record: $index + 1, field: smaller(row.len(), $header.len()) + 1, line: 0, column: 0, problem: width_problem(row.len(), $header.len()) }))))
 					}
 					match parse_row(CSV.State.{ row, header: $header, column: 0, cell: 0, record: $index + 1, nested: False }) {
 						Ok({ value, rest: _ }) => {
@@ -840,7 +826,7 @@ decode_records = |bytes, records, parse_row, mode| {
 		row = records.get($index) ?? []
 		if row != [[]] {
 			if mode != Headerless and row.len() != width {
-				return Err(InvalidCsv(locate(bytes, { record: $index + 1, field: smaller(row.len(), width) + 1, line: 0, column: 0, problem: width_problem(row.len(), width) })))
+				return Err(InvalidCsv(locate(bytes, csv_error({ record: $index + 1, field: smaller(row.len(), width) + 1, line: 0, column: 0, problem: width_problem(row.len(), width) }))))
 			}
 			match parse_row(CSV.State.{ row, header, column: 0, cell: 0, record: $index + 1, nested: False }) {
 				Ok({ value, rest: _ }) => {
@@ -863,34 +849,35 @@ decoding_mode = |header| match header {
 }
 
 checked_error : Str, CSV.Error -> [BadQuotedBytes(Str)]
-checked_error = |name, problem| Quotation.error({ name, format: "CSV", message: "record ${problem.record.to_str()}, field ${problem.field.to_str()}: ${Str.inspect(problem.problem)}", line: problem.line, column: problem.column })
+checked_error = |name, problem| Parser.Quotation.error({ name, format: "CSV", message: "record ${csv_coordinates(problem).record.to_str()}, field ${csv_coordinates(problem).field.to_str()}: ${Str.inspect(problem.problem)}", line: csv_coordinates(problem).line, column: csv_coordinates(problem).column })
 
-checked_records : Str, Str, CSV.HeaderMode, CSV.Lints -> Try(List(CSV.Record), [BadQuotedBytes(Str)])
-checked_records = |source, name, header, lints| {
-	bytes = source.to_utf8()
-	records = scan_table(bytes).map_err(|bad| checked_error(name, syntax_error(bytes, bad)))?
+checked_records : Str, CSV.HeaderMode, CSV.Lints -> Try(List(CSV.Record), [InvalidCsv(CSV.Error)])
+checked_records = |source, header, lints| CSV.parse_bytes(source.to_utf8(), { header, validation: Checked(lints) }).map_ok(|document| document.records)
+
+check_headers : List(U8), List(CSV.Record), CSV.HeaderMode, CSV.Lints -> Try({}, [InvalidCsv(CSV.Error)])
+check_headers = |bytes, records, header, lints| {
 	if header != Absent {
 		names = (records.first() ?? []).map(|field| if (header == Normalized) normalize_name(field) else Str.from_utf8_lossy(field))
 		var $seen = Set.empty()
 		var $index = 0
 		for field in names {
 			if lints.empty_headers and field == "" {
-				return Err(checked_error(name, locate(bytes, { record: 1, field: $index + 1, line: 0, column: 0, problem: EmptyHeader })))
+				return Err(InvalidCsv(locate(bytes, csv_error({ record: 1, field: $index + 1, line: 0, column: 0, problem: EmptyHeader }))))
 			}
 			if lints.duplicate_headers and $seen.contains(field) {
-				return Err(checked_error(name, locate(bytes, { record: 1, field: $index + 1, line: 0, column: 0, problem: DuplicateHeader(field) })))
+				return Err(InvalidCsv(locate(bytes, csv_error({ record: 1, field: $index + 1, line: 0, column: 0, problem: DuplicateHeader(field) }))))
 			}
 			$seen = $seen.insert(field)
 			$index = $index + 1
 		}
 	}
-	Ok(records)
+	Ok({})
 }
 
 smaller : U64, U64 -> U64
 smaller = |a, b| if (a < b) a else b
 
-width_problem : U64, U64 -> Parser.Problem(CSV.Problem([]))
+width_problem : U64, U64 -> CSV.Problem([])
 width_problem = |found, expected| WidthMismatch({ found, expected })
 
 ## Lowercase ASCII, trim spaces, and turn runs of spaces, `-` and `_` into one `_`.
@@ -920,8 +907,8 @@ current_cell = |state| {
 	}
 }
 
-cell_error : CSV.State, Parser.Problem(CSV.Problem([])) -> [InvalidCsv(CSV.Error)]
-cell_error = |state, problem| InvalidCsv({ record: state.record, field: state.cell + 1, line: 0, column: 0, problem })
+cell_error : CSV.State, CSV.Problem([]) -> [InvalidCsv(CSV.Error)]
+cell_error = |state, problem| InvalidCsv(csv_error({ record: state.record, field: state.cell + 1, line: 0, column: 0, problem }))
 
 cell_int : CSV.State, (Str -> Try(n, [BadNumStr])), Bool, CSV.ValueType -> Try({ value : n, rest : CSV.State }, [InvalidCsv(CSV.Error)])
 cell_int = |state, from_str, signed, name| {
@@ -990,7 +977,7 @@ error_excerpt = |bytes| {
 	$out
 }
 
-expected_problem : CSV.ValueType, List(U8) -> Parser.Problem(CSV.Problem(p))
+expected_problem : CSV.ValueType, List(U8) -> CSV.Problem(p)
 expected_problem = |expected, bytes| ExpectedValue({ expected, bytes: error_excerpt(bytes) })
 
 ## Explain why a record parser left fields unread, preferring the furthest
@@ -998,10 +985,10 @@ expected_problem = |expected, bytes| ExpectedValue({ expected, bytes: error_exce
 leftover_error : Parser(CSV.Record, a, p), CSV.Record, U64, U64 -> CSV.RowError(p)
 leftover_error = |record_parser, fields, left, record| {
 	used = fields.len() - left
-	extra = { record, field: used + 1, line: 0, column: 0, problem: UnreadFields({ found: fields.len(), read: used }) }
+	extra = csv_error({ record, field: used + 1, line: 0, column: 0, problem: UnreadFields({ found: fields.len(), read: used }) })
 	match record_parser.parse(fields) {
 		Err(ParseError({ problem: UnexpectedInput, .. })) => extra
-		Err(ParseError({ problem, offset })) => { record, field: offset + 1, line: 0, column: 0, problem: ParserFailure(problem) }
+		Err(ParseError(failure)) => row_error(record, failure)
 		_ => extra
 	}
 }
@@ -1019,15 +1006,23 @@ scanner_problem = |problem| match problem {
 syntax_error : List(U8), BadField -> CSV.Error
 syntax_error = |bytes, bad| {
 	{ line, column } = line_column(bytes, bad.at)
-	{ record: bad.record + 1, field: bad.field + 1, line, column, problem: Syntax(scanner_problem(bad.problem)) }
+	Diagnostic.{ problem: Syntax(scanner_problem(bad.problem)), location: Text({ offset: bad.at, line, column }), path: [Record(bad.record + 1), Field(bad.field + 1)] }
 }
 
 ## Fill in the line and column of a decoding error from the source bytes.
 ## Only runs on the error path, so it rescans the input.
 locate : List(U8), CSV.Located(p) -> CSV.Located(p)
 locate = |bytes, problem| {
-	{ line, column } = line_column(bytes, field_offset(bytes, problem.record - 1, problem.field - 1))
-	{ record: problem.record, field: problem.field, line, column, problem: problem.problem }
+	if bytes.is_empty() {
+		return problem
+	}
+	coordinates = csv_coordinates(problem)
+	if coordinates.record == 0 or coordinates.field == 0 {
+		return problem
+	}
+	offset = field_offset(bytes, coordinates.record - 1, coordinates.field - 1)
+	{ line, column } = line_column(bytes, offset)
+	{ ..problem, location: Text({ offset, line, column }) }
 }
 
 ## Byte offset where field `field` of record `record` (both zero-based)
@@ -1349,7 +1344,7 @@ decimal_f64 = |bytes| {
 
 parses_u64 : Str, Try(U64, {}) -> Bool
 parses_u64 = |text, expected| {
-	actual = Utf8.parse_bytes(CSV.u64({}), text.to_utf8())
+	actual = (CSV.u64({})).parse(text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted
 		(Err(_), Err({})) => True
@@ -1359,7 +1354,7 @@ parses_u64 = |text, expected| {
 
 parses_f64 : Str, Try(F64, {}) -> Bool
 parses_f64 = |text, expected| {
-	actual = Utf8.parse_bytes(CSV.f64({}), text.to_utf8())
+	actual = (CSV.f64({})).parse(text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted or (value.is_nan() and wanted.is_nan())
 		(Err(_), Err({})) => True
@@ -1368,25 +1363,32 @@ parses_f64 = |text, expected| {
 }
 
 records : Str -> Try(List(List(Str)), [InvalidCsv(CSV.Error)])
-records = |text| CSV.parse_records(text).map_ok(|found| found.map(|fields| fields.map(Str.from_utf8_lossy)))
+records = |text| CSV.parse_str(text, {}).map_ok(|document| document.records).map_ok(|found| found.map(|fields| fields.map(Str.from_utf8_lossy)))
 
-row_error_of : Try(a, [InvalidRow(CSV.RowError(p)), ..others]) -> Try(CSV.RowError(p), [NoError])
+physical_error_for_test : Diagnostic(p) -> Diagnostic(p)
+physical_error_for_test = |error| match error.location {
+	Text(at) => { ..error, location: LineColumn({ line: at.line, column: at.column }) }
+	_ => error
+}
+
+row_error_of : Try(a, [InvalidRow(CSV.RowError(p)), ParseError(Diagnostic(Parser.Problem([InvalidCsv(CSV.Error), InvalidRow(CSV.RowError(p))]))), ..others]) -> Try(CSV.RowError(p), [NoError])
 row_error_of = |result| match result {
-	Err(InvalidRow(error)) => Ok(error)
+	Err(InvalidRow(error)) => Ok(physical_error_for_test(error))
+	Err(ParseError({ problem: InvalidRow(error), .. })) => Ok(physical_error_for_test(error))
 	_ => Err(NoError)
 }
 # Text collection has the same rows and exact syntax diagnostics as raw and
 # generic string decoding, including the header, BOM, and relaxed quote rules.
-expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n") == Ok([["name", "note"], ["Ada", "said \"hello\""]])
+expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n", {}) == Ok([["name", "note"], ["Ada", "said \"hello\""]])
 expect ["", "\n", "\r\n", ",", "\"\"", "\"\",", "a,b\r\nc,d", "a\r\n\nb", "é,😀", "\u(feff)a", "a\"b, \"c\" ", "\"a\r\nb\",\"x\"\"y\"\n", "a,\"b", "x\n\"a\"b,c", "a,b,c,d\nx\n,,\n\"a,b\",c\n"].all(
 	|text| {
 		expected = records(text)
-		generic_agrees = match (CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text), expected) {
+		generic_agrees = match (CSV.rows_parser({ row: Parser.many(CSV.field(CSV.string({}))) }).parse_str(text), expected) {
 			(Ok(actual), Ok(wanted)) => actual == wanted
-			(Err(InvalidCsv(actual)), Err(InvalidCsv(wanted))) => actual == wanted
+			(Err(ParseError({ problem: InvalidCsv(actual), .. })), Err(InvalidCsv(wanted))) => actual == wanted
 			_ => False
 		}
-		CSV.parse_string_records(text) == expected and generic_agrees
+		CSV.parse_string_records(text, {}) == expected and generic_agrees
 	},
 )
 
@@ -1398,14 +1400,14 @@ expect (0..=48).iter().fold(
 		prefix = Str.from_utf8_lossy(List.repeat('x', width))
 		plain = "${prefix},\"é,😀\",\r\n"
 		escaped = "${prefix},\"é,😀\"\"q\",\r\n"
-		good and CSV.parse_string_records(plain) == Ok([[prefix, "é,😀", ""]]) and CSV.parse_string_records(escaped) == Ok([[prefix, "é,😀\"q", ""]])
+		good and CSV.parse_string_records(plain, {}) == Ok([[prefix, "é,😀", ""]]) and CSV.parse_string_records(escaped, {}) == Ok([[prefix, "é,😀\"q", ""]])
 	},
 )
 
 error_of : Try(a, [InvalidCsv(CSV.Error), ..others]) -> Try(CSV.Error, [NoError])
 error_of = |result| {
 	match result {
-		Err(InvalidCsv(problem)) => Ok(problem)
+		Err(InvalidCsv(problem)) => Ok(physical_error_for_test(problem))
 		_ => Err(NoError)
 	}
 }
@@ -1446,14 +1448,17 @@ expect records("\u(feff)a") == Ok([["\u(feff)a"]])
 expect records("\"a,\r\nb\"\"\",\"\"") == Ok([["a,\r\nb\"", ""]])
 
 # Text after a closing quote is an error located at that text.
-expect error_of(records("x\n\"a\"b,c")) == Ok({ record: 2, field: 1, line: 2, column: 4, problem: Syntax(TextAfterQuote) })
+expect error_of(records("x\n\"a\"b,c")) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 4, problem: Syntax(TextAfterQuote) }))
 
 # An unterminated quoted field is an error located at its opening quote.
-expect error_of(records("a,\"b")) == Ok({ record: 1, field: 2, line: 1, column: 3, problem: Syntax(UnterminatedQuotedField) })
+expect error_of(records("a,\"b")) == Ok(csv_error({ record: 1, field: 2, line: 1, column: 3, problem: Syntax(UnterminatedQuotedField) }))
 
 # The composable parser accepts any bytes and reports malformed fields by offset.
-expect Utf8.parse_bytes(CSV.parser({}), [0xFF, ',', 0xC3]) == Ok([[[0xFF], [0xC3]]])
-expect Utf8.parse_bytes(CSV.parser({}), "a\n\"b".to_utf8()) == Err(ParseError({ problem: Syntax(UnterminatedQuotedField), offset: 2 }))
+expect (CSV.parser({})).parse([0xFF, ',', 0xC3]).map_ok(|document| document.records) == Ok([[[0xFF], [0xC3]]])
+expect match (CSV.parser({})).parse("a\n\"b".to_utf8()) {
+	Err(ParseError({ problem: InvalidCsv(error), .. })) => error.problem == Syntax(UnterminatedQuotedField) and error.location == Text({ offset: 2, line: 2, column: 1 })
+	_ => False
+}
 
 # The header helper splits off the column names.
 expect CSV.split_header([]) == { header: [], rows: [] }
@@ -1463,205 +1468,205 @@ expect CSV.split_header([["a".to_utf8()], ["1".to_utf8()]]) == { header: ["a"], 
 user : Parser(CSV.Record, { name : Str, age : U64 }, _)
 user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.u64({})))
 
-expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+expect CSV.rows_parser({ row: user }).parse_str("Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 
 # Row widths can grow or shrink between records, including empty fields.
 expect {
 	text = "a,b,c,d\nx\n,,\n\"a,b\",c\n"
 	expected = [["a", "b", "c", "d"], ["x"], ["", "", ""], ["a,b", "c"]]
-	records(text) == Ok(expected) and CSV.parse_with(Parser.many(CSV.field(CSV.string({}))), text) == Ok(expected)
+	records(text) == Ok(expected) and CSV.rows_parser({ row: Parser.many(CSV.field(CSV.string({}))) }).parse_str(text) == Ok(expected)
 }
 
 # A field that does not decode names its record, field and position.
-expect row_error_of(CSV.parse_with(user, "Ada,36\nAlan,forty\n")) == Ok({ record: 2, field: 2, line: 2, column: 6, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: "forty".to_utf8() }) })) })
+expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada,36\nAlan,forty\n")) == Ok(csv_error({ record: 2, field: 2, line: 2, column: 6, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: "forty".to_utf8() }), location: ByteOffset(0), path: [] })) }))
 
 # Extra fields are an error carrying the record number.
-expect row_error_of(CSV.parse_with(user, "Ada,36\n\"Al\nan\",41,x\n")) == Ok({ record: 2, field: 3, line: 3, column: 8, problem: UnreadFields({ found: 3, read: 2 }) })
+expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada,36\n\"Al\nan\",41,x\n")) == Ok(csv_error({ record: 2, field: 3, line: 3, column: 8, problem: UnreadFields({ found: 3, read: 2 }) }))
 
 # A repetition's rejected field keeps its problem and quoted-field position
 # when the row is rebuilt for the leftover diagnostic. Later syntax loses to it.
-expect row_error_of(CSV.parse_with(Parser.many(CSV.field(CSV.u64({}))), "1,2\r\n3,\"4\",nope\r\n\"unterminated")) == Ok({ record: 2, field: 3, line: 2, column: 7, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: "nope".to_utf8() }) })) })
+expect row_error_of(CSV.rows_parser({ row: Parser.many(CSV.field(CSV.u64({}))) }).parse_str("1,2\r\n3,\"4\",nope\r\n\"unterminated")) == Ok(csv_error({ record: 2, field: 3, line: 2, column: 7, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: "nope".to_utf8() }), location: ByteOffset(0), path: [] })) }))
 
 # Too few fields is an error too.
-expect row_error_of(CSV.parse_with(user, "Ada")) == Ok({ record: 1, field: 2, line: 1, column: 1, problem: ParserFailure(MissingField) })
+expect row_error_of(CSV.rows_parser({ row: user }).parse_str("Ada")) == Ok(csv_error({ record: 1, field: 2, line: 1, column: 1, problem: ParserFailure(MissingField) }))
 
 # Invalid UTF-8 remains raw source bytes in bounded structured payloads.
 expect {
 	bad = [0xFF, 0xC3, 'x']
-	row_error_of(CSV.decode(user, [[bad, "1".to_utf8()]])) == Ok({ record: 1, field: 1, line: 0, column: 0, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: Text, bytes: bad }) })) })
+	row_error_of(CSV.{ records: [[bad, "1".to_utf8()]] }.decode_rows({ row: user })) == Ok(csv_error({ record: 1, field: 1, line: 0, column: 0, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: Text, bytes: bad }), location: ByteOffset(0), path: [] })) }))
 }
 expect {
 	long = List.repeat('9', 5000)
-	match CSV.decode(user, [["a".to_utf8(), long]]) {
+	match CSV.{ records: [["a".to_utf8(), long]] }.decode_rows({ row: user }) {
 		Err(InvalidRow({ problem: ParserFailure(FieldProblem({ problem: ExpectedValue({ bytes, .. }), .. })), .. })) => bytes.len() == 40
 		_ => False
 	}
 }
 expect {
 	all_fields = Parser.many(CSV.field(CSV.u64({})))
-	row_error_of(CSV.decode(all_fields, [["1".to_utf8(), [0xFF, 0xFE]]])) == Ok({ record: 1, field: 2, line: 0, column: 0, problem: ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: [0xFF, 0xFE] }) })) })
+	row_error_of(CSV.{ records: [["1".to_utf8(), [0xFF, 0xFE]]] }.decode_rows({ row: all_fields })) == Ok(csv_error({ record: 1, field: 2, line: 0, column: 0, problem: ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: [0xFF, 0xFE] }), location: ByteOffset(0), path: [] })) }))
 }
 
 # Type-directed decoding: header names choose fields, unknown columns are
 # skipped, and absent optional columns are `Err(Missing)`.
 Person : { name : Str, age : U64, admin : Bool, email : Try(Str, [Missing]) }
 
-PersonResult : Try(List(Person), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+PersonResult : Try(List(Person), [InvalidCsv(CSV.Error)])
 
 expect {
 	people : PersonResult
-	people = CSV.parse("age,extra,name,admin\n36,zz,Ada,true\r\n7,,\"Bob, Jr\",FALSE\n")
+	people = CSV.decode_str("age,extra,name,admin\n36,zz,Ada,true\r\n7,,\"Bob, Jr\",FALSE\n", {})
 	people == Ok([{ name: "Ada", age: 36, admin: True, email: Err(Missing) }, { name: "Bob, Jr", age: 7, admin: False, email: Err(Missing) }])
 }
 
 expect {
 	people : PersonResult
-	people = CSV.parse("email,name,age,admin\na@b.c,Ada,36,true\n")
+	people = CSV.decode_str("email,name,age,admin\na@b.c,Ada,36,true\n", {})
 	people == Ok([{ name: "Ada", age: 36, admin: True, email: Ok("a@b.c") }])
 }
 
 # A required column that is absent is reported by the compiler-added error.
 expect {
 	people : PersonResult
-	people = CSV.parse("name,admin\nAda,true\n")
-	people == Err(MissingRequiredField("age"))
+	people = CSV.decode_str("name,admin\nAda,true\n", {})
+	people == Err(InvalidCsv(Diagnostic.{ problem: MissingRequiredField("age"), location: Unavailable(NotRetained), path: [Key("age")] }))
 }
 
 # A cell that does not decode is located by record, field, line and column.
 expect {
 	people : PersonResult
-	people = CSV.parse("name,age,admin\nAda,36,true\nBob,old,true\n")
-	error_of(people) == Ok({ record: 3, field: 2, line: 3, column: 5, problem: ExpectedValue({ expected: U64, bytes: "old".to_utf8() }) })
+	people = CSV.decode_str("name,age,admin\nAda,36,true\nBob,old,true\n", {})
+	error_of(people) == Ok(csv_error({ record: 3, field: 2, line: 3, column: 5, problem: ExpectedValue({ expected: U64, bytes: "old".to_utf8() }) }))
 }
 
 # Short and long rows are errors naming the record; blank lines are skipped.
 expect {
 	people : PersonResult
-	people = CSV.parse("name,age,admin\n\nAda,36\n")
-	error_of(people) == Ok({ record: 3, field: 3, line: 3, column: 1, problem: WidthMismatch({ found: 2, expected: 3 }) })
+	people = CSV.decode_str("name,age,admin\n\nAda,36\n", {})
+	error_of(people) == Ok(csv_error({ record: 3, field: 3, line: 3, column: 1, problem: WidthMismatch({ found: 2, expected: 3 }) }))
 }
 expect {
 	people : PersonResult
-	people = CSV.parse("name,age,admin\nAda,36,true,x\n\n")
-	error_of(people) == Ok({ record: 2, field: 4, line: 2, column: 13, problem: WidthMismatch({ found: 4, expected: 3 }) })
+	people = CSV.decode_str("name,age,admin\nAda,36,true,x\n\n", {})
+	error_of(people) == Ok(csv_error({ record: 2, field: 4, line: 2, column: 13, problem: WidthMismatch({ found: 4, expected: 3 }) }))
 }
 
 # Empty cells are `Err(Null)` for `Try(_, [Null])` fields and `""` for strings.
 expect {
-	rows : Try(List({ a : Try(U64, [Null]), b : Str }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a,b\n,\n5,y\n")
+	rows : Try(List({ a : Try(U64, [Null]), b : Str }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a,b\n,\n5,y\n", {})
 	rows == Ok([{ a: Err(Null), b: "" }, { a: Ok(5), b: "y" }])
 }
 
 # Tags without payloads decode from their names.
 expect {
-	rows : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("status\nActive\nInactive\n")
+	rows : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("status\nActive\nInactive\n", {})
 	rows == Ok([{ status: Active }, { status: Inactive }])
 }
 expect {
-	rows : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("status\nNope\n")
-	error_of(rows) == Ok({ record: 2, field: 1, line: 2, column: 1, problem: UnknownTag("Nope".to_utf8()) })
+	rows : Try(List({ status : [Active, Inactive] }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("status\nNope\n", {})
+	error_of(rows) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 1, problem: UnknownTag("Nope".to_utf8()) }))
 }
 
 # Every number type uses the data grammar; signs only where they fit.
 expect {
-	rows : Try(List({ a : I8, b : U16, c : I32, d : U128, e : I128, f : Dec, g : F32, h : U8, i : I16, j : U32, k : I64 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a,b,c,d,e,f,g,h,i,j,k\n-128,+65535,-7,340282366920938463463374607431768211455,-1,-2.50,1.5,255,-32768,0,-9\n")
+	rows : Try(List({ a : I8, b : U16, c : I32, d : U128, e : I128, f : Dec, g : F32, h : U8, i : I16, j : U32, k : I64 }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a,b,c,d,e,f,g,h,i,j,k\n-128,+65535,-7,340282366920938463463374607431768211455,-1,-2.50,1.5,255,-32768,0,-9\n", {})
 	rows == Ok([{ a: -128, b: 65535, c: -7, d: 340282366920938463463374607431768211455, e: -1, f: -2.5, g: 1.5, h: 255, i: -32768, j: 0, k: -9 }])
 }
 expect {
-	rows : Try(List({ a : U8 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a\n256\n")
+	rows : Try(List({ a : U8 }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a\n256\n", {})
 	rows.is_err()
 }
 expect {
-	rows : Try(List({ a : U8 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a\n-1\n")
+	rows : Try(List({ a : U8 }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a\n-1\n", {})
 	rows.is_err()
 }
 expect {
-	rows : Try(List({ a : Dec }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a\n1e3\n")
+	rows : Try(List({ a : Dec }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a\n1e3\n", {})
 	rows.is_err()
 }
 
 # Tags with payloads are rejected.
 expect {
-	rows : Try(List({ a : [Tagged(Str), Plain] }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a\nTagged\n")
-	error_of(rows) == Ok({ record: 2, field: 1, line: 2, column: 1, problem: UnsupportedCell(TagPayload) })
+	rows : Try(List({ a : [Tagged(Str), Plain] }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a\nTagged\n", {})
+	error_of(rows) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 1, problem: UnsupportedCell(TagPayload) }))
 }
 
 # Nested records are rejected.
 expect {
-	rows : Try(List({ a : { b : Str } }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse("a\nx\n")
-	error_of(rows) == Ok({ record: 2, field: 1, line: 2, column: 1, problem: UnsupportedCell(Record) })
+	rows : Try(List({ a : { b : Str } }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("a\nx\n", {})
+	error_of(rows) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 1, problem: UnsupportedCell(Record) }))
 }
 
 # Normalized header names match snake_case fields.
 expect {
-	rows : Try(List({ first_name : Str, last_name : Str }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse_normalized(" First Name ,LAST--name\nAda,Lovelace\n")
+	rows : Try(List({ first_name : Str, last_name : Str }), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str(" First Name ,LAST--name\nAda,Lovelace\n", { header: Normalized })
 	rows == Ok([{ first_name: "Ada", last_name: "Lovelace" }])
 }
 
 # Headerless input decodes into tuples, and the width must match.
 expect {
-	rows : Try(List((Str, U64, Bool)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse_headerless("Ada,36,true\nAlan,41,false\n")
+	rows : Try(List((Str, U64, Bool)), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("Ada,36,true\nAlan,41,false\n", { header: Absent })
 	rows == Ok([("Ada", 36, True), ("Alan", 41, False)])
 }
 expect {
-	rows : Try(List((Str, U64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	rows = CSV.parse_headerless("Ada,36\nAlan\n")
-	error_of(rows) == Ok({ record: 2, field: 2, line: 2, column: 1, problem: WidthMismatch({ found: 1, expected: 2 }) })
+	rows : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
+	rows = CSV.decode_str("Ada,36\nAlan\n", { header: Absent })
+	error_of(rows) == Ok(csv_error({ record: 2, field: 2, line: 2, column: 1, problem: WidthMismatch({ found: 1, expected: 2 }) }))
 }
 
 # Malformed CSV is reported before any decoding.
 expect {
 	people : PersonResult
-	people = CSV.parse("name\n\"Ada")
-	error_of(people) == Ok({ record: 2, field: 1, line: 2, column: 1, problem: Syntax(UnterminatedQuotedField) })
+	people = CSV.decode_str("name\n\"Ada", {})
+	error_of(people) == Ok(csv_error({ record: 2, field: 1, line: 2, column: 1, problem: Syntax(UnterminatedQuotedField) }))
 }
 
 # A header with no data rows decodes to no rows, as does empty input.
 expect {
 	people : PersonResult
-	people = CSV.parse("name,age,admin\n")
+	people = CSV.decode_str("name,age,admin\n", {})
 	people == Ok([])
 }
 expect {
 	people : PersonResult
-	people = CSV.parse("")
+	people = CSV.decode_str("", {})
 	people == Ok([])
 }
 
 # The examples in the documentation comments.
 expect {
-	people : Try(List({ name : Str, age : U64 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	people = CSV.parse("name,age\nAda,36\nAlan,41\n")
+	people : Try(List({ name : Str, age : U64 }), [InvalidCsv(CSV.Error)])
+	people = CSV.decode_str("name,age\nAda,36\nAlan,41\n", {})
 	people == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 }
 
-expect CSV.parse_records("a,\"b,c\"\n") == Ok([["a".to_utf8(), "b,c".to_utf8()]])
+expect CSV.parse_str("a,\"b,c\"\n", {}).map_ok(|document| document.records) == Ok([["a".to_utf8(), "b,c".to_utf8()]])
 
 expect {
-	found = CSV.parse_records("name,age\nAda,36\n")?
+	found = CSV.parse_str("name,age\nAda,36\n", {}).map_ok(|document| document.records)?
 	CSV.split_header(found) == { header: ["name", "age"], rows: [["Ada".to_utf8(), "36".to_utf8()]] }
 }
 
 expect {
 	name : Parser(CSV.Record, { first : Str, last : Str }, _)
 	name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string({}))).keep(CSV.field(CSV.string({})))
-	CSV.parse_with(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
+	CSV.rows_parser({ row: name }).parse_str("Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
 }
 
 expect {
-	items : Try(List({ sku : Str, count : U64, note : Try(Str, [Missing]), price : Try(Dec, [Null]) }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	items = CSV.parse("price,sku,count\n1.50,A1,3\n,B2,0\n")
+	items : Try(List({ sku : Str, count : U64, note : Try(Str, [Missing]), price : Try(Dec, [Null]) }), [InvalidCsv(CSV.Error)])
+	items = CSV.decode_str("price,sku,count\n1.50,A1,3\n,B2,0\n", {})
 	items == Ok([
 		{ sku: "A1", count: 3, note: Err(Missing), price: Ok(1.50) },
 		{ sku: "B2", count: 0, note: Err(Missing), price: Err(Null) },
@@ -1669,14 +1674,14 @@ expect {
 }
 
 expect {
-	names : Try(List({ first_name : Str }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	names = CSV.parse_normalized(" First Name \nAda\n")
+	names : Try(List({ first_name : Str }), [InvalidCsv(CSV.Error)])
+	names = CSV.decode_str(" First Name \nAda\n", { header: Normalized })
 	names == Ok([{ first_name: "Ada" }])
 }
 
 expect {
-	pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	pairs = CSV.parse_headerless("Ada,36\nAlan,41\n")
+	pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
+	pairs = CSV.decode_str("Ada,36\nAlan,41\n", { header: Absent })
 	pairs == Ok([("Ada", 36), ("Alan", 41)])
 }
 
@@ -1694,83 +1699,69 @@ expect {
 	people.value == [{ name: "Ada", age: 36 }]
 }
 
-# Raw CSV never guesses that a first record contains header names.
+## Raw validation never guesses that the first record is a header.
 expect CSV.validate({ source: "name,name,\n" }) == Ok([["name".to_utf8(), "name".to_utf8(), []]])
 
-expect CSV.validate({ source: "name,name\n", header: Exact, name: "names.csv" }) == Err(BadQuotedBytes("names.csv:1:6: CSV: record 1, field 2: DuplicateHeader(\"name\")"))
-expect CSV.validate({ source: "name,\n", header: Exact }) == Err(BadQuotedBytes("<literal>:1:6: CSV: record 1, field 2: EmptyHeader"))
+## Duplicate and empty header failures retain typed reasons and original offsets.
+expect CSV.validate({ source: "name,name\n", header: Exact }) == Err(InvalidCsv(Diagnostic.{ problem: DuplicateHeader("name"), location: Text({ offset: 5, line: 1, column: 6 }), path: [Record(1), Field(2)] }))
+expect CSV.validate({ source: "name,\n", header: Exact }) == Err(InvalidCsv(Diagnostic.{ problem: EmptyHeader, location: Text({ offset: 5, line: 1, column: 6 }), path: [Record(1), Field(2)] }))
 expect CSV.validate({ source: "", header: Exact }) == Ok([])
 
+## Normalized checks detect collisions while exact checks keep distinct names.
 expect {
 	source = "First-Name,FIRST_NAME\nAda,Alan\n"
-	exact = CSV.validate({ source, header: Exact }).is_ok()
-	normalized = match CSV.validate({ source, header: Normalized }) {
-		Err(BadQuotedBytes(message)) => message.contains("DuplicateHeader") and message.contains("first_name")
+	exact = CSV.validate({ source, header: Exact })?
+	match CSV.validate({ source, header: Normalized }) {
+		Err(InvalidCsv(error)) => error.problem == DuplicateHeader("first_name") and exact.len() == 3 - 1
 		Ok(_) => False
 	}
-	exact and normalized
 }
 
+## Disabling header lints preserves syntax parsing and does not silently check names.
 expect {
 	source = "name,name,\nAda,Alan,\n"
-	CSV.validate({ source, header: Exact, lints: { duplicate_headers: False, empty_headers: False } }) == CSV.parse_records(source).map_err(|_| BadQuotedBytes("unexpected parse error"))
+	CSV.validate({ source, header: Exact, lints: { duplicate_headers: False, empty_headers: False } }) == CSV.parse_str(source, {}).map_ok(|document| document.records)
 }
 
-expect {
-	match CSV.validate({ source: "name,name\n\"unterminated", header: Exact, name: "bad.csv" }) {
-		Err(BadQuotedBytes(message)) => message.starts_with("bad.csv:2:1:") and message.contains("UnterminatedQuotedField") and !message.contains("DuplicateHeader")
-		Ok(_) => False
-	}
+## Syntax errors take precedence over header lint checks.
+expect match CSV.validate({ source: "name,name\n\"unterminated", header: Exact }) {
+	Err(InvalidCsv(error)) => error.problem == Syntax(UnterminatedQuotedField) and error.location == Text({ offset: 10, line: 2, column: 1 })
+	Ok(_) => False
 }
 
+## Checked typed decoding preserves normalized headers and headerless tuples.
 expect {
-	result : Try(List({ first_name : Str }), [BadQuotedBytes(Str)])
+	result : Try(List({ first_name : Str }), [InvalidCsv(CSV.Error)])
 	result = CSV.validate_as({ source: " First Name \nAda\n", header: Normalized })
 	result == Ok([{ first_name: "Ada" }])
 }
-
 expect {
-	result : Try(List({ name : Str }), [BadQuotedBytes(Str)])
-	result = CSV.validate_as({ source: "name,name\nAda,Alan", lints: { duplicate_headers: False } })
-	result == Ok([{ name: "Alan" }])
-}
-
-expect {
-	result : Try(List((Str, U64)), [BadQuotedBytes(Str)])
+	result : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
 	result = CSV.validate_as({ source: "Ada,36\nAlan,41", header: Absent })
 	result == Ok([("Ada", 36), ("Alan", 41)])
 }
 
+## A missing schema field has no fabricated physical cell position.
 expect {
-	result : Try(List({ name : Str, age : U64 }), [BadQuotedBytes(Str)])
-	result = CSV.validate_as({ source: "name,age\nAda,nope", name: "people.csv" })
+	result : Try(List({ required : Str }), [InvalidCsv(CSV.Error)])
+	result = CSV.validate_as({ source: "other\nvalue" })
 	match result {
-		Err(BadQuotedBytes(message)) => message.starts_with("people.csv:2:5:") and message.contains("record 2, field 2")
-		Ok(_) => False
-	}
-}
-
-expect {
-	result : Try(List({ required : Str }), [BadQuotedBytes(Str)])
-	result = CSV.validate_as({ source: "other\nvalue", name: "missing.csv" })
-	match result {
-		Err(BadQuotedBytes(message)) => message.starts_with("missing.csv: CSV:") and message.contains("required")
+		Err(InvalidCsv(error)) => error.problem == MissingRequiredField("required") and error.location == Unavailable(NotRetained) and error.path == [Key("required")]
 		Ok(_) => False
 	}
 }
 
 CheckedCsvFailure := [Never].{
+	is_eq : _
 	parser_for : CSV.Format -> (CSV.State -> Try({ value : CheckedCsvFailure, rest : CSV.State }, [InvalidCsv(CSV.Error), CustomCsvFailure(Str)]))
 	parser_for = |_| |_| Err(CustomCsvFailure("custom detail"))
 }
 
+## Custom type-directed failures remain tagged values during runtime validation.
 expect {
-	result : Try(List(CheckedCsvFailure), [BadQuotedBytes(Str)])
+	result : Try(List(CheckedCsvFailure), [InvalidCsv(CSV.Error), CustomCsvFailure(Str)])
 	result = CSV.validate_as({ source: "header\nvalue" })
-	match result {
-		Err(BadQuotedBytes(message)) => message.contains("CustomCsvFailure") and message.contains("custom detail")
-		Ok(_) => False
-	}
+	result == Err(CustomCsvFailure("custom detail"))
 }
 
 # The streaming scanner and complete parser agree at every byte boundary,
@@ -1778,14 +1769,15 @@ expect {
 stream_records_for_test : List(List(U8)) -> Try(List(CSV.Record), [InvalidCsv(CSV.Error)])
 stream_records_for_test = |chunks| {
 	var $rows = []
-	for event in Streaming.read_iter(chunks.iter(), CSV.decoder({})) {
+	for event in (CSV.decoder({})).read_iter(chunks.iter()) {
 		match event {
 			Ok(Value(row)) => {
 				$rows = $rows.append(row)
 			}
 			Ok(Finished(_)) => return Ok($rows)
-			Ok(Rejected(error)) | Err(ParseErr(error)) => return Err(InvalidCsv(error))
+			Ok(Rejected(InvalidCsv(error))) | Err(InvalidCsv(error)) => return Err(InvalidCsv(error))
 			Err(_) => crash "streaming protocol failure"
+
 		}
 	}
 	crash "missing finished event"
@@ -1793,7 +1785,7 @@ stream_records_for_test = |chunks| {
 expect ["", "\n", "a,b\r\nc,d", "a\r\n\nb", "é,😀", "\u(feff)a", "a\"b, \"c\" ", "\"a\r\nb\",\"x\"\"y\"\n", "a,\"b", "x\n\"a\"b,c"].all(
 	|text| {
 		bytes = text.to_utf8()
-		(0..=bytes.len()).iter().fold(True, |good, split| good and stream_records_for_test([bytes.take_first(split), [], bytes.drop_first(split)]) == CSV.parse_records(text))
+		(0..=bytes.len()).iter().fold(True, |good, split| good and stream_records_for_test([bytes.take_first(split), [], bytes.drop_first(split)]) == CSV.parse_str(text, {}).map_ok(|document| document.records))
 	},
 )
 expect CSV.encode_record(["a,b".to_utf8(), "x\"y".to_utf8()], {}) == Ok("\"a,b\",\"x\"\"y\"\r\n".to_utf8())
@@ -1802,16 +1794,16 @@ expect CSV.encode_record([], {}).is_err()
 expect CSV.encode_record(["a".to_utf8()], { max_record_bytes: 3 }) == Ok("a\r\n".to_utf8())
 expect CSV.encode_record(["a".to_utf8()], { max_record_bytes: 2 }).is_err()
 expect {
-	encoded = List.from_iter(Streaming.write_iter([["a,b".to_utf8(), "é".to_utf8()], [[]]].iter(), CSV.encoder({}).with_chunk_bytes(1)))
+	encoded = List.from_iter((CSV.encoder({ chunk_bytes: 1 })).write_iter([["a,b".to_utf8(), "é".to_utf8()], [[]]].iter()))
 	encoded.all(|result| result.map_ok(|bytes| bytes.len() <= 1) == Ok(True)) and stream_records_for_test(encoded.map(|chunk| chunk ?? [])) == Ok([["a,b".to_utf8(), "é".to_utf8()], [[]]])
 }
 expect {
 	decode = Parser.many(CSV.field(CSV.u64({})))
-	events = Streaming.read_iter(["1\nwrong\n2\n".to_utf8()].iter(), CSV.positional_decoder(decode, {}).with_errors({ error_policy: ReportInvalidRecords }))
-	match Streaming.collect_report(events) {
+	decoder = CSV.positional_decoder({ row: decode, reader: { errors: { policy: ReportInvalidRecords } } })
+	match decoder.collect_report(["1\nwrong\n2\n".to_utf8()].iter()) {
 		Ok({ values, errors, report }) => values == [[1], [2]] and errors.len() == 1 and errors.all(
 			|error| match error {
-				InvalidRow(at) => at.line == 2
+				InvalidRow(at) => csv_coordinates(at).line == 2
 				_ => False
 			},
 		) and report == { emitted_items: 2, rejected_records: 1 }
@@ -1820,21 +1812,21 @@ expect {
 }
 expect {
 	result : Try(List({ name : Str, age : U64 }), _)
-	result = Streaming.collect(Streaming.read_iter(["name,age\r".to_utf8(), "\nAda,36\nAlan,41".to_utf8()].iter(), CSV.typed_decoder(Exact, {})))
+	result = (CSV.typed_decoder({ header: Exact, reader: {} })).collect(["name,age\r".to_utf8(), "\nAda,36\nAlan,41".to_utf8()].iter())
 	result == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 }
 expect {
 	result : Try(List({ id : U64 }), _)
-	result = CSV.parse("id\nwrong\n\"unterminated")
+	result = CSV.decode_str("id\nwrong\n\"unterminated", {})
 	match result {
-		Err(InvalidCsv(error)) => error.record == 2 and error.problem == ExpectedValue({ expected: U64, bytes: "wrong".to_utf8() })
+		Err(InvalidCsv(error)) => csv_coordinates(error).record == 2 and error.problem == ExpectedValue({ expected: U64, bytes: "wrong".to_utf8() })
 		_ => False
 	}
 }
 expect {
 	decode = Parser.many(CSV.field(CSV.u64({})))
-	match CSV.parse_with(decode, "bad\n\"unterminated") {
-		Err(InvalidRow(error)) => error.record == 1 and error.problem == ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ expected: U64, bytes: "bad".to_utf8() }) }))
+	match CSV.rows_parser({ row: decode }).parse_str("bad\n\"unterminated") {
+		Err(ParseError({ problem: InvalidRow(error), .. })) => csv_coordinates(error).record == 1 and error.problem == ParserFailure(FieldProblem(Diagnostic.{ problem: ExpectedValue({ expected: U64, bytes: "bad".to_utf8() }), location: ByteOffset(0), path: [] }))
 		_ => False
 	}
 }
@@ -1842,18 +1834,18 @@ expect {
 expect CSV.encode_record(["a".to_utf8(), "b".to_utf8()], { quoting: Always, line_ending: Lf }) == Ok("\"a\",\"b\"\n".to_utf8())
 expect CSV.encode_record(["a".to_utf8()], { line_ending: Cr }) == Ok("a\r".to_utf8())
 
-expect Streaming.collect(Streaming.read_iter(["\"a\"\"\"\n".to_utf8()].iter(), CSV.decoder({ max_field_bytes: 2 }))) == Ok([["a\"".to_utf8()]])
-expect Streaming.collect(Streaming.read_iter(["\"a\"\"\"\n".to_utf8()].iter(), CSV.decoder({ max_field_bytes: 1 }))).is_err()
-expect Streaming.collect(Streaming.read_iter(["a,b".to_utf8()].iter(), CSV.decoder({ max_fields: 2 }))) == Ok([["a".to_utf8(), "b".to_utf8()]])
-expect Streaming.collect(Streaming.read_iter(["a,b,c".to_utf8()].iter(), CSV.decoder({ max_fields: 2 }))).is_err()
-expect Streaming.collect(Streaming.read_iter(["a,b".to_utf8()].iter(), CSV.decoder({ max_record_bytes: 3 }))) == Ok([["a".to_utf8(), "b".to_utf8()]])
-expect Streaming.collect(Streaming.read_iter(["a,b".to_utf8()].iter(), CSV.decoder({ max_record_bytes: 2 }))).is_err()
+expect (CSV.decoder({ max_field_bytes: 2 })).collect(["\"a\"\"\"\n".to_utf8()].iter()) == Ok([["a\"".to_utf8()]])
+expect (CSV.decoder({ max_field_bytes: 1 })).collect(["\"a\"\"\"\n".to_utf8()].iter()).is_err()
+expect (CSV.decoder({ max_fields: 2 })).collect(["a,b".to_utf8()].iter()) == Ok([["a".to_utf8(), "b".to_utf8()]])
+expect (CSV.decoder({ max_fields: 2 })).collect(["a,b,c".to_utf8()].iter()).is_err()
+expect (CSV.decoder({ max_record_bytes: 3 })).collect(["a,b".to_utf8()].iter()) == Ok([["a".to_utf8(), "b".to_utf8()]])
+expect (CSV.decoder({ max_record_bytes: 2 })).collect(["a,b".to_utf8()].iter()).is_err()
 
 # User parser tags and byte offsets survive positional row decoding unchanged.
 expect {
-	custom = CSV.field(Parser.custom(|_| Err(ParseError({ offset: 2, problem: OutsideRange({ max: 10.U64 }) }))))
-	match CSV.parse_with(custom, "123") {
-		Err(InvalidRow({ record: 1, field: 1, line: 1, column: 1, problem: ParserFailure(FieldProblem({ offset: 2, problem: OutsideRange({ max: 10 }) })) })) => True
+	custom = CSV.field(Parser.custom(|_| Err(ParseError(Diagnostic.{ problem: OutsideRange({ max: 10.U64 }), location: InputOffset(2), path: [] }))))
+	match CSV.rows_parser({ row: custom }).parse_str("123") {
+		Err(ParseError({ problem: InvalidRow(error), .. })) => error.problem == ParserFailure(FieldProblem(Diagnostic.{ problem: OutsideRange({ max: 10 }), location: ByteOffset(2), path: [] })) and error.path == [Record(1), Field(1)]
 		_ => False
 	}
 }
@@ -1862,11 +1854,11 @@ expect {
 expect {
 	row = CSV.record(|name| |count| { name, count })
 		.keep(CSV.field(CSV.string({})))
-		.keep(CSV.field(Utf8.digits({})))
-	CSV.parse_with(row, "apples,42\n") == Ok([{ name: "apples", count: 42 }])
+		.keep(CSV.field(Parser.Utf8.digits({})))
+	CSV.rows_parser({ row: row }).parse_str("apples,42\n") == Ok([{ name: "apples", count: 42 }])
 }
 expect {
-	even = Utf8.digits({}).map(
+	even = Parser.Utf8.digits({}).map(
 		|value| if value % 2 == 0 {
 			Ok(value)
 		} else {
@@ -1876,8 +1868,58 @@ expect {
 	row = CSV.record(|name| |count| { name, count })
 		.keep(CSV.field(CSV.string({})))
 		.keep(CSV.field(even))
-	match CSV.parse_with(row, "apples,3\n") {
-		Err(InvalidRow(error)) => error.record == 1 and error.field == 2 and error.line == 1 and error.column == 8 and error.problem == ParserFailure(FieldProblem({ offset: 0, problem: OddCount(3) }))
+	match CSV.rows_parser({ row: row }).parse_str("apples,3\n") {
+		Err(ParseError({ problem: InvalidRow(error), .. })) => csv_coordinates(error).record == 1 and csv_coordinates(error).field == 2 and csv_coordinates(error).line == 1 and csv_coordinates(error).column == 8 and error.problem == ParserFailure(FieldProblem(Diagnostic.{ problem: OddCount(3), location: ByteOffset(0), path: [] }))
 		_ => False
 	}
+}
+
+decoded_error : Diagnostic(p) -> Diagnostic(p)
+decoded_error = |error| {
+	location = match error.location {
+		InputOffset(offset) => ByteOffset(offset)
+		_ => error.location
+	}
+	{ ..error, location }
+}
+
+row_error : U64, Diagnostic(Parser.Problem(p)) -> CSV.RowError(p)
+row_error = |record, error| {
+	fields = match error.location {
+		InputOffset(index) => [Field(index + 1)]
+		_ => []
+	}
+	location = match error.location {
+		InputOffset(_) => Unavailable(NotRetained)
+		_ => error.location
+	}
+	Diagnostic.{ problem: ParserFailure(error.problem), location, path: [Record(record)].concat(fields).concat(error.path) }
+}
+
+# The sole conversion from logical CSV coordinates into shared diagnostics.
+csv_error : { record : U64, field : U64, line : U64, column : U64, problem : p } -> Diagnostic(p)
+csv_error = |error| {
+	path = (if (error.record > 0) [Record(error.record)] else [])
+		.concat(if (error.field > 0) [Field(error.field)] else [])
+	location = if (error.line > 0 and error.column > 0) LineColumn({ line: error.line, column: error.column }) else Unavailable(NotRetained)
+	Diagnostic.{ problem: error.problem, location, path }
+}
+
+csv_coordinates : Diagnostic(p) -> { record : U64, field : U64, line : U64, column : U64 }
+csv_coordinates = |error| {
+	var $record = 0.U64
+	var $field = 0.U64
+	for part in error.path {
+		match part {
+			Record(index) => {
+				$record = index
+			}
+			Field(index) => {
+				$field = index
+			}
+			_ => {}
+		}
+	}
+	position = Diagnostic.line_column(error.location) ?? { line: 0, column: 0 }
+	{ record: $record, field: $field, line: position.line, column: position.column }
 }

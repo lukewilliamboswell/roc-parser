@@ -4,15 +4,15 @@ import Streaming
 CSVReader :: [].{
 
 	## Limits bound the unfinished record, including fields retained for decoding.
-	Props := { max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536 }
+	Props := { max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536, errors : Streaming.RecoveryProps ?? {} }
 
 	Problem : [UnterminatedQuotedField, TextAfterQuote, RecordBytesExceeded({ max : U64 }), FieldBytesExceeded({ max : U64 }), FieldCountExceeded({ max : U64 })]
 
 	## One-based record, field, physical line and byte column.
-	Error : { record : U64, field : U64, line : U64, column : U64, problem : Problem }
+	Error : { offset : U64, record : U64, field : U64, line : U64, column : U64, problem : Problem }
 
 	## A source position for typed-decoding diagnostics.
-	Location : { line : U64, column : U64 }
+	Location : { offset : U64, line : U64, column : U64 }
 
 	## Parser state owns only the unfinished record and the latest positions.
 	State : {
@@ -36,7 +36,7 @@ CSVReader :: [].{
 
 	## Start scanning; BOM bytes remain part of the first field.
 	new : Props -> State
-	new = |props| { props, field: [], fields: [], starts: [], last_starts: [], last_end: { line: 1, column: 1 }, mode: Start, record_started: False, record_bytes: 0, offset: 0, line: 1, column: 1, previous_cr: False, skip_lf: False, record: 1, field_start: { line: 1, column: 1 } }
+	new = |props| { props, field: [], fields: [], starts: [], last_starts: [], last_end: { offset: 0, line: 1, column: 1 }, mode: Start, record_started: False, record_bytes: 0, offset: 0, line: 1, column: 1, previous_cr: False, skip_lf: False, record: 1, field_start: { offset: 0, line: 1, column: 1 } }
 
 	## Consume at most one complete record. Syntax and limit failures are terminal.
 	step : State, List(U8), Streaming.InputEnd -> Streaming.Step(State, List(List(U8)), Error)
@@ -47,7 +47,7 @@ CSVReader :: [].{
 			byte = bytes.get($index) ?? 0
 			if $state.skip_lf and byte == '\n' {
 				$state = advance({ ..$state, skip_lf: False }, byte)
-				$state = { ..$state, field_start: { line: $state.line, column: $state.column } }
+				$state = { ..$state, field_start: { offset: $state.offset, line: $state.line, column: $state.column } }
 				$index = $index + 1
 			} else {
 				$state = { ..$state, skip_lf: False }
@@ -61,7 +61,7 @@ CSVReader :: [].{
 				is_break = byte == '\r' or byte == '\n'
 				if $state.mode != Quoted and (byte == ',' or is_break) {
 					$state = finish_field($state)
-					at = { line: $state.line, column: $state.column }
+					at = { offset: $state.offset, line: $state.line, column: $state.column }
 					$state = advance($state, byte)
 					$index = $index + 1
 					if is_break {
@@ -69,7 +69,7 @@ CSVReader :: [].{
 						$state = finish_record($state, at, byte == '\r')
 						return { state: $state, consumed: $index, outcome: Item(fields) }
 					}
-					$state = { ..$state, field_start: { line: $state.line, column: $state.column } }
+					$state = { ..$state, field_start: { offset: $state.offset, line: $state.line, column: $state.column } }
 				} else {
 					match $state.mode {
 						Start if byte == '"' => {
@@ -78,7 +78,7 @@ CSVReader :: [].{
 						Quoted if byte == '"' => {
 							$state = { ..$state, mode: AfterQuote }
 						}
-						AfterQuote if byte != '"' => return { state: $state, consumed: $index, outcome: Failed({ record: $state.record, field: $state.fields.len() + 1, line: $state.line, column: $state.column, problem: TextAfterQuote }) }
+						AfterQuote if byte != '"' => return { state: $state, consumed: $index, outcome: Failed({ offset: $state.offset, record: $state.record, field: $state.fields.len() + 1, line: $state.line, column: $state.column, problem: TextAfterQuote }) }
 						_ => {
 							if $state.field.len() >= $state.props.max_field_bytes {
 								return failure($state, $index, FieldBytesExceeded({ max: $state.props.max_field_bytes }))
@@ -95,7 +95,7 @@ CSVReader :: [].{
 			return { state: $state, consumed: $index, outcome: NeedInput }
 		}
 		if $state.mode == Quoted {
-			return { state: $state, consumed: $index, outcome: Failed({ record: $state.record, field: $state.fields.len() + 1, line: $state.field_start.line, column: $state.field_start.column, problem: UnterminatedQuotedField }) }
+			return { state: $state, consumed: $index, outcome: Failed({ offset: $state.field_start.offset, record: $state.record, field: $state.fields.len() + 1, line: $state.field_start.line, column: $state.field_start.column, problem: UnterminatedQuotedField }) }
 		}
 		if $state.record_started {
 			if $state.fields.len() >= $state.props.max_fields {
@@ -103,7 +103,7 @@ CSVReader :: [].{
 			}
 			$state = finish_field($state)
 			fields = $state.fields
-			$state = finish_record($state, { line: $state.line, column: $state.column }, False)
+			$state = finish_record($state, { offset: $state.offset, line: $state.line, column: $state.column }, False)
 			return { state: $state, consumed: $index, outcome: Item(fields) }
 		}
 		{ state: $state, consumed: $index, outcome: Done }
@@ -127,9 +127,9 @@ finish_field : CSVReader.State -> CSVReader.State
 finish_field = |state| { ..state, fields: state.fields.append(state.field), starts: state.starts.append(state.field_start), field: [], mode: Start }
 
 finish_record : CSVReader.State, CSVReader.Location, Bool -> CSVReader.State
-finish_record = |state, at, skip_lf| { ..state, field: [], fields: [], starts: [], last_starts: state.starts, last_end: at, mode: Start, record_started: False, record_bytes: 0, record: state.record + 1, field_start: { line: state.line, column: state.column }, skip_lf }
+finish_record = |state, at, skip_lf| { ..state, field: [], fields: [], starts: [], last_starts: state.starts, last_end: at, mode: Start, record_started: False, record_bytes: 0, record: state.record + 1, field_start: { offset: state.offset, line: state.line, column: state.column }, skip_lf }
 
 failure : CSVReader.State, U64, CSVReader.Problem -> Streaming.Step(CSVReader.State, List(List(U8)), CSVReader.Error)
-failure = |state, consumed, problem| { state, consumed, outcome: Failed({ record: state.record, field: state.fields.len() + 1, line: state.field_start.line, column: state.field_start.column, problem }) }
+failure = |state, consumed, problem| { state, consumed, outcome: Failed({ offset: state.field_start.offset, record: state.record, field: state.fields.len() + 1, line: state.field_start.line, column: state.field_start.column, problem }) }
 
-expect Streaming.collect(Streaming.read_iter(["a,\"b".to_utf8(), "\"\"c\"\r".to_utf8(), "\nx,y".to_utf8()].iter(), Streaming.decoder(CSVReader.new({}), CSVReader.step))) == Ok([["a".to_utf8(), "b\"c".to_utf8()], ["x".to_utf8(), "y".to_utf8()]])
+expect (Streaming.decoder({ initial_state: CSVReader.new({}), step: |state, bytes, end| Streaming.map_step_error(CSVReader.step(state, bytes, end), |error| ScannerFailure(error)) })).collect(["a,\"b".to_utf8(), "\"\"c\"\r".to_utf8(), "\nx,y".to_utf8()].iter()) == Ok([["a".to_utf8(), "b\"c".to_utf8()], ["x".to_utf8(), "y".to_utf8()]])
