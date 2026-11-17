@@ -31,5 +31,20 @@ the parser. Apply this rule consistently when adding or revising errors.
 
 Keep benchmark reports, timing receipts, build output and downloaded dependencies
 in ignored scratch directories such as `.roc-parser-tmp/`. Commit reproducible
-harnesses, dependency pins and required test fixtures; document useful result
+harnesses, dependency pins and minimal regression witnesses; document useful result
 summaries without checking in raw measurement reports.
+
+## Testing
+
+Prefer property-based tests with small deterministic seeds and reviewable model
+generators. Check round trips, independent models, metamorphic relations and
+resource bounds across generated inputs. When a bug is found, extend the property
+or generator and shrink the failure; retain a small explicit witness when it
+clarifies a contract that generated coverage would otherwise miss.
+
+Do not commit expanded generated corpora or large prescriptive snapshots.
+Generate scaling inputs from parameters. Recreate external conformance suites
+and local comparison scaffolds from pinned source revisions and verified hashes
+in ignored scratch storage; keep the acquisition recipe and dependency pins in
+Git. Preserve useful checks when replacing a dataset with a generator, rather
+than deleting coverage to reduce file size.

@@ -21,23 +21,12 @@ spec.loader.exec_module(perf)
 
 
 class Performance(unittest.TestCase):
-    def test_measured_regressions_reproduce_independent_source_fingerprints(self):
-        expected = {
-            'scaling-header-first-section-quote-counters-body-128': '8944138aa4830d6b33eda97c68d59978ae6572e55fa9571b571762c389e45b76',
-            'scaling-header-first-section-quote-counters-body-256': '8567780e7690c6ef6ec1c0950cd3f74f9ef39a5b1ed7978e6667ca57a0ccc82d',
-            'scaling-header-first-section-quote-counters-body-512': '5ec9d7e463607569e353177ac65d4d8001ff672d2d226fc7e08c9c9536addc81',
-            'scaling-header-first-section-mutating-previews-body-128': 'cbef0b021e476b780a0d6d38675e7fee8994477f231c75a40cae4130665a7f0c',
-            'scaling-header-first-section-mutating-previews-body-256': 'd51b06bdf3c2be13e8feec2bf10f44506626f8fe19dc77e1a403ac5a5d8be2dc',
-            'scaling-header-first-section-mutating-previews-body-512': '32d0966410cdfbc694ea070db81dd5aa2c9e7f94dbd0b37e82b0af223954187f',
-            'scaling-source-store-colliding-attribute-names-128': '72303b287f9094ad8dee9c5e1a2a31ab585f593f635ed91ba018a23ee3f58a13',
-            'scaling-source-store-colliding-attribute-names-256': '0a89107a2e0e7aa1d395f105b68c62803995ed5cd9de281b074a05027a78cccf',
-            'scaling-source-store-colliding-attribute-names-512': '258855eb62c1cb3a938b4e6decaaabb0a1e0d44f5ed5bdc922d8fea40b4d9d46',
-        }
+    def test_measured_regressions_keep_bounded_sizes_and_semantic_predicates(self):
         cases = list(perf.measured_regressions([32,64,128,256,512,1024]))
-        self.assertEqual({c['id']:hashlib.sha256(c['source'].encode()).hexdigest() for c in cases},expected)
         self.assertEqual([c['size'] for c in cases],[128,256,512]*3)
         self.assertTrue(all(c['provenance']['geometric'] for c in cases))
         self.assertTrue(all(len(c['source'].encode()) <= 262144 for c in cases))
+        self.assertTrue(all(c['expect']['html_contains'] for c in cases))
         self.assertEqual(list(perf.measured_regressions([32,64,1024])),[])
         self.assertEqual([c['size'] for c in perf.measured_regressions([256])],[256]*3)
 
@@ -56,15 +45,15 @@ class Performance(unittest.TestCase):
                 for byte in name.encode():
                     value=(value*33+byte)%4294967296
                 hashes.append(value)
-            self.assertEqual(set(hashes),{case['provenance']['name_hash']})
-            self.assertTrue(all(len(name)==case['provenance']['name_length'] for name in names))
+            self.assertEqual(len(set(hashes)), 1)
+            self.assertEqual(len({len(name) for name in names}), 1)
 
     def test_measured_regressions_append_after_historical_inputs_and_keep_scaling_pairs(self):
         args=perf.parser().parse_args(['--generated','2','--sizes','128','256','512'])
         args.fixtures=[]
         old=list(perf.geometric(args.sizes))+list(perf.generated(args.seed,args.generated))
         added=list(perf.measured_regressions(args.sizes))
-        self.assertEqual(list(perf.corpus(args)),old+added+list(perf.fixed_performance_guards(args)))
+        self.assertEqual(list(perf.corpus(args)),old+added+list(perf.generated_performance_guards(args)))
         rows=[{'case':case,'mode':mode,'candidate':{'median_ns':len(case['source'].encode())}}
               for mode in ('parse','render') for case in added]
         pairs=perf.scaling(rows,1.3)
@@ -1026,7 +1015,7 @@ class Performance(unittest.TestCase):
         cases=list(perf.corpus(args))
         geometry=list(perf.geometric(args.sizes))
         generated=list(perf.generated(args.seed,args.generated))
-        self.assertEqual(cases,geometry+generated+list(perf.fixed_performance_guards(args)))
+        self.assertEqual(cases,geometry+generated+list(perf.generated_performance_guards(args)))
         self.assertEqual([case['family']for case in geometry[:10:2]],
                          ['many-sections','many-footnotes','many-crossrefs','attribute-redefinitions','plain-punctuation-adversary'])
         self.assertEqual(len({case['id']for case in cases}),len(cases))
@@ -1043,236 +1032,122 @@ class Performance(unittest.TestCase):
         self.assertFalse(perf.request({'id':'x','source':'x'},'parse',1)['expand'])
         self.assertTrue(perf.request({'id':'x','source':'x','includes':{}},'parse',1)['expand'])
 
-class FixedPerformanceGuards(unittest.TestCase):
-    def write_guards(self, root, cases):
-        path = root / 'scripts/asciidoc/performance-guards.json'
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({'schema_version': 1, 'cases': cases}))
-        return path
-
-    def args(self, root, sizes=('128', '256', '512')):
-        args = perf.parser().parse_args(['--root', str(root), '--generated', '0', '--sizes', *sizes])
+class GeneratedPerformanceGuards(unittest.TestCase):
+    def args(self, *options):
+        args = perf.parser().parse_args(['--generated', '0', '--sizes', '128', '256', '512', *options])
         args.fixtures = []
         return args
 
-    def test_append_after_all_historical_inputs_preserves_exact_request_prefix(self):
+    def test_generation_needs_no_download_or_expanded_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            fixture = root / 'fixtures.json'
-            fixture.write_text(json.dumps({'cases': [{'id': 'fixture', 'source': 'Fixture.'}]}))
-            docs = root / 'docs'
-            docs.mkdir()
-            (docs / 'guide.adoc').write_text('Document.')
-            guard = {'id': 'guard', 'source': 'Guard.', 'family': 'ordered-options',
-                     'attributes': [{'name': 'n', 'value': 'first'}, {'name': 'n', 'value': 'last'}],
-                     'size': 32, 'scaling_input': 'request', 'provenance': {'authored': 'kept'}}
-            path = self.write_guards(root, [guard])
-            args = self.args(root)
-            args.fixtures = [fixture]
-            args.corpus = [docs]
-            geometry = [{'id': 'geometry', 'source': 'Geometry.', 'family': 'geometry', 'includes': {}}]
-            generated = [{'id': 'generated', 'source': 'Generated.', 'family': 'generated-model'}]
-            measured = [{'id': 'measured', 'source': 'Measured.', 'family': 'measured'}]
-            with mock.patch.object(perf, 'geometric', return_value=geometry), \
-                 mock.patch.object(perf, 'generated', return_value=generated), \
-                 mock.patch.object(perf, 'measured_regressions', return_value=measured):
-                old = list(perf.historical_corpus(args))
-                old_fingerprints = [perf.case_identity(case) for case in old]
-                actual = list(perf.corpus(args))
-            self.assertEqual([case['id'] for case in old[:3]], ['geometry', 'generated', 'fixture'])
-            self.assertTrue(old[3]['id'].startswith('corpus-'))
-            self.assertEqual(old[-1]['id'], 'measured')
-            self.assertEqual(actual[:-1], old)
-            self.assertEqual([perf.case_identity(case) for case in actual[:-1]], old_fingerprints)
-            self.assertEqual(actual[-1]['id'], 'guard')
-            self.assertEqual(actual[-1]['family'], guard['family'])
-            self.assertEqual(actual[-1]['scaling_input'], 'request')
-            self.assertEqual(actual[-1]['attributes'], guard['attributes'])
-            self.assertEqual(perf.case_identity(actual[-1]), perf.case_identity(guard))
-            self.assertEqual(actual[-1]['provenance']['authored'], 'kept')
-            self.assertEqual(actual[-1]['provenance']['performance_guard_sha256'], perf.digest(path))
+            args = self.args('--root', directory)
+            cases = list(perf.generated_performance_guards(args))
+            self.assertTrue(cases)
+            self.assertEqual(list(pathlib.Path(directory).iterdir()), [])
+            self.assertEqual(len(cases), len({case['id'] for case in cases}))
+            self.assertTrue(all(case['source'] is not None for case in cases))
 
-    def test_source_extensions_require_expanded_sizes_but_small_and_request_guards_always_load(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            cases = [{'id': 'small', 'source': 'S', 'size': 512, 'family': 'standard'},
-                     {'id': 'request', 'source': 'R', 'size': 2048, 'family': 'options', 'scaling_input': 'request'},
-                     *[{'id': f'large-{size}', 'source': 'X', 'size': size, 'family': 'source-growth'}
-                       for size in (1024, 2048, 4096)]]
-            self.write_guards(root, cases)
-            for sizes in [('32',), ('128', '256', '512')]:
-                self.assertEqual([c['id'] for c in perf.fixed_performance_guards(self.args(root, sizes))], ['small', 'request'])
-            expanded = list(perf.fixed_performance_guards(self.args(root, ('1024',))))
-            self.assertEqual([c['id'] for c in expanded], [c['id'] for c in cases])
-            self.assertEqual([c['family'] for c in expanded], [c['family'] for c in cases])
-            self.assertEqual([c.get('scaling_input', 'source') for c in expanded], ['source', 'request', 'source', 'source', 'source'])
+    def test_seed_reproduces_samples_and_different_seeds_explore_other_sizes(self):
+        first = list(perf.generated_performance_guards(self.args('--generated', '24', '--seed', '719')))
+        again = list(perf.generated_performance_guards(self.args('--generated', '24', '--seed', '719')))
+        other = list(perf.generated_performance_guards(self.args('--generated', '24', '--seed', '720')))
+        self.assertEqual(first, again)
+        samples = [case for case in first if 'seed' in case['provenance']]
+        changed = [case for case in other if 'seed' in case['provenance']]
+        self.assertEqual(len(samples), 24)
+        self.assertNotEqual([perf.case_identity(c) for c in samples], [perf.case_identity(c) for c in changed])
+        self.assertTrue(any(c['size'] not in (128, 256, 512) for c in samples))
+        self.assertTrue(all(1 <= c['size'] <= 512 for c in samples))
+        self.assertTrue(all(not c['provenance']['geometric'] for c in samples))
 
-    def test_identical_request_duplicate_keeps_original_case_and_measurement_fields(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            old = {'id': 'same', 'source': 'Body.', 'family': 'historical', 'provenance': {'original': True}}
-            self.write_guards(root, [{**old, 'family': 'guard', 'scaling_input': 'request'}])
-            with mock.patch.object(perf, 'historical_corpus', return_value=iter([old])):
-                actual = list(perf.corpus(self.args(root)))
-            self.assertEqual(actual, [old])
-            self.assertIs(actual[0], old)
+    def test_source_extensions_require_expanded_sizes_and_options_keep_request_scaling(self):
+        bounded = list(perf.generated_performance_guards(self.args()))
+        expanded = list(perf.generated_performance_guards(self.args('--sizes', '1024')))
+        self.assertTrue(all(c['size'] <= 512 for c in bounded))
+        self.assertTrue(any(c['size'] == 4096 for c in expanded))
+        for case in bounded:
+            if case.get('scaling_input') == 'request':
+                self.assertTrue(case['attributes'])
+                self.assertEqual(len(case['attributes']), case['size'])
+                self.assertEqual(perf.scaling_measure(case)['scaling_input'], 'request')
 
-    def test_duplicate_id_with_changed_source_include_policy_or_option_order_is_an_error(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            old = {'id': 'same', 'source': 'Body.', 'attributes': [{'name': 'n', 'value': 'first'}, {'name': 'n', 'value': 'last'}]}
-            changed = [{**old, 'source': 'Changed.'}, {**old, 'includes': {}},
-                       {**old, 'attributes': list(reversed(old['attributes']))}]
-            for case in changed:
-                with self.subTest(case=case):
-                    self.write_guards(root, [case])
-                    with mock.patch.object(perf, 'historical_corpus', return_value=iter([old])):
-                        with self.assertRaisesRegex(ValueError, 'duplicate ID.*different request fingerprint: same'):
-                            list(perf.corpus(self.args(root)))
+    def test_generated_shapes_grow_linearly_at_seeded_non_boundary_sizes(self):
+        import random
+        rng = random.Random(719)
+        for _ in range(24):
+            size = rng.randint(1, 2048)
+            small = list(perf.source_guard_models(size))
+            large = list(perf.source_guard_models(size * 2))
+            self.assertEqual([c['family'] for c in small], [c['family'] for c in large])
+            for a, b in zip(small, large):
+                with self.subTest(size=size, family=a['family']):
+                    before, after = len(a['source'].encode()), len(b['source'].encode())
+                    self.assertGreater(after, before)
+                    self.assertLessEqual(after, before * 2.6 + 128)
+                    self.assertLessEqual(after, 262144)
+                    self.assertEqual(a['source'].count('== '), b['source'].count('== '))
 
-    def test_normal_campaign_missing_guard_file_fails_instead_of_silently_omitting_cases(self):
-        with tempfile.TemporaryDirectory() as directory:
-            args = self.args(pathlib.Path(directory))
-            with mock.patch.object(perf, 'historical_corpus', return_value=iter([])):
-                with self.assertRaisesRegex(ValueError, 'required performance guard file missing'):
-                    list(perf.corpus(args))
+    def test_generated_collision_names_are_distinct_and_really_collide(self):
+        import random
+        rng = random.Random(112)
+        for size in [1, 2, 31, 32, 33, *[rng.randint(3, 1024) for _ in range(20)]]:
+            case = next(c for c in perf.source_guard_models(size) if c['family'] == 'source-store-colliding-attribute-names')
+            names = [line.split(':')[1] for line in case['source'].split('\n\n')[0].splitlines()]
+            self.assertEqual(len(set(names)), size)
+            hashes = set()
+            for name in names:
+                self.assertRegex(name, r'^[a-z][a-z0-9]+$')
+                value = 5381
+                for byte in name.encode():
+                    value = (value * 33 + byte) % 4294967296
+                hashes.add(value)
+            self.assertEqual(len(hashes), 1)
+            self.assertIn(f'<p>Body value0 value{size - 1}.</p>', case['expect']['html_contains'])
 
-    def test_smoke_and_replay_never_load_guards(self):
+    def test_option_models_preserve_order_and_check_endpoint_values(self):
+        import random
+        rng = random.Random(719)
+        for size in [1, 2, 31, 32, 33, *[rng.randint(2, 1024) for _ in range(20)]]:
+            for boundary, growth in [(False, False), (True, False), (False, True)]:
+                case = perf.option_guard_model(size, boundary=boundary, growth=growth)
+                attrs = perf.request(case, 'parse', 0)['attributes']
+                self.assertEqual(len(attrs), size)
+                self.assertEqual([a['name'] for a in attrs], [*[f'key{i}' for i in range(size - 1)], 'last'])
+                expected = 'value' + str(size - 1) if growth else 'last-value'
+                self.assertEqual(attrs[-1]['value'], expected)
+                self.assertIn(expected, case['expect']['html_contains'][0])
+
+    def test_append_preserves_original_requests_and_measurement_fields(self):
+        args = self.args()
+        old = {'id': 'old', 'source': 'Body.', 'family': 'original'}
+        guard = perf.option_guard_model(17, boundary=True)
+        with mock.patch.object(perf, 'historical_corpus', return_value=iter([old])), \
+             mock.patch.object(perf, 'generated_performance_guards', return_value=iter([guard])):
+            actual = list(perf.corpus(args))
+        self.assertIs(actual[0], old)
+        self.assertIs(actual[1], guard)
+
+    def test_identical_duplicate_keeps_original_and_changed_requests_fail(self):
+        old = {'id': 'same', 'source': 'Body.', 'attributes': [{'name': 'n', 'value': 'first'}, {'name': 'n', 'value': 'last'}]}
+        for guard in [{**old, 'family': 'guard'}, {**old, 'source': 'Changed.'},
+                      {**old, 'includes': {}}, {**old, 'attributes': list(reversed(old['attributes']))}]:
+            with self.subTest(guard=guard), \
+                 mock.patch.object(perf, 'historical_corpus', return_value=iter([old])), \
+                 mock.patch.object(perf, 'generated_performance_guards', return_value=iter([guard])):
+                if perf.case_identity(guard) == perf.case_identity(old):
+                    self.assertEqual(list(perf.corpus(self.args())), [old])
+                else:
+                    with self.assertRaisesRegex(ValueError, 'duplicate ID.*different request fingerprint: same'):
+                        list(perf.corpus(self.args()))
+
+    def test_smoke_and_replay_bypass_generation(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            replay = root / 'replay.json'
-            cases = [{'id': 'retained', 'source': 'Body.', 'family': 'retained', 'scaling_input': 'request'}]
+            replay = pathlib.Path(directory) / 'replay.json'
+            cases = [{'id': 'witness', 'source': 'Body.'}]
             replay.write_text(json.dumps({'cases': cases}))
-            with mock.patch.object(perf, 'fixed_performance_guards', side_effect=AssertionError('must not load')):
-                smoke = list(perf.corpus(perf.parser().parse_args(['--root', str(root), '--smoke'])))
-                self.assertEqual(len(smoke), 2)
+            with mock.patch.object(perf, 'generated_performance_guards', side_effect=AssertionError('must not generate')):
+                self.assertEqual(len(list(perf.corpus(self.args('--smoke')))), 2)
                 self.assertEqual(list(perf.corpus(argparse.Namespace(replay=[replay]))), cases)
-
-    def test_guard_preflight_finishes_before_first_historical_yield_but_output_stays_appended(self):
-        old = {'id': 'old', 'source': 'Body.'}
-        guard = {'id': 'guard', 'source': 'Guard.'}
-        args = self.args(pathlib.Path('/unused'))
-        events = []
-        def historical(_):
-            events.append('historical')
-            yield old
-        def guards(_):
-            events.append('guards')
-            yield guard
-            events.append('guards-complete')
-        with mock.patch.object(perf, 'historical_corpus', side_effect=historical), \
-             mock.patch.object(perf, 'fixed_performance_guards', side_effect=guards) as load:
-            cases = perf.corpus(args)
-            load.assert_not_called()
-            self.assertIs(next(cases), old)
-            self.assertEqual(events, ['guards', 'guards-complete', 'historical'])
-            load.assert_called_once_with(args)
-            self.assertEqual(list(cases), [guard])
-
-    def test_missing_or_invalid_guard_fails_next_before_any_historical_yield(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            path = root / 'scripts/asciidoc/performance-guards.json'
-            path.parent.mkdir(parents=True)
-            for content in [None, 'not-json', json.dumps({'schema_version': 99, 'cases': []}),
-                            json.dumps({'schema_version': 1, 'cases': {}})]:
-                with self.subTest(content=content):
-                    if content is None:
-                        path.unlink(missing_ok=True)
-                    else:
-                        path.write_text(content)
-                    with mock.patch.object(perf, 'historical_corpus', return_value=iter([{'id': 'old', 'source': 'Body.'}])) as historical:
-                        cases = perf.corpus(self.args(root))
-                        with self.assertRaises(ValueError):
-                            next(cases)
-                        historical.assert_not_called()
-
-    def test_retained_file_has_exact_cohorts_and_preserves_request_scaling(self):
-        path = ROOT / 'scripts/asciidoc/performance-guards.json'
-        value = json.loads(path.read_text())
-        cases = value['cases']
-        self.assertEqual(value['schema_version'], 1)
-        self.assertFalse(value['provenance']['passing_claim'])
-        self.assertEqual(len(cases), 248)
-        self.assertEqual(len({case['id'] for case in cases}), 248)
-        options = [c for c in cases if c.get('scaling_input') == 'request']
-        self.assertEqual(len(options), 18)
-        self.assertTrue(all(c.get('attributes') for c in options))
-        large = [c for c in cases[:83] if c.get('size', 0) > 512]
-        self.assertEqual(len(large), 24)
-        self.assertEqual({c['size'] for c in large}, {1024, 2048, 4096})
-        self.assertEqual({c['family'] for c in large}, {'live-dynamic-source-redefinitions-each-counter-reset', 'header-first-section-quote-counters', 'header-first-section-quote-counters-escaped', 'header-first-section-quote-counters-role-plus', 'header-first-section-link-counters', 'header-first-section-angle-https-counters', 'header-first-section-angle-http-counters', 'header-first-section-angle-literal-counters'})
-        self.assertTrue(all(c.get('scaling_input', 'source') == 'source' for c in large))
-        ids = [case_id for origin in value['provenance']['origins'] for case_id in origin['case_ids']]
-        self.assertEqual(ids, [c['id'] for c in cases])
-        self.assertTrue(all(len(origin['source_sha256']) == 64 for origin in value['provenance']['origins']))
-
-
-    def test_qualified_extensions_preserve_exact_requests_and_bounded_inventory(self):
-        value = json.loads((ROOT / 'scripts/asciidoc/performance-guards.json').read_text())
-        cases = value['cases']
-        compact = lambda rows: json.dumps(rows, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
-        self.assertEqual(hashlib.sha256(compact(cases[:83])).hexdigest(), 'da84890e20192e3d71ae9ea6783bcd2568dff5d8be5dff26fdd985a14583a77e')
-        self.assertEqual(hashlib.sha256(compact(cases[83:])).hexdigest(), 'c9875b5004a6d81e89f021ed14aa718e3268e2e81d35fcb41e0d967fc7e8b1e3')
-        self.assertEqual(len(cases[83:]), 165)
-        self.assertEqual(len({perf.case_identity(c) for c in cases[83:]}), 165)
-        self.assertTrue({perf.case_identity(c) for c in cases[:83]}.isdisjoint(perf.case_identity(c) for c in cases[83:]))
-        self.assertTrue(all(c['provenance']['geometric'] is True for c in cases[83:]))
-        self.assertTrue(all(len(c['source'].encode()) <= 262144 for c in cases[83:]))
-        bounded = list(perf.fixed_performance_guards(self.args(ROOT)))
-        expanded = list(perf.fixed_performance_guards(self.args(ROOT, ('1024',))))
-        self.assertEqual(len(bounded), 134)
-        self.assertEqual([c['id'] for c in expanded], [c['id'] for c in cases])
-        self.assertEqual(len([c for c in cases if c.get('size', 0) > 512]), 114)
-        origins = [o for o in value['provenance']['origins'] if o['cohort'].startswith('qualified-')]
-        self.assertEqual([len(o['case_ids']) for o in origins], [24, 15, 24, 48, 24, 24, 6])
-        self.assertEqual([case_id for o in origins for case_id in o['case_ids']], [c['id'] for c in cases[83:]])
-
-    def test_supported_title_extensions_preserve_legacy47_and_exact_geometric_inputs(self):
-        value = json.loads((ROOT / 'scripts/asciidoc/performance-guards.json').read_text())
-        cases = value['cases']
-        # These twelve requests were already geometric in the broad corpus.
-        # Restore only the formerly absent marker for historical byte hashes;
-        # require the real retained guards to keep their scaling checks enabled.
-        promoted = {
-            f'scaling-header-first-section-{kind}-body-{size}'
-            for kind in ('quote-counters-escaped', 'quote-counters-role-plus')
-            for size in (128, 256, 512, 1024, 2048, 4096)
-        }
-        legacy = json.loads(json.dumps(cases[:83]))
-        self.assertEqual({c['id'] for c in legacy if c['id'] in promoted}, promoted)
-        for case in legacy:
-            if case['id'] in promoted:
-                self.assertIs(case['provenance'].pop('geometric'), True)
-        prefix = hashlib.sha256(json.dumps(legacy[:47], sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
-        self.assertEqual(prefix, '8a394040639a4eb3ba1e183707cb3b1e3d330e7eaabd4e90e4024ec0a5c72c0e')
-        first65 = hashlib.sha256(json.dumps(legacy[:65], sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
-        self.assertEqual(first65, 'c1a5b0479a6ddb0ccb66ce8e683a8c42aa043cd17c27bc76cabcf6f6be5f5d01')
-        families = {
-            'header-first-section-quote-counters-escaped': 'escaped-header-quotes',
-            'header-first-section-quote-counters-role-plus': 'role-plus-header-quotes',
-            'header-first-section-link-counters': 'explicit-header-links',
-            'header-first-section-angle-https-counters': 'angle-https-header-counters',
-            'header-first-section-angle-http-counters': 'angle-http-header-counters',
-            'header-first-section-angle-literal-counters': 'angle-literal-header-counters',
-        }
-        for family, cohort in families.items():
-            selected = [case for case in cases[47:83] if case['family'] == family]
-            self.assertEqual([case['size'] for case in selected], [128, 256, 512, 1024, 2048, 4096])
-            origin = next(item for item in value['provenance']['origins'] if item['cohort'] == cohort)
-            self.assertTrue(origin['geometric'])
-            self.assertEqual(origin['sizes'], [128, 256, 512, 1024, 2048, 4096])
-            self.assertEqual(origin['case_ids'], [case['id'] for case in selected])
-            self.assertEqual(origin['max_source_utf8_bytes'], max(len(case['source'].encode()) for case in selected))
-            for case in selected:
-                self.assertLessEqual(len(case['source'].encode()), 262144)
-                self.assertEqual(case['provenance']['source_sha256'], hashlib.sha256(case['source'].encode()).hexdigest())
-                self.assertEqual(case.get('scaling_input', 'source'), 'source')
-                self.assertEqual(case['expect'], {'html_contains': ['<p>Body.</p>']})
-        self.assertFalse(value['provenance']['passing_claim'])
-        self.assertEqual(len(cases[47:83]), 36)
-
-
 
 
 class DefaultCalloutGeometry(unittest.TestCase):
@@ -1322,7 +1197,7 @@ class DefaultCalloutGeometry(unittest.TestCase):
 
     def test_smoke_early_return_keeps_exact_two_requests(self):
         args=perf.parser().parse_args(['--smoke'])
-        with mock.patch.object(perf,'geometric',side_effect=AssertionError('no geometry in smoke')),mock.patch.object(perf,'fixed_performance_guards',side_effect=AssertionError('no guards in smoke')):
+        with mock.patch.object(perf,'geometric',side_effect=AssertionError('no geometry in smoke')),mock.patch.object(perf,'generated_performance_guards',side_effect=AssertionError('no guards in smoke')):
             cases=list(perf.corpus(args))
         self.assertEqual(cases,[{'id':'smoke-paragraph','family':'smoke','source':'Hello *Roc*.'},
             {'id':'smoke-include-selectors','family':'smoke','source':'----\ninclude::part.adoc[lines=2..4]\ninclude::part.adoc[tag=chosen]\n----',

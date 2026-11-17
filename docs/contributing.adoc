@@ -256,8 +256,10 @@ separately, and put any warning before the step it applies to.
   the boundary cases of the behaviour you changed.
 * When you change parser behaviour, run that format's conformance review and,
   if the change touches a fuzzed path, a smoke run of its targets
-  (<<property-testing>>). If a fuzz target or review found the bug, add the
-  input as a regression.
+  (<<property-testing>>). If a fuzz target or review found the bug, extend its
+  property or generator and retain a minimized witness when needed. Keep
+  expanded corpora in ignored scratch storage; regenerate external suites from
+  pinned sources.
 * Fix the cause of a failure. Do not add a gate, a skip or a known-failures
   entry to make a check pass unless the input is genuinely outside what the
   module supports, and say why in the entry.

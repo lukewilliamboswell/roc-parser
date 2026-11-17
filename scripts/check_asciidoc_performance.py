@@ -367,33 +367,13 @@ def geometric(sizes):
 
 
 def measured_regressions(sizes):
-    """Append bounded measured regressions without reordering historical inputs."""
-    selected = [size for size in (128, 256, 512) if size in sizes]
+    """Generate bounded stateful shapes before the extended scaling campaign."""
     for family in ('header-first-section-quote-counters',
-                   'header-first-section-mutating-previews'):
-        for size in selected:
-            if family == 'header-first-section-quote-counters':
-                title = ' '.join(f'{{counter:key{i}}} pass:q[*word*]' for i in range(size))
-            else:
-                title = ' '.join(f'pass:a[{{counter:key{i}}}] {{set:last:value}}' for i in range(size))
-            yield {'id': f'scaling-{family}-body-{size}', 'family': family, 'size': size,
-                   'source': '= Header {project}\n:project: Roc\n\n== ' + title + '\n\nBody.',
-                   'expect': {'html_contains': ['<p>Body.</p>']},
-                   'provenance': {'geometric': True, 'reason': 'First-body section title grows live counters during immediate pass/preview operations, with a static body. The separately retained counter-observing body reveals an inherited native/Ruby title-side-effect difference.'}}
-    for size in selected:
-        bits = size.bit_length() - 1
-        names = ['k' + ''.join('c8' if bit == '1' else 'az' for bit in f'{i:0{bits}b}')
-                 for i in range(size)]
-        name_hash = 5381
-        for byte in names[0].encode():
-            name_hash = (name_hash * 33 + byte) % 4294967296
-        yield {'id': f'scaling-source-store-colliding-attribute-names-{size}',
-               'family': 'source-store-colliding-attribute-names', 'size': size,
-               'source': '\n'.join(f':{name}: value{i}' for i, name in enumerate(names))
-                         + '\n\nBody {' + names[0] + '} {' + names[-1] + '}.',
-               'expect': {'html_contains': [f'<p>Body value0 value{size-1}.</p>']},
-               'provenance': {'geometric': True, 'reason': 'All valid lowercase/digit attribute names collide under the current uint32 DJB ordering hash; az and c8 equal polynomial contributions. Measures exact-name collision fallback, never hash identity.',
-                              'name_length': len(names[0]), 'name_hash': name_hash}}
+                   'header-first-section-mutating-previews',
+                   'source-store-colliding-attribute-names'):
+        for size in (128, 256, 512):
+            if size in sizes:
+                yield next(case for case in source_guard_models(size) if case['family'] == family)
 
 
 def historical_corpus(args):
@@ -428,33 +408,176 @@ def historical_corpus(args):
     yield from measured_regressions(args.sizes)
 
 
-def fixed_performance_guards(args):
-    """Load retained measurement inputs without flattening their families."""
-    path = args.root / 'scripts/asciidoc/performance-guards.json'
-    if not path.exists():
-        raise ValueError('required performance guard file missing: ' + str(path))
-    value = json.loads(path.read_text())
-    if not isinstance(value, dict) or value.get('schema_version') != 1 or not isinstance(value.get('cases'), list):
-        raise ValueError('invalid performance guard schema: ' + str(path))
-    guard_sha256 = digest(path)
-    expanded = max(args.sizes, default=0) >= 1024
-    for case in value['cases']:
-        if (case.get('size', 0) > 512 and case.get('scaling_input', 'source') == 'source'
-                and not expanded):
-            continue
-        yield {**case, 'provenance': {**case.get('provenance', {}),
-               'performance_guard': str(path), 'performance_guard_sha256': guard_sha256}}
+def guard_case(family, size, source, *, expect=None, attributes=None, case_id=None):
+    case = {'id': case_id or f'scaling-{family}-{size}', 'family': family,
+            'size': size, 'source': source,
+            'provenance': {'generator': family, 'parameter': size, 'geometric': True}}
+    if expect is not None:
+        case['expect'] = expect
+    if attributes is not None:
+        case.update(attributes=attributes, scaling_input='request')
+    return case
+
+
+def standard_guard_models(size):
+    """Grow standard-attribute work independently of the parser's output."""
+    models = {
+        'missing-conditions': ('ifndef::not-a-standard-attribute[kept]\n' * size, ['kept']),
+        'present-conditions': ('ifdef::last-update-label[kept]\n' * size, ['kept']),
+        'attribute-references': ('{docyear} {backend} {last-update-label}\n\n' * size, ['2000 html5 Last updated']),
+        'sections': (''.join(f'== Section {i}\n\nBody.\n\n' for i in range(size)), ['Section 0', f'Section {size - 1}']),
+        'listing': ('----\n' + 'literal {docyear}\n' * size + '----', ['literal {docyear}']),
+        'tables': ('|===\n|Name |Value\n\n' + '|fixed |{docyear}\n' * size + '|===', ['2000']),
+        'counters': ('{counter:serial}\n\n' * size, [str(size)]),
+    }
+    for name, (source, expected) in models.items():
+        family = 'lazy-standard-' + name
+        yield guard_case(family, size, source, case_id=f'{family}-{size}',
+                         expect={'html_contains': expected, 'html_excludes': []})
+
+
+def option_guard_model(size, *, boundary=False, growth=False):
+    family = ('ordered-options-source-writes' if growth else
+              'small-ordered-options-boundary' if boundary else 'small-ordered-options')
+    attributes = [{'name': f'key{i}', 'value': f'value{i}'} for i in range(size - 1)]
+    last = f'value{size - 1}' if growth else 'last-value'
+    attributes.append({'name': 'last', 'value': last})
+    source = 'Body {key0} {last}.' if size > 1 else 'Body {last}.'
+    expected = f'<p>Body value0 {last}.</p>' if size > 1 else f'<p>Body {last}.</p>'
+    expect = {'html_contains': [expected]}
+    if growth:
+        expect['html_excludes'] = []
+    return guard_case(family, size, source, case_id=f'{family}-{size}',
+                      attributes=attributes, expect=expect)
+
+
+def source_guard_models(size):
+    """Small grammars for state growth, rejected closers and listing callouts.
+
+    Size is a parameter, not a lookup into a retained document inventory.
+    Expected fragments describe the model rather than snapshot parser output.
+    """
+    body = {'html_contains': ['<p>Body.</p>']}
+    header = '= Header {project}\n:project: Roc\n\n== '
+    title_macros = {
+        'quote-counters': 'pass:q[*word*]',
+        'quote-counters-escaped': '\\pass:q[*word*]',
+        'quote-counters-role-plus': '[.red]++*word*++',
+        'link-counters': 'link:https://a.b[Link]',
+        'angle-https-counters': '<https://a.b>',
+        'angle-http-counters': '<http://a.b>',
+        'angle-literal-counters': '<x',
+        'bare-https-counters': 'https://a.b',
+        'malformed-angle-http-counters': '<http://a.b',
+        'malformed-link-bracket-counters': 'link:https://a.b[',
+        'malformed-pass-bracket-counters': 'pass:q[',
+    }
+    for name, macro in title_macros.items():
+        family = 'header-first-section-' + name
+        title = ' '.join(f'{{counter:key{i}}} {macro}' for i in range(size))
+        yield guard_case(family, size, header + title + '\n\nBody.', expect=body,
+                         case_id=f'scaling-{family}-body-{size}')
+    title = ' '.join(f'pass:a[{{counter:key{i}}}] {{set:last:value}}' for i in range(size))
+    yield guard_case('header-first-section-mutating-previews', size, header + title + '\n\nBody.',
+                     expect=body, case_id=f'scaling-header-first-section-mutating-previews-body-{size}')
+    yield guard_case('live-dynamic-source-redefinitions-each-counter-reset', size, each_live_counter_reset(size),
+                     expect={'html_contains': ['<p>Probe 41.</p>', '<p>Final 42 42.</p>']})
+    # az and c8 contribute the same DJB polynomial; all names have equal width.
+    bits = max(1, (size - 1).bit_length())
+    names = ['k' + ''.join('c8' if bit == '1' else 'az' for bit in f'{i:0{bits}b}') for i in range(size)]
+    source = '\n'.join(f':{name}: value{i}' for i, name in enumerate(names)) + '\n\nBody {' + names[0] + '} {' + names[-1] + '}.'
+    yield guard_case('source-store-colliding-attribute-names', size, source,
+                     expect={'html_contains': [f'<p>Body value0 value{size - 1}.</p>']})
+    for suffix, attributes in (
+            ('', None), ('-option', [{'name': 'outfilesuffix', 'value': '.html'}]),
+            ('-restored-standard-option', [{'name': 'outfilesuffix', 'value': '.x'}, {'name': 'outfilesuffix', 'value': '.html'}])):
+        ending = '-same-standard-option' if suffix == '-option' else suffix
+        case = guard_case('alternating-rich-simple-counters' + suffix, size, alternating_rich_simple_counters(size),
+                          case_id=f'scaling-alternating-rich-simple-counters-{size}{ending}',
+                          expect={'html_contains': ['<p>Counter 1.</p>', '<p>Body.</p>', '<p>Final 2 2.</p>']})
+        if attributes is not None:
+            case['attributes'] = attributes
+        yield case
+    patterns = {
+        'raw-role-shared-close-ascii': ('', '[', '] text pass:q['),
+        'raw-role-shared-close-unicode': ('', '[é', '] text pass:q['),
+        'raw-role-shared-close-unterminated-plus': ('', '[é', ']++unterminated'),
+        'raw-role-shared-close-unterminated-pass': ('', '[é', ']pass:q[unterminated'),
+        'quote-role-prefix-ascii-balanced-role-missing-body': ('Lead ', '[', '] text *'),
+        'quote-role-prefix-unicode-balanced-role-missing-body': ('Lead ', '[é', '] text *'),
+        'quote-role-prefix-unicode-missing-role-close': ('Lead ', '[é', ' text *'),
+        'quote-role-prefix-unicode-admissible-role-missing-body-close': ('Lead ', '[é', ']*unterminated'),
+    }
+    literal_patterns = {
+        'missing-indexterm-double': '((term ', 'missing-indexterm-triple': '(((term ',
+        'missing-anchor-double': '[[ref ', 'missing-anchor-triple': '[[[ref ',
+        'missing-xref-raw': '<<ref ', 'missing-xref-entity': '&lt;&lt;ref ',
+        'anchor-newline-double': '[[ref\ntext]] ', 'anchor-newline-triple': '[[[ref\ntext]]] ',
+    }
+    patterns.update({'literal-search-' + name: ('Lead ', pattern, 'tail.') for name, pattern in literal_patterns.items()})
+    for family, (prefix, unit, suffix) in patterns.items():
+        yield guard_case(family, size, prefix + unit * size + suffix)
+    callout = '<b class="conum">(1)</b>'
+    listings = {
+        'missing-angle-closer-lines': ('x < y & z\n' * size, ['x &lt; y &amp; z']),
+        'unicode-html-like-lines': ('α <b>x & y</b>\n' * size, ['α &lt;b&gt;x &amp; y&lt;/b&gt;']),
+        'numbered-callout-lines': ('x <1>\n' * size, [callout]),
+        'numbered-callout-one-line': ('x ' + '<1> ' * size + '\n', [callout]),
+        'long-collision-prefix': ('ROCASCIIDOCCALLOUT' + 'X' * size + '\n' + 'x <1>\n' * size,
+                                  ['ROCASCIIDOCCALLOUT' + 'X' * size, callout]),
+    }
+    for name, (source, expected) in listings.items():
+        yield guard_case('listing-callout-' + name, size, '----\n' + source + '----',
+                         expect={'html_contains': expected})
+
+
+def generated_performance_guards(args):
+    """Boundary/scaling parameters plus seeded shapes; never read an expanded corpus."""
+    for name, source, expected in [('empty', '', []), ('plain', 'Plain text.', ['Plain text.'])]:
+        family = 'lazy-standard-' + name
+        yield guard_case(family, 1, source, case_id=family + '-1',
+                         expect={'html_contains': expected, 'html_excludes': []})
+    for size in (32, 128, 512):
+        yield from standard_guard_models(size)
+    for size in (1, 2, 4, 8, 16, 32, 64):
+        yield option_guard_model(size)
+    for name, values in [('same', ['.html']), ('changed', ['.x']), ('restored', ['.x', '.html'])]:
+        family = 'small-standard-options-' + name
+        yield guard_case(family, len(values), 'Body {outfilesuffix}.', case_id=family,
+                         attributes=[{'name': 'outfilesuffix', 'value': value} for value in values],
+                         expect={'html_contains': [f'<p>Body {values[-1]}.</p>']})
+    for size in (17, 24, 31, 33, 48):
+        yield option_guard_model(size, boundary=True)
+    for size in (128, 256, 512):
+        yield option_guard_model(size, growth=True)
+    sizes = (128, 256, 512, 1024, 2048, 4096) if max(args.sizes, default=0) >= 1024 else (128, 256, 512)
+    already_generated = {
+        'header-first-section-quote-counters', 'header-first-section-mutating-previews',
+        'live-dynamic-source-redefinitions-each-counter-reset', 'source-store-colliding-attribute-names',
+        'alternating-rich-simple-counters', 'alternating-rich-simple-counters-option',
+        'alternating-rich-simple-counters-restored-standard-option',
+    }
+    for size in sizes:
+        for case in source_guard_models(size):
+            if size > 512 or case['family'] not in already_generated:
+                yield case
+    # Exercise sizes between the scaling points without retaining their bytes.
+    rng = random.Random(f'asciidoc-guards-v1:{args.seed}')
+    for index in range(min(args.generated, 32)):
+        size = rng.randint(1, min(max(args.sizes), 4096))
+        case = rng.choice(list(source_guard_models(size)) + list(standard_guard_models(size))
+                          + [option_guard_model(max(2, size), boundary=True)])
+        case['id'] = f'guard-model-{args.seed}-{index}'
+        case['provenance'].update(seed=args.seed, index=index, geometric=False)
+        yield case
 
 
 def corpus(args):
-    # Replay and smoke keep their historical early returns, without opening
-    # the guard file or changing their input inventory.
+    # Replay and smoke bypass expensive corpus generation.
     if args.replay or args.smoke:
         yield from historical_corpus(args)
         return
-    # Fail missing, malformed or unsupported guard data before any expensive
-    # historical request runs. Retained guards still appear only at the end.
-    guards = list(fixed_performance_guards(args))
+    guards = generated_performance_guards(args)
     seen = {}
     for case in historical_corpus(args):
         seen.setdefault(case['id'], set()).add(case_identity(case))

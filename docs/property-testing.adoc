@@ -43,6 +43,19 @@ CI uses `smoke --ci all` and the scheduled matrix excludes them.
 A failing property is a bug in the parser, or occasionally in the property.
 Either way the outcome is a fix: see <<property-testing-fix-the-cause>>.
 
+Keep the committed seeds small. A generator should describe a class of inputs
+and a property should check its contract across sizes and variations. Prefer
+round trips, independent models, metamorphic relations and resource bounds to
+large lists of prescribed input/output pairs. Shrink failures and keep a small
+explicit regression witness when it explains a contract the generator would
+otherwise miss.
+
+Expanded corpora, timing samples and comparison scaffolds belong in ignored
+`.roc-parser-tmp/` storage. Generate scaling documents from parameters. Recreate
+external suites from pinned revisions with verified hashes, retaining the
+acquisition recipe and pins in Git. Replacing a dataset must preserve its useful
+checks; moving assertions out of the repository is not a substitute for them.
+
 == Three kinds of target
 
 Each file `fuzz/<target>.roc` is one roc-fuzz app. They come in three kinds,
