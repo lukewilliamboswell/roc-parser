@@ -195,7 +195,9 @@ OFX := { statements : List(OFX.Statement) }.{
 
 Frame : { name : Str, offset : U64 }
 
-State : { props : OFX.Props, offset : U64, line : U64, column : U64, last_cr : Bool, token : List(U8), token_mode : Bool, quote : U8, header : List(U8), header_done : Bool, syntax : OFX.Syntax, encoding : [Utf8, Windows1252, Ascii], stack : List(Frame), capture : List(U8), capture_tag : Str, capture_depth : U64, leaf : List(U8), context : OFX.Context, started : Bool, in_statement : Bool, root_seen : Bool, root_closed : Bool, header_info : OFX.Header, wrapper_id : Str, wrapper_status : OFX.Status, status_seen : Bool, context_seen : List(Str), balances_seen : List(Str), terminal : Bool }
+# Statement metadata changes rarely while tokens are consumed. Keep it behind
+# shared boxes so moving the lexical state does not copy all its strings.
+State : { props : OFX.Props, offset : U64, line : U64, column : U64, last_cr : Bool, token : List(U8), token_mode : Bool, quote : U8, header : List(U8), header_done : Bool, syntax : OFX.Syntax, encoding : [Utf8, Windows1252, Ascii], stack : List(Frame), capture : List(U8), capture_tag : Str, capture_depth : U64, leaf : List(U8), context : Box(OFX.Context), started : Bool, in_statement : Bool, root_seen : Bool, root_closed : Bool, header_info : Box(OFX.Header), wrapper_id : Str, wrapper_status : Box(OFX.Status), status_seen : Bool, context_seen : List(Str), balances_seen : List(Str), terminal : Bool }
 
 WriteState : { props : OFX.WriteProps, opened : Bool, statement : Bool, list_open : Bool, kind : [Bank, CreditCard], balances : List(Str), header : OFX.Header }
 
@@ -212,7 +214,7 @@ empty_statement : OFX.Context -> OFX.Statement
 empty_statement = |context| { context, transactions: [], ledger_balance: Err(Missing), available_balance: Err(Missing) }
 
 initial : OFX.Props -> State
-initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: empty_context, started: False, in_statement: False, root_seen: False, root_closed: False, header_info: empty_header, wrapper_id: "", wrapper_status: { code: "", severity: "", message: "" }, status_seen: False, context_seen: [], balances_seen: [], terminal: False }
+initial = |props| { props, offset: 0, line: 1, column: 1, last_cr: False, token: [], token_mode: False, quote: 0, header: [], header_done: False, syntax: Xml203, encoding: if (props.encoding == Windows1252) Windows1252 else Utf8, stack: [], capture: [], capture_tag: "", capture_depth: 0, leaf: [], context: Box.box(empty_context), started: False, in_statement: False, root_seen: False, root_closed: False, header_info: Box.box(empty_header), wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False, context_seen: [], balances_seen: [], terminal: False }
 
 problem : State, Str -> OFX.Error
 problem = |state, message| { offset: state.offset, line: state.line, column: state.column, message }
@@ -433,7 +435,7 @@ read_header = |state| {
 	var $charset = "NONE"
 	var $version = ""
 	var $seen = []
-	var $header_info = state.header_info
+	var $header_info = Box.unbox(state.header_info)
 	for line in text.replace_each("\r", "").split_on("\n").keep_if(|s| !s.trim().is_empty()) {
 		parts = line.split_on(":")
 		if parts.len() != 2 {
@@ -493,7 +495,7 @@ read_header = |state| {
 	if (state.props.encoding == Utf8 and $encoding == Windows1252) or (state.props.encoding == Windows1252 and $encoding != Windows1252) {
 		return Err(problem(state, "encoding override contradicts OFX header"))
 	}
-	Ok({ ..state, header_done: True, syntax: Sgml102, encoding: $encoding, header: [], header_info: $header_info })
+	Ok({ ..state, header_done: True, syntax: Sgml102, encoding: $encoding, header: [], header_info: Box.box($header_info) })
 }
 
 decode : State, List(U8) -> Try(Str, OFX.Error)
@@ -520,33 +522,33 @@ consume_text = |state| {
 			return Err(problem(state, "duplicate or late OFX context field"))
 		}
 	}
-	context = state.context
+	context = Box.unbox(state.context)
 	if ["DTSERVER", "LANGUAGE", "ORG", "FID"].contains(top) {
 		if state.started {
 			return Err(problem(state, "late OFX signon metadata"))
 		}
-		header = state.header_info
+		header = Box.unbox(state.header_info)
 		next_header = match top {
 			"DTSERVER" => { ..header, server_date: decoded }
 			"LANGUAGE" => { ..header, language: decoded }
 			"ORG" => { ..header, org: decoded }
 			_ => { ..header, fid: decoded }
 		}
-		return Ok({ ..state, header_info: next_header })
+		return Ok({ ..state, header_info: Box.box(next_header) })
 	}
 	match top {
-		"CURDEF" => Ok({ ..state, context_seen: state.context_seen.append(top), context: { ..context, currency: decoded } })
-		"DTSTART" => Ok({ ..state, context_seen: state.context_seen.append(top), context: { ..context, start: decoded } })
-		"DTEND" => Ok({ ..state, context_seen: state.context_seen.append(top), context: { ..context, end: decoded } })
+		"CURDEF" => Ok({ ..state, context_seen: state.context_seen.append(top), context: Box.box({ ..context, currency: decoded }) })
+		"DTSTART" => Ok({ ..state, context_seen: state.context_seen.append(top), context: Box.box({ ..context, start: decoded }) })
+		"DTEND" => Ok({ ..state, context_seen: state.context_seen.append(top), context: Box.box({ ..context, end: decoded }) })
 		"TRNUID" => Ok({ ..state, wrapper_id: decoded })
 		"CODE" => {
 			if decoded != "0" {
 				return Err(problem(state, "non-success OFX responses are unsupported"))
 			}
-			Ok({ ..state, wrapper_status: { ..state.wrapper_status, code: decoded } })
+			Ok({ ..state, wrapper_status: Box.box({ ..Box.unbox(state.wrapper_status), code: decoded }) })
 		}
-		"SEVERITY" => Ok({ ..state, wrapper_status: { ..state.wrapper_status, severity: decoded } })
-		"MESSAGE" => Ok({ ..state, wrapper_status: { ..state.wrapper_status, message: decoded } })
+		"SEVERITY" => Ok({ ..state, wrapper_status: Box.box({ ..Box.unbox(state.wrapper_status), severity: decoded }) })
+		"MESSAGE" => Ok({ ..state, wrapper_status: Box.box({ ..Box.unbox(state.wrapper_status), message: decoded }) })
 		_ => Ok(state)
 	}
 }
@@ -611,7 +613,7 @@ consume_token = |state| {
 			if node.attribute("OFXHEADER") != Ok("200") or !(node.attribute("VERSION") ?? "").starts_with("2") or node.attribute("SECURITY") != Ok("NONE") {
 				return Err(problem(state, "unsupported OFX XML header"))
 			}
-			$next = { ..$next, header_info: { ..$next.header_info, old_uid: node.attribute("OLDFILEUID") ?? "NONE", new_uid: node.attribute("NEWFILEUID") ?? "NONE" } }
+			$next = { ..$next, header_info: Box.box({ ..Box.unbox($next.header_info), old_uid: node.attribute("OLDFILEUID") ?? "NONE", new_uid: node.attribute("NEWFILEUID") ?? "NONE" }) }
 		} else {
 			return Err(problem(state, "unknown OFX processing instruction"))
 		}
@@ -666,13 +668,13 @@ consume_token = |state| {
 		return Err(problem($s, "nested content in OFX scalar field"))
 	}
 	if name == "STMTTRNRS" or name == "CCSTMTTRNRS" {
-		$s = { ..$s, wrapper_id: "", wrapper_status: { code: "", severity: "", message: "" }, status_seen: False }
+		$s = { ..$s, wrapper_id: "", wrapper_status: Box.box({ code: "", severity: "", message: "" }), status_seen: False }
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if $s.in_statement {
 			return Err(problem($s, "nested OFX statements"))
 		}
-		$s = { ..$s, context: { ..empty_context, kind: if (name == "STMTRS") Bank else CreditCard, transaction_id: $s.wrapper_id, status: $s.wrapper_status, header: $s.header_info }, started: False, in_statement: True, context_seen: [], balances_seen: [] }
+		$s = { ..$s, context: Box.box({ ..empty_context, kind: if (name == "STMTRS") Bank else CreditCard, transaction_id: $s.wrapper_id, status: Box.unbox($s.wrapper_status), header: Box.unbox($s.header_info) }), started: False, in_statement: True, context_seen: [], balances_seen: [] }
 	}
 	parent = $s.stack.last().map_ok(|frame| frame.name) ?? ""
 	if !placement(name, parent) {
@@ -708,9 +710,9 @@ consume_token = |state| {
 			return Err(problem($s, "OFX record outside a statement"))
 		}
 		if !$s.started {
-			validate_context($s.context).map_err(|message| problem($s, message))?
+			validate_context(Box.unbox($s.context)).map_err(|message| problem($s, message))?
 			$s = { ..$s, started: True }
-			return Ok({ state: $s, outcome: Emitted(StatementStart($s.context)) })
+			return Ok({ state: $s, outcome: Emitted(StatementStart(Box.unbox($s.context))) })
 		}
 	}
 	Ok({ state: $s, outcome: Quiet })
@@ -741,7 +743,7 @@ close_tag = |state, name, text| {
 				}
 			} else if name == "BANKACCTFROM" or name == "CCACCTFROM" {
 				account = account_from(root).map_err(|message| problem($s, message))?
-				$s = { ..$s, context: { ..$s.context, account } }
+				$s = { ..$s, context: Box.box({ ..Box.unbox($s.context), account }) }
 			} else {
 				balance = balance_from(root).map_err(|message| problem($s, message))?
 				return Ok({ state: $s, outcome: Emitted(if (name == "LEDGERBAL") LedgerBalance(balance) else AvailableBalance(balance)) })
@@ -749,8 +751,8 @@ close_tag = |state, name, text| {
 		}
 	}
 	if name == "BANKTRANLIST" and !$s.started {
-		validate_context($s.context).map_err(|message| problem($s, message))?
-		return Ok({ state: { ..$s, started: True }, outcome: Emitted(StatementStart($s.context)) })
+		validate_context(Box.unbox($s.context)).map_err(|message| problem($s, message))?
+		return Ok({ state: { ..$s, started: True }, outcome: Emitted(StatementStart(Box.unbox($s.context))) })
 	}
 	if name == "STMTRS" or name == "CCSTMTRS" {
 		if !$s.started {
@@ -1421,4 +1423,14 @@ expect {
 expect {
 	bytes = "\r\n${sample_xml}".to_utf8()
 	[0, 1, 3, 7, 8, 16].all(|limit| List.from_iter(OFX.parse_iter([bytes].iter(), { max_token_bytes: limit })) == List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), { max_token_bytes: limit })))
+}
+
+expect {
+	bytes = sample_xml.to_utf8()
+	body = Str.from_utf8(bytes.sublist({ start: 5, len: bytes.len() - 11 }))?
+	second = body.replace_each("<TRNUID>0", "<TRNUID>2").replace_each("<CURDEF>AUD", "<CURDEF>USD").replace_each("<ACCTID>000123", "<ACCTID>000456")
+	document = OFX.parse_str("<OFX>${body}${second}</OFX>")?
+	first = document.statements.first()?.context
+	last = document.statements.last()?.context
+	document.statements.len() == 2 and first.account.account_id == "000123" and first.currency == "AUD" and first.transaction_id == "0" and last.account.account_id == "000456" and last.currency == "USD" and last.transaction_id == "2"
 }
