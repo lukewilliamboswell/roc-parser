@@ -35,7 +35,7 @@ json_message = |file_name, source| {
 	match JsonValue.parse_str(source) {
 		Ok(_) => "${file_name}: ok"
 		Err(InvalidJsonValue({ line, column, problem })) =>
-			"${file_name}:${line.to_str()}:${column.to_str()}: ${JsonValue.describe_problem(problem)}"
+			"${file_name}:${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 
@@ -44,18 +44,20 @@ json_message = |file_name, source| {
 # tag::csv[]
 Row : { name : Str, count : U64 }
 
-row : Parser(CSV.Record, Row)
+row : Parser(CSV.Record, Row, _)
 row =
 	CSV.record(|name| |count| { name, count })
-		.keep(CSV.field(CSV.string))
-		.keep(CSV.field(CSV.u64))
+		.keep(CSV.field(CSV.string({})))
+		.keep(CSV.field(CSV.u64({})))
 
 csv_message : Str -> Str
 csv_message = |source| {
 	match CSV.parse_with(row, source) {
 		Ok(rows) => "${rows.len().to_str()} rows"
-		Err(InvalidCsv({ line, column, record, field, message })) =>
-			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${message}"
+		Err(InvalidCsv({ line, column, record, field, problem })) =>
+			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}"
+		Err(InvalidRow({ line, column, record, field, problem })) =>
+			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}"
 	}
 }
 

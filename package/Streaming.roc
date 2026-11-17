@@ -37,23 +37,32 @@ Streaming :: [].{
 		outcome : [Item(item), RecordError(problem), NeedInput, Done, Failed(problem)],
 	}
 
+	## A configured incremental decoder; use it with either shared reader.
 	Decoder(state, item, problem) :: {
 		inner : state,
-		advance : state, List(U8), InputEnd -> Step(state, item, problem),
+		advance : state, Bytes, InputEnd -> Step(state, item, problem),
 		handling : ReadProps,
 	}.{
+
+		## Configure recovery and its rejection budget without changing format limits.
 		with_errors : Decoder(state, item, problem), ReadProps -> Decoder(state, item, problem)
 		with_errors = |current, handling| Decoder.{ inner: current.inner, advance: current.advance, handling }
+
+		## Inspect format state, for metadata or a decoder built on another decoder.
 		state : Decoder(state, item, problem) -> state
 		state = |current| current.inner
-		step : Decoder(state, item, problem), List(U8), InputEnd -> Step(Decoder(state, item, problem), item, problem)
+
+		## Advance manually; retain the returned descriptor and honor consumed bytes.
+		step : Decoder(state, item, problem), Bytes, InputEnd -> Step(Decoder(state, item, problem), item, problem)
 		step = |current, bytes, end| {
 			Decoder.{ inner, advance, handling } = current
 			next = advance(inner, bytes, end)
 			{ state: Decoder.{ inner: next.state, advance, handling }, consumed: next.consumed, outcome: next.outcome }
 		}
 	}
-	decoder : state, (state, List(U8), InputEnd -> Step(state, item, problem)) -> Decoder(state, item, problem)
+
+	## Configure a pure state machine without reading any input.
+	decoder : state, (state, Bytes, InputEnd -> Step(state, item, problem)) -> Decoder(state, item, problem)
 	decoder = |inner, advance| Decoder.{ inner, advance, handling: {} }
 
 	## Lazily read chunks using the format's configured decoder.
@@ -61,27 +70,32 @@ Streaming :: [].{
 	read_iter = |chunks, current| read_chunks(chunks, current.inner, current.advance, current.handling)
 
 	## Read an effectful source; source failure never supplies a false EOF.
-	read_stream : Stream(Try(Bytes, source_error)), Decoder(state, item, problem) -> _
+	read_stream : Stream(Try(Bytes, source_error)), Decoder(state, item, problem) -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(ProtocolProblem)]))
 	read_stream = |chunks, current| read_source(chunks, current.inner, current.advance, current.handling)
 
+	## A configured record encoder with state and an EOF suffix.
 	Encoder(state, item, problem) :: {
 		inner : state,
-		encode : state, item -> Try({ state : state, bytes : List(U8) }, problem),
-		finish : state -> Try(List(U8), problem),
+		encode : state, item -> Try({ state : state, bytes : Bytes }, problem),
+		finish : state -> Try(Bytes, problem),
 		chunk_bytes : U64,
 	}.{
+
+		## Bound each output chunk; zero produces InvalidChunkSize before pulling items.
 		with_chunk_bytes : Encoder(state, item, problem), U64 -> Encoder(state, item, problem)
 		with_chunk_bytes = |current, chunk_bytes| Encoder.{ inner: current.inner, encode: current.encode, finish: current.finish, chunk_bytes }
 	}
-	encoder : state, (state, item -> Try({ state : state, bytes : List(U8) }, problem)), (state -> Try(List(U8), problem)) -> Encoder(state, item, problem)
+
+	## Configure encoding and completion callbacks without pulling any items.
+	encoder : state, (state, item -> Try({ state : state, bytes : Bytes }, problem)), (state -> Try(Bytes, problem)) -> Encoder(state, item, problem)
 	encoder = |inner, encode, finish| Encoder.{ inner, encode, finish, chunk_bytes: 65_536 }
 
 	## Encode items lazily, preserving state and emitting a bounded final suffix.
-	write_iter : Iter(item), Encoder(state, item, problem) -> _
+	write_iter : Iter(item), Encoder(state, item, problem) -> Iter(Try(Bytes, [EncodeErr(problem), InvalidChunkSize]))
 	write_iter = |items, current| write_items(items, current.inner, current.encode, current.finish, current.chunk_bytes)
 
 	## Encode an effectful item source without collecting the document.
-	write_stream : Stream(Try(item, source_error)), Encoder(state, item, problem) -> _
+	write_stream : Stream(Try(item, source_error)), Encoder(state, item, problem) -> Stream(Try(Bytes, [SourceErr(source_error), EncodeErr(problem), InvalidChunkSize]))
 	write_stream = |items, current| write_source(items, current.inner, current.encode, current.finish, current.chunk_bytes)
 
 	## Supported text encodings. Undefined Windows-1252 bytes are rejected.

@@ -48,7 +48,7 @@ parsers for data formats, web markup and Roc source.
 
 |{api}Streaming/[`Streaming`]
 |Adapt pure chunk decoders to builtin Iter and Stream, with bounded writers
-|`Streaming.iter`, `Streaming.stream`, `Streaming.collect_report`
+|`Streaming.read_iter`, `Streaming.read_stream`, `Streaming.write_iter`, `Streaming.write_stream`
 
 |{api}QIF/[`QIF`]
 |Read and write raw Quicken records and decode bank/cash/card transactions
