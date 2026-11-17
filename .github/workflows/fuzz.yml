@@ -71,6 +71,7 @@ jobs:
           - json-raw
           - json-options
           - json-roundtrip
+          - json-stream
           - ofx-raw
           - ofx-stream
           - ofx-roundtrip

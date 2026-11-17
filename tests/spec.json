@@ -53,6 +53,35 @@
       ]
     },
     {
+      "path": "examples/json-streaming.roc",
+      "cases": [
+        {
+          "name": "records",
+          "args": [],
+          "stdin": "{\"name\":\"Ada\"}\n[1,true]\n",
+          "stdout": "[{\"name\":\"Ada\"},[1,true]]",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "empty",
+          "args": [],
+          "stdin": "",
+          "stdout": "[]",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "crlf-final-record",
+          "args": [],
+          "stdin": "1\r\n2",
+          "stdout": "[1,2]",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/letters.roc",
       "cases": [
         {

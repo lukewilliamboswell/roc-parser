@@ -43,10 +43,12 @@ retains source information and validates vocabulary and values. See the
 [method and reproduction command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table)
 and [library versions and measurement receipts](bench/throughput.json).
 
-CSV, QIF and OFX support [chunked reading and writing](docs/streaming.adoc)
-through Roc’s builtin `Iter` and `Stream`. The other format parsers require
-complete input in memory. JSON and namespace-aware XML also support writing,
-with `JsonValue.to_str` and `XmlNs.render`.
+CSV, QIF, OFX and JSON record streams support
+[chunked reading and writing](docs/streaming.adoc) through Roc’s builtin `Iter`
+and `Stream`. JSON supports NDJSON records and top-level array items through
+`JsonStream`; complete JSON documents use `JsonValue`. The other format parsers
+require complete input in memory. JSON and namespace-aware XML also support whole-document
+writing, with `JsonValue.to_str` and `XmlNs.render`.
 
 ## Try it
 

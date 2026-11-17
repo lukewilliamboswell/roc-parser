@@ -3,11 +3,25 @@
 :idprefix: _
 :idseparator: _
 
-Use the CSV, QIF and OFX chunk APIs when a file is too large to keep in memory.
+Use the CSV, QIF, OFX and JSON record APIs when input is too large to keep in memory.
 The package parses bytes without performing I/O. Roc's builtin `Iter` supplies
 pure chunks; builtin `Stream` supplies effectful chunks from a file or stdin.
 The pinned basic-cli platform provides `File.Reader.chunks`, `Stdin.chunks` and
 `File.Writer.write_stream!` for these pipelines.
+
+Choose the format's reader and output unit:
+
+[cols="1,2,2",options="header"]
+|===
+|Format |Readers |Values
+|CSV |`CSV.iter_records`, `CSV.stream_records` |Rows; typed decoding adapters are also available
+|QIF |`QIF.parse_iter`, `QIF.parse_stream` |Section context and transaction records
+|OFX |`OFX.parse_iter`, `OFX.parse_stream` |Statement context and transaction records
+|JSON |`JsonStream.parse_iter`, `JsonStream.parse_stream` |NDJSON records or top-level array items
+|===
+
+CSV, QIF, OFX and JSON also provide record writers. See
+xref:json.adoc#json-streaming[JSON record streams] for JSON-specific setup.
 
 == Consume a document completely
 
@@ -39,6 +53,10 @@ collected values; use an ordinary pull loop to process and discard records.
 completely framed but failed semantic decoding. `ReportInvalidRecords` emits
 `Rejected` and continues. The completion report counts emitted items and
 rejected records; metadata/context events count as emitted items too.
+
+JSON recovery applies to independently framed NDJSON lines. Errors within a
+JSON array are terminal; the reader does not guess where valid input resumes
+after broken syntax.
 
 These policies never recover from broken framing, invalid encoding, source
 failures, invalid account/statement context, or resource-limit failures. For

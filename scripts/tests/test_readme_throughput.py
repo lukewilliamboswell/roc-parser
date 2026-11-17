@@ -81,8 +81,8 @@ class ReadmeThroughputTests(unittest.TestCase):
                 builder = stack.enter_context(patch.object(throughput.bench, "Builder"))
                 builder.return_value.versions = {"roc": "fake-nightly"}
                 reference_class = stack.enter_context(patch.object(throughput.readme_references, "ReferenceRun", return_value=fake_references))
-                stack.enter_context(patch.object(throughput.os, "sched_getaffinity", side_effect=lambda pid: set(current_affinity)))
-                stack.enter_context(patch.object(throughput.os, "sched_setaffinity", side_effect=set_affinity))
+                stack.enter_context(patch.object(throughput.os, "sched_getaffinity", side_effect=lambda pid: set(current_affinity), create=True))
+                stack.enter_context(patch.object(throughput.os, "sched_setaffinity", side_effect=set_affinity, create=True))
                 self.assertEqual(throughput.main(["--cpu", "7", "--work", str(folder), "--python", "existing-python",
                                                  "--reference-cache-dir", str(folder / "shared-cache")]), 0)
                 arguments = reference_class.call_args.args[1]

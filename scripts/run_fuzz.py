@@ -111,6 +111,7 @@ TARGETS = dict(
         # The first two bytes choose the options, so its seeds carry them.
         target("json-options", "json-options", "raw", "json", timeout=10),
         target("json-roundtrip", max_input_size=1024, timeout=10),
+        target("json-stream", "json", "raw", "json", max_input_size=1024, timeout=10, examples=True),
         target("ofx-raw", "ofx", "raw", "ofx", max_input_size=8192, timeout=10),
         target("ofx-stream", max_input_size=256, timeout=10),
         target("ofx-roundtrip", max_input_size=256, timeout=10),

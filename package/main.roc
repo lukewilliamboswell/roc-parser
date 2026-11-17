@@ -4,6 +4,7 @@
 ## [Parser] holds the generic combinators and [Utf8] the byte-level primitives
 ## and runners. [Streaming] adapts pure chunk decoders to builtin Iter and
 ## Stream. [QIF] and [OFX] read and write banking records incrementally.
+## [JsonStream] reads and writes NDJSON records and top-level JSON array items.
 ## [CSV], [Yaml], [Xml], [XmlNs], [JsonValue], [Markdown] and
 ## [HTTP] parse their formats into Roc values, following RFC 4180, YAML 1.2,
 ## XML 1.0 and Namespaces in XML 1.0, RFC 8259, CommonMark 0.31.2 with GitHub
