@@ -33,7 +33,7 @@ test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
 	width = (bytes.first() ?? 0).to_u64() % 31 + 1
 	expected = Utf8.parse_bytes(CSV.parser, bytes)
-	actual = Streaming.collect(CSV.iter_records(chunks(bytes, width), {}, {}))
+	actual = Streaming.collect(Streaming.read_iter(chunks(bytes, width), CSV.decoder({})))
 	match (expected, actual) {
 		(Ok(rows), Ok(found)) => {
 			if rows != found {
@@ -41,7 +41,6 @@ test = |bytes| {
 			}
 			props : CSV.WriteProps
 			props = {
-				chunk_bytes: width,
 				quoting: if (width % 2 == 0) Always else Necessary,
 				line_ending: match width % 3 {
 					0 => CrLf
@@ -50,7 +49,7 @@ test = |bytes| {
 				},
 			}
 			var $encoded = []
-			for part in CSV.write_iter(rows.iter(), props) {
+			for part in Streaming.write_iter(rows.iter(), CSV.encoder(props).with_chunk_bytes(width)) {
 				match part {
 					Ok(chunk) => {
 						if chunk.len() > width {
@@ -61,12 +60,12 @@ test = |bytes| {
 					Err(_) => crash "accepted CSV records failed to encode"
 				}
 			}
-			if Streaming.collect(CSV.iter_records(chunks($encoded, 1), {}, {})) != Ok(rows) {
+			if Streaming.collect(Streaming.read_iter(chunks($encoded, 1), CSV.decoder({}))) != Ok(rows) {
 				crash "streaming byte CSV round trip changed records"
 			}
 		}
 		(Err(_), Err(ReadFailed(ParseErr(problem)))) => {
-			if problem.record == 0 or problem.field == 0 or problem.line == 0 or problem.column == 0 or problem.message.count_utf8_bytes() > 200 {
+			if problem.record == 0 or problem.field == 0 or problem.line == 0 or problem.column == 0 {
 				crash "invalid streaming CSV diagnostic"
 			}
 		}

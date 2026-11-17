@@ -112,7 +112,7 @@ generate = |bytes| {
 	{ csv: $text, expected: $rows }
 }
 
-all_fields : Parser(CSV.Record, List(Str))
+all_fields : Parser(CSV.Record, List(Str), _)
 all_fields = Parser.many(CSV.field(CSV.string))
 
 show_rows : List(List(Str)) -> Str
@@ -123,7 +123,7 @@ test = |input| {
 	match CSV.parse_with(all_fields, input.csv) {
 		Ok(rows) if rows == input.expected => {}
 		Ok(rows) => crash "round trip mismatch\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- actual ---\n${show_rows(rows)}"
-		Err(InvalidCsv(problem)) => crash "round trip rejected\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- error ---\n${Str.inspect(problem)}"
+		Err(problem) => crash "round trip rejected\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- error ---\n${Str.inspect(problem)}"
 	}
 	match CSV.parse_records(input.csv) {
 		Ok(records) if records.map(|fields| fields.map(Str.from_utf8_lossy)) == input.expected => {}
@@ -131,11 +131,11 @@ test = |input| {
 	}
 	chunks = input.csv.to_utf8().map(|byte| [byte]).iter()
 	expected_bytes = input.expected.map(|row| row.map(Str.to_utf8))
-	if Streaming.collect(CSV.iter_records(chunks, {}, {})) != Ok(expected_bytes) {
+	if Streaming.collect(Streaming.read_iter(chunks, CSV.decoder({}))) != Ok(expected_bytes) {
 		crash "generated streaming CSV differs from independent model"
 	}
 	var $encoded = []
-	for part in CSV.write_iter(expected_bytes.iter(), { chunk_bytes: 3 }) {
+	for part in Streaming.write_iter(expected_bytes.iter(), CSV.encoder({}).with_chunk_bytes(3)) {
 		match part {
 			Ok(bytes) => {
 				$encoded = $encoded.concat(bytes)
@@ -143,7 +143,7 @@ test = |input| {
 			Err(_) => crash "generated model did not encode"
 		}
 	}
-	if Streaming.collect(CSV.iter_records($encoded.map(|byte| [byte]).iter(), {}, {})) != Ok(expected_bytes) {
+	if Streaming.collect(Streaming.read_iter($encoded.map(|byte| [byte]).iter(), CSV.decoder({}))) != Ok(expected_bytes) {
 		crash "generated streaming writer round trip differs from model"
 	}
 

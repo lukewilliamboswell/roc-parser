@@ -22,9 +22,9 @@ main! = |_| {
 					rows = records.map(|fields| "[${fields.map(json_bytes) |> Str.join_with(",")}]") |> Str.join_with(",")
 					Stdout.line!("{\"status\":\"ok\",\"records\":[${rows}]}")?
 				}
-				Err(InvalidCsv({ record, field, line, column, message })) => {
+				Err(InvalidCsv({ record, field, line, column, problem })) => {
 					location = "\"record\":${record.to_str()},\"field\":${field.to_str()},\"line\":${line.to_str()},\"column\":${column.to_str()}"
-					Stdout.line!("{\"status\":\"error\",\"message\":${json_bytes(message.to_utf8())},${location}}")?
+					Stdout.line!("{\"status\":\"error\",\"message\":${json_bytes(Str.inspect(problem).to_utf8())},${location}}")?
 				}
 			}
 		}

@@ -46,7 +46,7 @@ write! = |destination, chunks| File.with_writer!(destination, Truncate, {}, |wri
 
 encode_chunks : Stream(Try(List(U8), source_error)) -> Stream(Try(List(U8), _))
 encode_chunks = |chunks| {
-	events = CSV.stream_records(chunks, {}, {})
+	events = Streaming.read_stream(chunks, CSV.decoder({}))
 	Streaming.encode_stream(
 		events,
 		|event| match event {

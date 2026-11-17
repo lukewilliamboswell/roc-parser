@@ -36,7 +36,7 @@ consume! = |chunks, start| {
 	var $first_item_ns = 0.U64
 	var $seen = False
 	var $sum = 0.U64
-	for! event in CSV.stream_records(chunks, {}, {}) {
+	for! event in Streaming.read_stream(chunks, CSV.decoder({})) {
 		match event? {
 			Value(row) => {
 				if !$seen {

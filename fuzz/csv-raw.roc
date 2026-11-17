@@ -43,11 +43,11 @@ parse = |text| {
 }
 
 ## Decode raw bytes with the byte-level parser and field parsers that can
-## fail on any field. Nothing may crash, and messages stay bounded.
+## fail on any field. Nothing may crash, and source payloads stay bounded.
 check_bytes : List(U8) -> {}
 check_bytes = |bytes| {
 	match Utf8.parse_bytes(CSV.parser, bytes) {
-		Err(ParseError({ message: _, offset })) if offset > bytes.len() => crash "offset beyond the input"
+		Err(ParseError({ problem: _, offset })) if offset > bytes.len() => crash "offset beyond the input"
 		Err(_) => {}
 		Ok(rows) => {
 			when_text = |text| {
@@ -68,12 +68,11 @@ check_bytes = |bytes| {
 	}
 }
 
-bounded : Try(a, [InvalidCsv(CSV.Error)]) -> {}
-bounded = |result| {
-	match result {
-		Err(InvalidCsv({ message, record, field: _, line: _, column: _ })) if message.count_utf8_bytes() > 200 or record == 0 => crash "unbounded or unnumbered error: ${message}"
-		_ => {}
-	}
+bounded : Try(a, [InvalidCsv(CSV.Error), InvalidRow(CSV.RowError(p))]) -> {}
+bounded = |result| match result {
+	Err(InvalidCsv({ record: 0, .. })) => crash "unnumbered CSV error"
+	Err(InvalidRow({ record: 0, .. })) => crash "unnumbered row error"
+	_ => {}
 }
 
 show_rows : Rows -> Str

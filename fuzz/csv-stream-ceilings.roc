@@ -23,7 +23,7 @@ drain = |records, field_bytes, retain| {
 		},
 	)
 	var $retained = []
-	for event in CSV.iter_records(chunks, {}, {}) {
+	for event in Streaming.read_iter(chunks, CSV.decoder({})) {
 		match event {
 			Ok(Value(row)) => {
 				if retain and $retained.is_empty() {

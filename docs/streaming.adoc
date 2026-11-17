@@ -10,21 +10,25 @@ pure chunks; builtin `Stream` supplies effectful chunks from a file or stdin.
 The pinned basic-cli platform provides `File.Reader.chunks`, `Stdin.chunks` and
 `File.Writer.write_stream!` for these pipelines.
 
-Choose the format's reader and output unit:
+Use `Streaming.read_iter(chunks, decoder)` for pure chunks or
+`Streaming.read_stream(chunks, decoder)` for an effectful source. Choose a
+format-specific decoder and output unit:
 
 [cols="1,2,2",options="header"]
 |===
-|Format |Readers |Values
-|CSV |`CSV.iter_records`, `CSV.stream_records` |Rows; typed decoding adapters are also available
-|QIF |`QIF.parse_iter`, `QIF.parse_stream` |Section context and transaction records
-|OFX |`OFX.parse_iter`, `OFX.parse_stream` |Statement context and transaction records
-|JSON |`JsonStream.parse_iter`, `JsonStream.parse_stream` |NDJSON records or top-level array items
-|XML |`Xml.parse_iter`, `Xml.parse_stream` |Start, end and bounded text events
-|XML with namespaces |`XmlNs.parse_iter`, `XmlNs.parse_stream` |Events with resolved names
-|HTTP/1.1 |`HTTP.iter_requests`, `HTTP.stream_requests`, `HTTP.iter_responses`, `HTTP.stream_responses` |Heads, body fragments, trailers and message boundaries
+|Format |Decoder constructors |Values
+|CSV |`CSV.decoder`, `CSV.typed_decoder`, `CSV.positional_decoder` |Rows; typed decoding adapters are also available
+|QIF |`QIF.decoder`, `QIF.transaction_decoder` |Section context and transaction records
+|OFX |`OFX.decoder` |Statement context and transaction records
+|JSON |`JsonStream.decoder` |NDJSON records or top-level array items
+|XML |`Xml.decoder` |Start, end and bounded text events
+|XML with namespaces |`XmlNs.decoder` |Events with resolved names
+|HTTP/1.1 |`HTTP.request_decoder`, `HTTP.response_decoder` |Heads, body fragments, trailers and message boundaries
 |===
 
-CSV, QIF, OFX and JSON also provide record writers. See
+CSV, QIF, OFX and JSON also provide `encoder` constructors. Pass an encoder to
+`Streaming.write_iter(items, encoder)` or `Streaming.write_stream(items, encoder)`.
+Set output chunk limits with `encoder.with_chunk_bytes(bytes)` (64 KiB by default). See
 xref:json.adoc#json-streaming[JSON record streams],
 xref:xml.adoc#xml-streaming[chunked XML events] and
 xref:http.adoc#http-streaming[chunked HTTP messages] for format-specific setup.
@@ -59,7 +63,8 @@ collected values; use an ordinary pull loop to process and discard records.
 
 == Choose an error policy
 
-`FailFast` is the default. `SkipInvalidRecords` discards records that were
+Configure common recovery with `decoder.with_errors({ error_policy: ReportInvalidRecords,
+max_errors: 1000 })`. `FailFast` is the default. `SkipInvalidRecords` discards records that were
 completely framed but failed semantic decoding. `ReportInvalidRecords` emits
 `Rejected` and continues. The completion report counts emitted items and
 rejected records; metadata/context events count as emitted items too.
@@ -119,8 +124,12 @@ It must drain pending output before requesting more input. `NeedInput` consumes
 the supplied input, and is invalid after `Final`; `Done` requires `Final` and
 complete consumption. The shared adapters reject these protocol violations.
 
-Use `Streaming.iter` and `Streaming.stream` to turn the pure step function into
-builtin iterators and streams. `Streaming.encode_iter` and
-`Streaming.encode_stream` apply a fallible record encoder and bound each emitted
-chunk. Source state belongs in the evolving iterator state so terminal states
-can release it.
+Construct a descriptor with `Streaming.decoder(initial_state, step)` and pass it
+to `Streaming.read_iter` or `Streaming.read_stream`. For manual backpressure, call
+`decoder.step(bytes, More | Final)` and retain the returned descriptor.
+
+`Streaming.encoder(initial_state, encode, finish)` configures a stateful writer.
+The `encode` function returns updated state and validated record bytes; `finish`
+returns the final suffix. Use `Streaming.write_iter` or `Streaming.write_stream`
+to bound output chunks. Source state belongs in the evolving iterator state so
+terminal states can release it.

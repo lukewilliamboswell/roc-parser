@@ -26,8 +26,8 @@ print_products! = |text| {
 				Stdout.line!("${p.name}: ${p.quantity.to_str()} at ${p.price.to_str()}")?
 			}
 
-		Err(InvalidCsv({ line, column, message, record: _, field: _ })) =>
-			Stdout.line!("line ${line.to_str()}, column ${column.to_str()}: ${message}")?
+		Err(InvalidCsv({ line, column, problem, record: _, field: _ })) =>
+			Stdout.line!("line ${line.to_str()}, column ${column.to_str()}: ${Str.inspect(problem)}")?
 
 		Err(MissingRequiredField(name)) =>
 			Stdout.line!("no column named ${name}")?
@@ -83,8 +83,8 @@ raw_records = |text| {
 		Ok(records) =>
 			Str.join_with(records.map(|fields| Str.join_with(fields.map(Str.from_utf8_lossy), " | ")), "\n")
 
-		Err(InvalidCsv({ message, line, column, record: _, field: _ })) =>
-			"not valid CSV at ${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidCsv({ problem, line, column, record: _, field: _ })) =>
+			"not valid CSV at ${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 
@@ -108,10 +108,10 @@ column_names = |text| {
 # tag::combinators[]
 Movie : { title : Str, year : U64, cast : List(Str) }
 
-cast : Parser(Utf8.Bytes, List(Str))
+cast : Parser(Utf8.Bytes, List(Str), _)
 cast = CSV.string.map(|text| Str.split_on(text, ";"))
 
-movie : Parser(CSV.Record, Movie)
+movie : Parser(CSV.Record, Movie, _)
 movie =
 	CSV.record(|title| |year| |actors| { title, year, cast: actors })
 		.keep(CSV.field(CSV.string))
@@ -125,8 +125,10 @@ describe : Str -> Str
 describe = |text| {
 	match CSV.parse_with(movie, text) {
 		Ok(movies) => "${movies.len().to_str()} movies"
-		Err(InvalidCsv({ record, field, line, column, message })) =>
-			"record ${record.to_str()}, field ${field.to_str()} (line ${line.to_str()}, column ${column.to_str()}): ${message}"
+		Err(InvalidCsv({ record, field, line, column, problem })) =>
+			"record ${record.to_str()}, field ${field.to_str()} (line ${line.to_str()}, column ${column.to_str()}): ${Str.inspect(problem)}"
+		Err(InvalidRow({ record, field, line, column, problem })) =>
+			"record ${record.to_str()}, field ${field.to_str()} (line ${line.to_str()}, column ${column.to_str()}): ${Str.inspect(problem)}"
 	}
 }
 

@@ -32,15 +32,18 @@ main! = |args| {
 			Stdout.line!("${n_movies} movies were found:\n\n${movies_string}\n\nParse success!\n")?
 		}
 
-		Err(InvalidCsv({ record, field, line, column, message })) => {
-			Stderr.line!("Invalid CSV at line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${message}")?
+		Err(InvalidCsv({ record, field, line, column, problem })) => {
+			Stderr.line!("Invalid CSV at line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}")?
+		}
+		Err(InvalidRow({ record, field, line, column, problem })) => {
+			Stderr.line!("Invalid CSV at line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}")?
 		}
 	}
 
 	Ok({})
 }
 
-movie_info_parser : Parser(CSV.Record, MovieInfo)
+movie_info_parser : Parser(CSV.Record, MovieInfo, _)
 movie_info_parser =
 	CSV.record(
 		|title| |release_year| |actors| {
@@ -51,7 +54,7 @@ movie_info_parser =
 		.keep(CSV.field(CSV.u64))
 		.keep(CSV.field(actors_parser))
 
-actors_parser : Parser(Utf8.Bytes, List(Str))
+actors_parser : Parser(Utf8.Bytes, List(Str), _)
 actors_parser = CSV.string.map(
 	|val| {
 		val.split_on(",")

@@ -241,7 +241,7 @@ quote_all = |fields, start| {
 	{ cells: $cells, cur: $cur }
 }
 
-decoder : Parser(CSV.Record, Row)
+decoder : Parser(CSV.Record, Row, _)
 decoder =
 	CSV.record(|id| |score| |name| { id, score, name })
 		.keep(CSV.field(CSV.u64))
@@ -289,7 +289,18 @@ named_error = |input, index, defect| {
 	{ record: index + 2, field }
 }
 
-check : Str, Str, Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)]), Try(Expected, [AllValid]), List(Row) -> {}
+error_location : CSV.Located(p) -> { record : U64, field : U64, line : U64, column : U64 }
+error_location = |error| { record: error.record, field: error.field, line: error.line, column: error.column }
+
+native_at : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)]) -> Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+native_at = |result| result.map_err(
+	|error| match error {
+		InvalidCsv(problem) => InvalidAt(error_location(problem))
+		MissingRequiredField(name) => MissingRequiredField(name)
+	},
+)
+
+check : Str, Str, Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)]), Try(Expected, [AllValid]), List(Row) -> {}
 check = |label, csv, result, expected, rows| {
 	context = "${label}\n--- csv ---\n${Str.inspect(csv)}"
 	match (expected, result) {
@@ -299,7 +310,7 @@ check = |label, csv, result, expected, rows| {
 			}
 		(Err(AllValid), Err(problem)) => crash "valid rows were rejected: ${context}\n--- error ---\n${Str.inspect(problem)}"
 		(Ok(_), Ok(actual)) => crash "a defective row decoded: ${context}\n--- actual ---\n${show_rows(actual)}"
-		(Ok(wanted), Err(InvalidCsv(problem))) =>
+		(Ok(wanted), Err(InvalidAt(problem))) =>
 			if problem.record != wanted.record or problem.field != wanted.field or problem.line == 0 or problem.column == 0 {
 				crash "wrong error position: ${context}\n--- expected ---\n${Str.inspect(wanted)}\n--- actual ---\n${Str.inspect(problem)}"
 			}
@@ -309,27 +320,35 @@ check = |label, csv, result, expected, rows| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	positional : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+	positional : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
 	positional =
 		match CSV.parse_with(decoder, input.csv) {
 			Ok(rows) => Ok(rows)
-			Err(InvalidCsv(problem)) => Err(InvalidCsv(problem))
+			Err(InvalidCsv(problem)) => Err(InvalidAt(error_location(problem)))
+			Err(InvalidRow(problem)) => Err(InvalidAt(error_location(problem)))
 		}
 	check("positional", input.csv, positional, input.first_bad.map_ok(|{ index, defect }| positional_error(index, defect)), input.rows)
-	named : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	named = CSV.parse(input.with_header)
+	named : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+	named = native_at(CSV.parse(input.with_header))
 	check("by header name", input.with_header, named, input.first_bad.map_ok(|{ index, defect }| named_error(input, index, defect)), input.rows)
-	streaming_named : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	streaming_named = match Streaming.collect(CSV.iter(input.with_header.to_utf8().map(|byte| [byte]).iter(), Exact, {}, {})) {
-		Ok(values) => Ok(values)
-		Err(ReadFailed(ParseErr(error))) => Err(error)
-		Err(_) => crash "typed streaming CSV protocol failure"
-	}
+	streaming_named : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+	streaming_named = native_at(
+		match Streaming.collect(Streaming.read_iter(input.with_header.to_utf8().map(|byte| [byte]).iter(), CSV.typed_decoder(Exact, {}))) {
+			Ok(values) => Ok(values)
+			Err(ReadFailed(ParseErr(error))) => Err(error)
+			Err(_) => crash "typed streaming CSV protocol failure"
+		},
+	)
 	check("streaming by header", input.with_header, streaming_named, input.first_bad.map_ok(|{ index, defect }| named_error(input, index, defect)), input.rows)
-	streaming_positional : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-	streaming_positional = match Streaming.collect(CSV.iter_with(decoder, input.csv.to_utf8().map(|byte| [byte]).iter(), {}, {})) {
+	streaming_positional : Try(List(Row), [InvalidAt({ record : U64, field : U64, line : U64, column : U64 }), MissingRequiredField(Str)])
+	streaming_positional = match Streaming.collect(Streaming.read_iter(input.csv.to_utf8().map(|byte| [byte]).iter(), CSV.positional_decoder(decoder, {}))) {
 		Ok(values) => Ok(values)
-		Err(ReadFailed(ParseErr(error))) => Err(InvalidCsv(error))
+		Err(ReadFailed(ParseErr(error))) => Err(
+			match error {
+				InvalidCsv(problem) => InvalidAt(error_location(problem))
+				InvalidRow(problem) => InvalidAt(error_location(problem))
+			},
+		)
 		Err(_) => crash "positional streaming CSV protocol failure"
 	}
 	check("streaming positional", input.csv, streaming_positional, input.first_bad.map_ok(|{ index, defect }| positional_error(index, defect)), input.rows)
