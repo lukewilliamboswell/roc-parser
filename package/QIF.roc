@@ -121,7 +121,7 @@ QIF := { events : List(QIF.Event) }.{
 					remaining = bytes.len() - $pos
 					# Inspect at most the budget plus its first violating byte.
 					scan_len = if (room < remaining) room + 1 else remaining
-					stop = Utf8.find_any(bytes.take_first($pos + scan_len), $pos, line_endings)
+					stop = Utf8.find_line_end(bytes.take_first($pos + scan_len), $pos)
 					len = stop - $pos
 					if len > record_room or len > line_room {
 						record_first = record_room <= line_room
@@ -504,9 +504,6 @@ terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done
 
 problem : QIF.Decoder, Str -> QIF.Error
 problem = |s, message| { offset: s.offset, line: s.line_number, column: s.column, message }
-
-line_endings : Utf8.ByteClass
-line_endings = Utf8.ByteClass.from_bytes(['\r', '\n'])
 
 process_line : QIF.Decoder, List(U8) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
 process_line = |s, bytes| {
