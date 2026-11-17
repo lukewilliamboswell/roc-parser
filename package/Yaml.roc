@@ -3758,3 +3758,16 @@ expect {
 		Ok(_) => False
 	}
 }
+
+# A closed native problem union can retain its domain when embedded in text.
+expect {
+	parser = Utf8.string("config: ").skip(Yaml.parser.map_problem(|problem| YamlProblem(problem)))
+	Utf8.parse_str(parser, "config: x: 1") == Ok("config: ")
+}
+expect {
+	parser = Utf8.string("config: ").skip(Yaml.parser.map_problem(|problem| YamlProblem(problem)))
+	match Utf8.parse_str(parser, "config: [") {
+		Err(ParseError(error)) => error.offset == 8 and error.problem == YamlProblem(UnclosedFlowCollection)
+		_ => False
+	}
+}

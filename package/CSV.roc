@@ -1681,3 +1681,27 @@ expect {
 		_ => False
 	}
 }
+
+# Native CSV fields compose with UTF-8 and caller-specific problems.
+expect {
+	row = CSV.record(|name| |count| { name, count })
+		.keep(CSV.field(CSV.string({})))
+		.keep(CSV.field(Utf8.digits({})))
+	CSV.parse_with(row, "apples,42\n") == Ok([{ name: "apples", count: 42 }])
+}
+expect {
+	even = Utf8.digits({}).map(
+		|value| if value % 2 == 0 {
+			Ok(value)
+		} else {
+			Err(OddCount(value))
+		},
+	).flatten()
+	row = CSV.record(|name| |count| { name, count })
+		.keep(CSV.field(CSV.string({})))
+		.keep(CSV.field(even))
+	match CSV.parse_with(row, "apples,3\n") {
+		Err(InvalidRow(error)) => error.record == 1 and error.field == 2 and error.line == 1 and error.column == 8 and error.problem == ParserFailure(FieldProblem({ offset: 0, problem: OddCount(3) }))
+		_ => False
+	}
+}

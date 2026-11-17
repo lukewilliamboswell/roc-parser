@@ -35,7 +35,7 @@ capture =
 	Parser.const(|label| |request| { label, request })
 		.keep(Parser.chomp_while(|byte| byte != '\n').map(|bytes| Str.from_utf8_lossy(bytes)))
 		.skip(Utf8.codeunit('\n'))
-		.keep(HTTP.request)
+		.keep(HTTP.request.map_problem(|problem| HttpProblem(problem)))
 
 # end::embedded[]
 

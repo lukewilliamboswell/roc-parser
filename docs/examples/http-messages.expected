@@ -10,4 +10,4 @@ decoded body: Wikipedia
 first: /a, second: /b, left over: 0 bytes
 targets: /a, /b
 health check: /health
-rejected at byte 55: both Transfer-Encoding and Content-Length
+rejected at byte 55: ConflictingFraming

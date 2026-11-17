@@ -195,6 +195,19 @@ Parser(input, a, p) :: { fun : input -> Step(input, a, p) }.{
 		}
 	}
 
+	## Translate structured problems while preserving the furthest failure.
+	## Wrap a closed native union in a domain tag when combining formats.
+	map_problem : Parser(input, a, p), (Parser.Problem(p) -> Parser.Problem(q)) -> Parser(input, a, q)
+	map_problem = |parser, transform| {
+		convert = |failure| { problem: transform(failure.problem), remaining: failure.remaining }
+		{
+			fun: |input| match step(parser, input) {
+				Ok({ value, rest, furthest }) => Ok({ value, rest, furthest: convert(furthest) })
+				Err(failure) => Err(convert(failure))
+			},
+		}
+	}
+
 	## Transforms the result of parsing into something else,
 	## using the given transformation function.
 	map : Parser(input, a, p), (a -> b) -> Parser(input, b, p)
@@ -695,4 +708,10 @@ expect {
 expect {
 	input = "ab;cd".to_utf8()
 	Parser.run(Parser.span(Parser.chomp_while(|b| b != ';')), input) == Ok({ value: "ab".to_utf8(), rest: ";cd".to_utf8() })
+}
+
+# Mapping preserves branch positions, including a repetition's remembered failure.
+expect {
+	parser = Parser.many(Parser.chomp_until(';')).map_problem(|problem| Token(problem))
+	Parser.parse(parser, ['x']) == Err(ParseError({ problem: Token(CharacterNotFound), offset: 0 }))
 }
