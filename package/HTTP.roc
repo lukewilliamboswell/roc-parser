@@ -1,4 +1,5 @@
 import Parser
+import Streaming
 import Utf8
 import Literal as Quotation
 
@@ -135,6 +136,55 @@ HTTP :: [].{
 	## are at offset 0, the start of the message.
 	Error : { offset : U64, message : Str }
 
+	## Bounds for incremental readers. Body fragments never exceed
+	## `max_body_chunk_bytes`; heads and trailer sections have independent bounds.
+	ReadProps := { max_head_bytes : U64 ?? 65_536, max_line_bytes : U64 ?? 8192, max_headers : U64 ?? 100, max_trailer_bytes : U64 ?? 65_536, max_trailers : U64 ?? 100, max_body_chunk_bytes : U64 ?? 65_536 }
+
+	## A request head, emitted before any body bytes.
+	RequestHead : { method : Method, target : Str, version : Version, headers : List(Header) }
+
+	## A response head, emitted before any body bytes.
+	ResponseHead : { version : Version, status_code : U16, reason : Str, headers : List(Header) }
+
+	## `MessageEnd` completes one HTTP message, including informational responses.
+	## `Finished` from Streaming completes the source. After a 101 response or a
+	## successful CONNECT, `ProtocolSwitch` precedes uninterpreted `ProtocolData`.
+	Event : [RequestHead(RequestHead), ResponseHead(ResponseHead), Body(List(U8)), Trailer(Header), MessageEnd, ProtocolSwitch, ProtocolData(List(U8))]
+
+	## Incremental state. Retain only the latest state to release consumed bytes.
+	Decoder : IncrementalState
+
+	## Begin a request pipeline. Construction does not read a source.
+	request_decoder : ReadProps -> Decoder
+	request_decoder = |props| incremental_initial(props, Requests, [].iter())
+
+	## Begin responses associated with request methods in encounter order.
+	## Informational responses retain the current method. A final response
+	## consumes it; unused methods are not pulled at source EOF.
+	response_decoder : Iter(Method), ReadProps -> Decoder
+	response_decoder = |methods, props| incremental_initial(props, Responses, methods)
+
+	## Consume bytes until one event, failure, or a request for more input.
+	## Broken framing and resource limits are terminal; records are never skipped.
+	step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, Error)
+	step = incremental_step
+
+	## Lazily read a pure request pipeline from arbitrary byte chunks.
+	iter_requests : Iter(List(U8)), ReadProps -> Iter(Try(Streaming.ReadEvent(Event, Error), Streaming.ReadError(Error)))
+	iter_requests = |chunks, props| Streaming.iter(chunks, request_decoder(props), step, {})
+
+	## Lazily read effectful request chunks, preserving source errors.
+	stream_requests : Stream(Try(List(U8), source_error)), ReadProps -> _
+	stream_requests = |chunks, props| Streaming.stream(chunks, request_decoder(props), step, {})
+
+	## Read pure response chunks using the matching request method queue.
+	iter_responses : Iter(List(U8)), Iter(Method), ReadProps -> Iter(Try(Streaming.ReadEvent(Event, Error), Streaming.ReadError(Error)))
+	iter_responses = |chunks, methods, props| Streaming.iter(chunks, response_decoder(methods, props), step, {})
+
+	## Read effectful response chunks using the matching request method queue.
+	stream_responses : Stream(Try(List(U8), source_error)), Iter(Method), ReadProps -> _
+	stream_responses = |chunks, methods, props| Streaming.stream(chunks, response_decoder(methods, props), step, {})
+
 	## The value of the first header with this name, compared
 	## case-insensitively, or `Err(Missing)`.
 	##
@@ -257,6 +307,261 @@ HTTP :: [].{
 Bytes : List(U8)
 
 Framing : [Length(U64), Chunked, Unframed]
+
+IncrementalMode : [Requests, Responses]
+
+IncrementalPhase : [Head, Fixed(U64), CloseBody, ChunkSize, ChunkData(U64), ChunkCR, ChunkLF, Trailers, Complete, Switch, Protocol, Closed]
+
+IncrementalContinuation : [NextMessage, SwitchProtocol, EndSource]
+
+IncrementalState : {
+	props : HTTP.ReadProps,
+	mode : IncrementalMode,
+	methods : Iter(HTTP.Method),
+	method : Try(HTTP.Method, [Missing]),
+	phase : IncrementalPhase,
+	continuation : IncrementalContinuation,
+	informational : Bool,
+	offset : U64,
+	section_start : U64,
+	buffer : Bytes,
+	line_bytes : U64,
+	saw_cr : Bool,
+	section_bytes : U64,
+	lines : U64,
+}
+
+incremental_initial : HTTP.ReadProps, IncrementalMode, Iter(HTTP.Method) -> IncrementalState
+incremental_initial = |props, mode, methods| {
+	{ props, mode, methods, method: Err(Missing), phase: Head, continuation: NextMessage, informational: False, offset: 0, section_start: 0, buffer: [], line_bytes: 0, saw_cr: False, section_bytes: 0, lines: 0 }
+}
+
+incremental_failed : IncrementalState, U64, U64, Str -> Streaming.Step(IncrementalState, HTTP.Event, HTTP.Error)
+incremental_failed = |state, consumed, offset, message| { state: { ..state, phase: Closed, buffer: [], methods: [].iter() }, consumed, outcome: Failed({ offset, message }) }
+
+incremental_failure : IncrementalState, U64, HTTP.Error -> Streaming.Step(IncrementalState, HTTP.Event, HTTP.Error)
+incremental_failure = |state, consumed, error| incremental_failed(state, consumed, error.offset, error.message)
+
+# Each wire byte is scanned once. Complete bounded heads/lines are then parsed
+# once by the same grammar and framing functions as the complete-input API.
+incremental_step : IncrementalState, Bytes, Streaming.InputEnd -> Streaming.Step(IncrementalState, HTTP.Event, HTTP.Error)
+incremental_step = |initial, bytes, end| {
+	var $state = initial
+	var $used = 0
+	if initial.props.max_body_chunk_bytes == 0 {
+		return incremental_failed($state, 0, $state.offset, "max_body_chunk_bytes must be positive")
+	}
+	while True {
+		match $state.phase {
+			Complete => {
+				phase = match $state.continuation {
+					NextMessage => Head
+					SwitchProtocol => Switch
+					EndSource => Closed
+				}
+				$state = { ..$state, phase, method: if ($state.informational) $state.method else Err(Missing), buffer: [], line_bytes: 0, saw_cr: False, section_bytes: 0, lines: 0, section_start: $state.offset }
+				return { state: $state, consumed: $used, outcome: Item(MessageEnd) }
+			}
+			Switch => {
+				$state = { ..$state, phase: Protocol, methods: [].iter() }
+				return { state: $state, consumed: $used, outcome: Item(ProtocolSwitch) }
+			}
+			Closed => {
+				if $used < bytes.len() {
+					return incremental_failed($state, $used, $state.offset, "bytes after a closed HTTP source")
+				}
+				return { state: $state, consumed: $used, outcome: if (end == Final) Done else NeedInput }
+			}
+			Fixed(0) => {
+				$state = { ..$state, phase: Complete }
+			}
+			ChunkData(0) => {
+				$state = { ..$state, phase: ChunkCR }
+			}
+			Fixed(remaining) | ChunkData(remaining) => {
+				if $used == bytes.len() {
+					if end == Final {
+						return incremental_failed($state, $used, $state.offset, "source ended before the body was complete")
+					}
+					return { state: $state, consumed: $used, outcome: NeedInput }
+				}
+				available = bytes.len() - $used
+				count = U64.min(U64.min(remaining, available), $state.props.max_body_chunk_bytes)
+				part = bytes.sublist({ start: $used, len: count })
+				phase = match $state.phase {
+					Fixed(_) => Fixed(remaining - count)
+					_ => ChunkData(remaining - count)
+				}
+				$state = { ..$state, phase, offset: $state.offset + count }
+				$used = $used + count
+				return { state: $state, consumed: $used, outcome: Item(Body(part)) }
+			}
+			CloseBody | Protocol => {
+				if $used == bytes.len() {
+					if end == More {
+						return { state: $state, consumed: $used, outcome: NeedInput }
+					}
+					if $state.phase == Protocol {
+						return { state: { ..$state, phase: Closed }, consumed: $used, outcome: Done }
+					}
+					$state = { ..$state, phase: Complete, continuation: EndSource }
+				} else {
+					count = U64.min(bytes.len() - $used, $state.props.max_body_chunk_bytes)
+					part = bytes.sublist({ start: $used, len: count })
+					event = if ($state.phase == Protocol) ProtocolData(part) else Body(part)
+					$state = { ..$state, offset: $state.offset + count }
+					$used = $used + count
+					return { state: $state, consumed: $used, outcome: Item(event) }
+				}
+			}
+			ChunkCR | ChunkLF => {
+				if $used == bytes.len() {
+					if end == Final {
+						return incremental_failed($state, $used, $state.offset, "source ended before chunk data CRLF")
+					}
+					return { state: $state, consumed: $used, outcome: NeedInput }
+				}
+				expected = if ($state.phase == ChunkCR) '\r' else '\n'
+				if bytes.get($used) != Ok(expected) {
+					return incremental_failed($state, $used, $state.offset, "chunk data must be followed by CRLF")
+				}
+				phase = if ($state.phase == ChunkCR) ChunkLF else ChunkSize
+				$state = { ..$state, phase, offset: $state.offset + 1, section_start: $state.offset + 1 }
+				$used = $used + 1
+			}
+			Head | ChunkSize | Trailers => {
+				if $used == bytes.len() {
+					if end == More {
+						return { state: $state, consumed: $used, outcome: NeedInput }
+					}
+					if $state.phase == Head and $state.buffer.is_empty() and $state.method.is_err() {
+						return { state: { ..$state, phase: Closed, methods: [].iter() }, consumed: $used, outcome: Done }
+					}
+					return incremental_failed($state, $used, $state.offset, "source ended before an HTTP head, chunk line, or trailer section was complete")
+				}
+				if $state.phase == Head and $state.mode == Responses and $state.method.is_err() {
+					var $found = False
+					while !$found {
+						match $state.methods.next() {
+							Done => return incremental_failed($state, $used, $state.offset, "response has no matching request method")
+							Skip({ rest }) => {
+								$state = { ..$state, methods: rest }
+							}
+							One({ item, rest }) => {
+								$state = { ..$state, methods: rest, method: Ok(item) }
+								$found = True
+							}
+						}
+					}
+				}
+				byte = bytes.get($used) ?? 0
+				if $state.saw_cr and byte != '\n' {
+					return incremental_failed($state, $used, $state.offset - 1, "CR not followed by LF")
+				}
+				if byte == '\n' and !$state.saw_cr {
+					return incremental_failed($state, $used, $state.offset, "LF not preceded by CR")
+				}
+				section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
+				if $state.section_bytes >= section_limit {
+					return incremental_failed($state, $used, $state.offset, "HTTP head, chunk line, or trailer section exceeds its byte limit")
+				}
+				if byte != '\r' and byte != '\n' and $state.line_bytes >= $state.props.max_line_bytes {
+					return incremental_failed($state, $used, $state.offset, "HTTP line exceeds max_line_bytes")
+				}
+				$state = { ..$state, offset: $state.offset + 1, section_bytes: $state.section_bytes + 1, buffer: $state.buffer.append(byte) }
+				$used = $used + 1
+				if byte == '\r' {
+					$state = { ..$state, saw_cr: True }
+				} else if byte != '\n' {
+					$state = { ..$state, line_bytes: $state.line_bytes + 1 }
+				} else {
+					line_length = $state.line_bytes
+					$state = { ..$state, saw_cr: False, line_bytes: 0 }
+					match $state.phase {
+						Head => {
+							if line_length == 0 {
+								match incremental_head($state) {
+									Err(error) => return incremental_failure($state, $used, error)
+									Ok({ state, event }) => return { state, consumed: $used, outcome: Item(event) }
+								}
+							} else {
+								$state = { ..$state, lines: $state.lines + 1 }
+								if $state.lines - 1 > $state.props.max_headers {
+									return incremental_failed($state, $used, $state.offset - line_length - 2, "HTTP head exceeds max_headers")
+								}
+							}
+						}
+						ChunkSize => {
+							match shift(parse_chunk_header($state.buffer.drop_last(2)), $state.section_start) {
+								Err(error) => return incremental_failure($state, $used, error)
+								Ok(size) => {
+									$state = { ..$state, phase: if (size == 0) Trailers else ChunkData(size), buffer: [], section_start: $state.offset, section_bytes: 0, lines: 0 }
+								}
+							}
+						}
+						Trailers => {
+							if line_length == 0 {
+								$state = { ..$state, phase: Complete, buffer: [] }
+							} else {
+								if $state.lines >= $state.props.max_trailers {
+									return incremental_failed($state, $used, $state.section_start, "HTTP trailer section exceeds max_trailers")
+								}
+								match shift(parse_field_line($state.buffer.drop_last(2)), $state.section_start) {
+									Err(error) => return incremental_failure($state, $used, error)
+									Ok(parsed) => {
+										if parsed.kind.is_ok() {
+											return incremental_failed($state, $used, $state.section_start, "Host and framing fields are forbidden in trailers")
+										}
+										$state = { ..$state, buffer: [], section_start: $state.offset, lines: $state.lines + 1 }
+										return { state: $state, consumed: $used, outcome: Item(Trailer(parsed.header)) }
+									}
+								}
+							}
+						}
+						_ => {}
+					}
+				}
+			}
+		}
+	}
+}
+
+incremental_head : IncrementalState -> Try({ state : IncrementalState, event : HTTP.Event }, HTTP.Error)
+incremental_head = |state| {
+	{ line, rest } = shift(take_line(state.buffer), state.section_start)?
+	head = shift(parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] }), state.section_start)?
+	if state.mode == Requests {
+		start = shift(parse_request_line(line), state.section_start)?
+		hosts = values_named(head.fields, Host)
+		if hosts.len() > 1 {
+			return fail(state.section_start + (hosts.get(1) ?? { value: [], offset: 0 }).offset, "more than one Host field")
+		}
+		if hosts.is_empty() and at_least_1_1(start.version) {
+			return fail(state.section_start, "an HTTP/1.1 request needs a Host field")
+		}
+		body_framing = shift(framing(head.fields, start.version), state.section_start)?
+		phase = match body_framing {
+			Length(n) => Fixed(n)
+			Chunked => ChunkSize
+			Unframed => Complete
+		}
+		Ok({ state: { ..state, phase, buffer: [], section_start: state.offset, section_bytes: 0, lines: 0, informational: False, continuation: NextMessage }, event: RequestHead({ method: start.method, target: start.target, version: start.version, headers: head.headers }) })
+	} else {
+		start = shift(parse_status_line(line), state.section_start)?
+		body_framing = shift(framing(head.fields, start.version), state.section_start)?
+		code = start.status_code
+		method = state.method ?? Get
+		switched = code == 101 or (method == Connect and code >= 200 and code < 300)
+		informational = code < 200 and code != 101
+		no_body = method == Head or code < 200 or code == 204 or code == 304 or switched
+		phase = if (no_body) Complete else match body_framing {
+			Length(n) => Fixed(n)
+			Chunked => ChunkSize
+			Unframed => CloseBody
+		}
+		Ok({ state: { ..state, phase, buffer: [], section_start: state.offset, section_bytes: 0, lines: 0, informational, continuation: if (switched) SwitchProtocol else NextMessage }, event: ResponseHead({ version: start.version, status_code: code, reason: start.reason, headers: head.headers }) })
+	}
+}
 
 # A failure, with `offset` relative to the start of the bytes the function
 # that produced it was given.
@@ -1072,4 +1377,215 @@ expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\n\r\nG
 expect match HTTP.validate_request({ source: "GET / HTTP/1.1\nHost: a\n\n" }) {
 	Err(BadQuotedBytes(message)) => message.contains("LF not preceded by CR")
 	Ok(_) => False
+}
+
+# Normalize only transport-dependent body fragmentation; heads, trailers,
+# completion markers and errors must remain in exactly the same order.
+HttpTestResult : [Event(HTTP.Event), Finished, Failed(Streaming.ReadError(HTTP.Error))]
+
+normalize_http_test : Iter(Try(Streaming.ReadEvent(HTTP.Event, HTTP.Error), Streaming.ReadError(HTTP.Error))) -> List(HttpTestResult)
+normalize_http_test = |input| {
+	var $out = []
+	for result in input {
+		match result {
+			Ok(Value(Body(part))) => {
+				match $out.last() {
+					Ok(Event(Body(before))) => {
+						$out = $out.drop_last(1).append(Event(Body(before.concat(part))))
+					}
+					_ => {
+						$out = $out.append(Event(Body(part)))
+					}
+				}
+			}
+			Ok(Value(ProtocolData(part))) => {
+				match $out.last() {
+					Ok(Event(ProtocolData(before))) => {
+						$out = $out.drop_last(1).append(Event(ProtocolData(before.concat(part))))
+					}
+					_ => {
+						$out = $out.append(Event(ProtocolData(part)))
+					}
+				}
+			}
+			Ok(Value(event)) => {
+				$out = $out.append(Event(event))
+			}
+			Ok(Finished(_)) => {
+				$out = $out.append(Finished)
+			}
+			Err(error) => {
+				$out = $out.append(Failed(error))
+			}
+			Ok(Rejected(error)) => {
+				$out = $out.append(Failed(ParseErr(error)))
+			}
+		}
+	}
+	$out
+}
+
+http_split_requests : Str -> Bool
+http_split_requests = |text| {
+	bytes = text.to_utf8()
+	want = normalize_http_test(HTTP.iter_requests([bytes].iter(), {}))
+	var $same = normalize_http_test(HTTP.iter_requests(bytes.map(|byte| [byte]).iter(), {})) == want
+	for split in (0.U64).to(bytes.len() + 1) {
+		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
+		if normalize_http_test(HTTP.iter_requests(parts.iter(), {})) != want {
+			$same = False
+		}
+	}
+	$same
+}
+
+http_split_responses : Str, List(HTTP.Method) -> Bool
+http_split_responses = |text, methods| {
+	bytes = text.to_utf8()
+	want = normalize_http_test(HTTP.iter_responses([bytes].iter(), methods.iter(), {}))
+	var $same = normalize_http_test(HTTP.iter_responses(bytes.map(|byte| [byte]).iter(), methods.iter(), {})) == want
+	for split in (0.U64).to(bytes.len() + 1) {
+		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
+		if normalize_http_test(HTTP.iter_responses(parts.iter(), methods.iter(), {})) != want {
+			$same = False
+		}
+	}
+	$same
+}
+
+expect {
+	text = "POST /one HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhelloGET /two HTTP/1.1\r\nHost: a\r\n\r\n"
+	events = Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {}))?
+	events == [RequestHead({ method: Post, target: "/one", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }, { name: "Content-Length", value: "5" }] }), Body("hello".to_utf8()), MessageEnd, RequestHead({ method: Get, target: "/two", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }] }), MessageEnd]
+		and http_split_requests(text)
+}
+
+expect {
+	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b;c=\"q\\\"\"\r\nhello\r\n6\r\n world\r\n0\r\nX-Trailer: t\r\n\r\n"
+	events = Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {}))?
+	events.drop_first(1) == [Body("hello".to_utf8()), Body(" world".to_utf8()), Trailer({ name: "X-Trailer", value: "t" }), MessageEnd]
+		and http_split_requests(text)
+}
+
+# All incomplete self-delimiting messages fail rather than finalizing at EOF.
+expect [
+	"GET / HTTP/1.1\r\nHost: a\r\n\r",
+	"POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 3\r\n\r\nab",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nab",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n",
+].all(|text| Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {})).is_err() and http_split_requests(text))
+
+expect [
+	"GET / HTTP/1.1\r\nHost: a\r\n\r\ninvalid suffix",
+	"GET / HTTP/1.1\nHost: a\r\n\r\n",
+	"GET / HTTP/1.1\rX",
+	"GET / HTTP/1.1\r\n\r\n",
+	"GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n",
+	"GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n",
+	"GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 1, 2\r\n\r\n",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;=bad\r\na\r\n0\r\n\r\n",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nContent-Length: 2\r\n\r\n",
+].all(|text| Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), {})).is_err() and http_split_requests(text))
+
+expect {
+	text = "HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\nHTTP/1.1 204 Empty\r\n\r\nHTTP/1.1 304 Cached\r\n\r\n"
+	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Head, Get, Get].iter(), {}))?
+	events.len() == 6 and events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and http_split_responses(text, [Head, Get, Get])
+}
+
+expect {
+	text = "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
+	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Post].iter(), {}))?
+	events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and events.drop_first(5) == [Body("hi".to_utf8()), MessageEnd] and http_split_responses(text, [Post])
+}
+
+expect {
+	text = "HTTP/1.1 200 OK\r\n\r\nbody\r\nHTTP/1.1 is body text"
+	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Get].iter(), {}))?
+	events.drop_first(1) == [Body("body\r\nHTTP/1.1 is body text".to_utf8()), MessageEnd] and http_split_responses(text, [Get])
+}
+
+expect {
+	text = "HTTP/1.1 200 Connected\r\n\r\ntunnel\r\nnot HTTP"
+	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Connect].iter(), {}))?
+	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("tunnel\r\nnot HTTP".to_utf8())] and http_split_responses(text, [Connect])
+}
+
+expect {
+	text = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\nraw"
+	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Get].iter(), {}))?
+	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("raw".to_utf8())] and http_split_responses(text, [Get])
+}
+
+expect {
+	text = "HTTP/1.1 403 Forbidden\r\nContent-Length: 2\r\n\r\nnoHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+	Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Connect, Get].iter(), {})).is_ok() and http_split_responses(text, [Connect, Get])
+}
+
+expect {
+	text = "HTTP/1.1 100 Continue\r\n\r\n"
+	Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Post].iter(), {})).is_err() and http_split_responses(text, [Post])
+}
+
+expect {
+	bytes = "HTTP/1.1 204 Empty\r\n\r\n".to_utf8()
+	Streaming.collect(HTTP.iter_responses([bytes].iter(), [].iter(), {})).is_err()
+		and Streaming.collect(HTTP.iter_responses([bytes.concat(bytes)].iter(), [Get].iter(), {})).is_err()
+}
+
+expect {
+	bytes = "GET / HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
+	Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_head_bytes: bytes.len() })).is_ok()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_head_bytes: bytes.len() - 1 })).is_err()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_line_bytes: 14, max_headers: 1 })).is_ok()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_line_bytes: 13 })).is_err()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_headers: 0 })).is_err()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_headers: U64.highest, max_line_bytes: U64.highest })).is_ok()
+}
+
+expect {
+	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n\r\n"
+	bytes = text.to_utf8()
+	Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_trailer_bytes: 8, max_trailers: 1 })).is_ok()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_trailer_bytes: 7 })).is_err()
+		and Streaming.collect(HTTP.iter_requests([bytes].iter(), { max_trailers: 0 })).is_err()
+}
+
+expect {
+	text = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n0123456789"
+	events = Streaming.collect(HTTP.iter_responses([text.to_utf8()].iter(), [Get].iter(), { max_body_chunk_bytes: 3 }))?
+	events.drop_first(1) == [Body("012".to_utf8()), Body("345".to_utf8()), Body("678".to_utf8()), Body("9".to_utf8()), MessageEnd]
+		and Streaming.collect(HTTP.iter_requests([[]].iter(), { max_body_chunk_bytes: 0 })).is_err()
+}
+
+expect {
+	# A consumer can stop immediately after the head without pulling any body
+	# source chunks or the next request context.
+	chunks = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled body source before demand" else Ok(("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\n".to_utf8(), True)))
+	methods = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled next method before demand" else Ok((Get, True)))
+	match HTTP.iter_responses(chunks, methods, {}).next() {
+		One({ item: Ok(Value(ResponseHead(head))), .. }) => head.status_code == 200
+		_ => False
+	}
+}
+
+expect {
+	# Completion validates only consumed responses; surplus context is lazy.
+	methods = Iter.custom({}, Err(Unknown), |_| crash "pulled unused context at EOF")
+	Streaming.collect(HTTP.iter_responses([[], []].iter(), methods, {})) == Ok([])
+}
+
+expect {
+	chunks = Iter.custom({}, Err(Unknown), |_| crash "read source with invalid fragment limit")
+	match HTTP.iter_requests(chunks, { max_body_chunk_bytes: 0 }).next() {
+		One({ item: Err(ParseErr(_)), .. }) => True
+		_ => False
+	}
+}
+
+expect {
+	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;abcdefghijklmnop=abcdefghijklmnop\r\nx\r\n0\r\n\r\n"
+	Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), { max_line_bytes: 35 })).is_ok()
+		and Streaming.collect(HTTP.iter_requests([text.to_utf8()].iter(), { max_line_bytes: 34 })).is_err()
 }
