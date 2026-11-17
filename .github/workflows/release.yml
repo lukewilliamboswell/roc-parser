@@ -16,8 +16,19 @@ on:
 permissions: {}
 
 jobs:
+  validate:
+    name: Validate
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      nightly-tag: ${{ inputs.nightly-tag || '' }}
+
   release:
     name: Release
+    needs: validate
+    if: ${{ always() && !cancelled() && (github.event_name == 'pull_request' || needs.validate.result == 'success') }}
     uses: lukewilliamboswell/roc-automation/.github/workflows/release-package.yml@cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
     permissions:
       contents: write
@@ -26,9 +37,9 @@ jobs:
       artifact-metadata: write
     with:
       version: ${{ inputs.version || '' }}
-      nightly-tag: ${{ inputs.nightly-tag || '' }}
-      # Pull requests run the full suite in CI; a dispatched release runs it here.
-      check-task: ${{ github.event_name == 'workflow_dispatch' && 'check' || '' }}
+      nightly-tag: ${{ needs.validate.outputs.nightly || '' }}
+      # CI checks pull requests; dispatched releases require the same validation above.
+      check-task: ''
       sbom-author: 'Organization: roc-parser contributors'
       sbom-task: sbom-composition
       manual: true
