@@ -1,7 +1,6 @@
+import Diagnostic
 import Parser
 import Streaming
-import Utf8
-import Literal as Quotation
 
 ## Parse HTTP/1.x requests and responses, following the message syntax of
 ## RFC 9112 and the field syntax of RFC 9110.
@@ -58,7 +57,7 @@ HTTP :: [].{
 
 		## Parse and validate a complete request during literal conversion.
 		from_quote : Str -> Try(RequestLiteral, [BadQuotedBytes(Str)])
-		from_quote = |source| HTTP.validate_request({ source: source }).map_ok(|value| { value: value })
+		from_quote = |source| HTTP.validate_request({ source: source }).map_err(|InvalidHttp(error)| quote_http_error(source, error)).map_ok(|value| { value: value })
 	}
 
 	## A complete checked response, available through `.value`.
@@ -66,21 +65,21 @@ HTTP :: [].{
 
 		## Parse and validate a complete response during literal conversion.
 		from_quote : Str -> Try(ResponseLiteral, [BadQuotedBytes(Str)])
-		from_quote = |source| HTTP.validate_response({ source: source }).map_ok(|value| { value: value })
+		from_quote = |source| HTTP.validate_response({ source: source }).map_err(|InvalidHttp(error)| quote_http_error(source, error)).map_ok(|value| { value: value })
 	}
 
 	## Parse exactly one request, then check enabled lint rules.
-	validate_request : ValidationProps -> Try(Request, [BadQuotedBytes(Str)])
+	validate_request : ValidationProps -> Try(Request, [InvalidHttp(Error)])
 	validate_request = |props| {
-		parsed = read_request_metadata(props.source.to_utf8()).map_err(|error| quotation_error(props, error))?
+		parsed = read_request_metadata(props.source.to_utf8()).map_err(|error| InvalidHttp(named_http_error(props.name, error)))?
 		validate_message(props, parsed.rest, parsed.fields)?
 		Ok(parsed.value)
 	}
 
 	## Parse exactly one response, then check enabled lint rules.
-	validate_response : ValidationProps -> Try(Response, [BadQuotedBytes(Str)])
+	validate_response : ValidationProps -> Try(Response, [InvalidHttp(Error)])
 	validate_response = |props| {
-		parsed = read_response_metadata(props.source.to_utf8()).map_err(|error| quotation_error(props, error))?
+		parsed = read_response_metadata(props.source.to_utf8()).map_err(|error| InvalidHttp(named_http_error(props.name, error)))?
 		validate_message(props, parsed.rest, parsed.fields)?
 		Ok(parsed.value)
 	}
@@ -134,12 +133,13 @@ HTTP :: [].{
 	##
 	## Problems with the message as a whole, such as a missing `Host` field,
 	## are at offset 0, the start of the message.
-	Problem : [DuplicateHost, MissingHost, CrWithoutLf, LfWithoutCr, MissingCrlf, MissingTarget, InvalidTarget, InvalidMethod, MissingMethod, InvalidVersion, InvalidStatusWidth, InvalidStatus, InvalidReasonCharacter, InvalidReasonEncoding, MissingStatus, InvalidFieldEncoding, ObsoleteFolding, WhitespaceBeforeColon, InvalidFieldCharacter, InvalidFieldName, TransferEncodingHttp10, ContentLengthOverflow, ConflictingFraming, UnsupportedTransferCoding, ConflictingContentLength, InvalidContentLength, IncompleteBody, IncompleteChunk, MissingChunkCrlf, InvalidChunkSize, ChunkSizeOverflow, WhitespaceAfterChunkSize, MissingExtensionName, InvalidExtension, MissingExtensionValue, InvalidQuotedPair, InvalidQuotedCharacter, UnclosedQuote, TrailingContent, RepeatedContentLength, RepeatedContentLengthValues, InvalidBodyChunkSize, SourceClosed, IncompleteSection, MissingRequestMethod, SectionTooLarge(U64), LineTooLarge(U64), TooManyHeaders(U64), TooManyTrailers(U64), ForbiddenTrailer]
-	Error : { offset : U64, problem : Parser.Problem(Problem) }
+	Resource : [SectionBytes, LineBytes, Headers, Trailers]
+	Problem : [LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), DuplicateHost, MissingHost, CrWithoutLf, LfWithoutCr, MissingCrlf, MissingTarget, InvalidTarget, InvalidMethod, MissingMethod, InvalidVersion, InvalidStatusWidth, InvalidStatus, InvalidReasonCharacter, InvalidReasonEncoding, MissingStatus, InvalidFieldEncoding, ObsoleteFolding, WhitespaceBeforeColon, InvalidFieldCharacter, InvalidFieldName, TransferEncodingHttp10, ContentLengthOverflow, ConflictingFraming, UnsupportedTransferCoding, ConflictingContentLength, InvalidContentLength, IncompleteBody, IncompleteChunk, MissingChunkCrlf, InvalidChunkSize, ChunkSizeOverflow, WhitespaceAfterChunkSize, MissingExtensionName, InvalidExtension, MissingExtensionValue, InvalidQuotedPair, InvalidQuotedCharacter, UnclosedQuote, TrailingContent, RepeatedContentLength, RepeatedContentLengthValues, InvalidBodyChunkSize, SourceClosed, IncompleteSection, MissingRequestMethod, ForbiddenTrailer]
+	Error : Diagnostic(Problem)
 
 	## Bounds for incremental readers. Body fragments never exceed
 	## `max_body_chunk_bytes`; heads and trailer sections have independent bounds.
-	ReadProps := { max_head_bytes : U64 ?? 65_536, max_line_bytes : U64 ?? 8192, max_headers : U64 ?? 100, max_trailer_bytes : U64 ?? 65_536, max_trailers : U64 ?? 100, max_body_chunk_bytes : U64 ?? 65_536 }
+	ReadProps := { max_head_bytes : U64 ?? 65_536, max_line_bytes : U64 ?? 8192, max_headers : U64 ?? 100, max_trailer_bytes : U64 ?? 65_536, max_trailers : U64 ?? 100, max_body_chunk_bytes : U64 ?? 65_536, errors : Streaming.RecoveryProps ?? {} }
 
 	## A request head, emitted before any body bytes.
 	RequestHead : { method : Method, target : Str, version : Version, headers : List(Header) }
@@ -153,13 +153,13 @@ HTTP :: [].{
 	Event : [RequestHead(RequestHead), ResponseHead(ResponseHead), Body(List(U8)), Trailer(Header), MessageEnd, ProtocolSwitch, ProtocolData(List(U8))]
 
 	## Configure request events for Streaming.read_iter or Streaming.read_stream.
-	request_decoder : ReadProps -> Streaming.Decoder(IncrementalState, Event, Error)
-	request_decoder = |props| Streaming.decoder(incremental_initial(props, Requests, [].iter()), incremental_step)
+	request_decoder : ReadProps -> Streaming.Decoder(IncrementalState, Event, [InvalidHttp(Error)])
+	request_decoder = |props| Streaming.decoder({ initial_state: incremental_initial(props, Requests, [].iter()), step: |state, bytes, end| Streaming.map_step_error(incremental_step(state, bytes, end), |error| InvalidHttp(http_error(error))), errors: props.errors })
 
 	## Associate responses with request methods in encounter order.
 	## Informational responses retain the method; a final response consumes it.
-	response_decoder : Iter(Method), ReadProps -> Streaming.Decoder(IncrementalState, Event, Error)
-	response_decoder = |methods, props| Streaming.decoder(incremental_initial(props, Responses, methods), incremental_step)
+	response_decoder : Iter(Method), ReadProps -> Streaming.Decoder(IncrementalState, Event, [InvalidHttp(Error)])
+	response_decoder = |methods, props| Streaming.decoder({ initial_state: incremental_initial(props, Responses, methods), step: |state, bytes, end| Streaming.map_step_error(incremental_step(state, bytes, end), |error| InvalidHttp(http_error(error))), errors: props.errors })
 
 	## The value of the first header with this name, compared
 	## case-insensitively, or `Err(Missing)`.
@@ -201,7 +201,7 @@ HTTP :: [].{
 	parse_request = |bytes| {
 		match read_request(bytes) {
 			Ok({ value, rest }) => Ok({ request: value, rest })
-			Err(error) => Err(InvalidHttp(error))
+			Err(error) => Err(InvalidHttp(http_error(error)))
 		}
 	}
 
@@ -224,7 +224,7 @@ HTTP :: [].{
 	parse_response = |bytes| {
 		match read_response(bytes) {
 			Ok({ value, rest }) => Ok({ response: value, rest })
-			Err(error) => Err(InvalidHttp(error))
+			Err(error) => Err(InvalidHttp(http_error(error)))
 		}
 	}
 
@@ -252,17 +252,17 @@ HTTP :: [].{
 	## ```roc
 	## expect {
 	##     text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	##     match Utf8.parse_str(HTTP.request, text) {
+	##     match (HTTP.request).parse_str(text) {
 	##         Ok(req) => req.method == Get and HTTP.header(req.headers, "host") == Ok("example.com")
 	##         Err(_) => False
 	##     }
 	## }
 	## ```
-	request : Parser(Utf8.Bytes, Request, Problem)
+	request : Parser(Parser.Utf8.Bytes, Request, Problem)
 	request =
 		Parser.custom(
 			|input| {
-				read_request(input).map_err(|{ offset, problem }| ParseError({ problem, offset }))
+				read_request(input).map_err(|{ offset, problem }| ParseError(Diagnostic.{ problem, location: InputOffset(offset), path: [] }))
 			},
 		)
 
@@ -270,11 +270,11 @@ HTTP :: [].{
 	## inside a larger parser.
 	##
 	## A failure is a `ParseError` with the native problem tag and byte offset.
-	response : Parser(Utf8.Bytes, Response, Problem)
+	response : Parser(Parser.Utf8.Bytes, Response, Problem)
 	response =
 		Parser.custom(
 			|input| {
-				read_response(input).map_err(|{ offset, problem }| ParseError({ problem, offset }))
+				read_response(input).map_err(|{ offset, problem }| ParseError(Diagnostic.{ problem, location: InputOffset(offset), path: [] }))
 			},
 		)
 }
@@ -311,15 +311,15 @@ incremental_initial = |props, mode, methods| {
 	{ props, mode, methods, method: Err(Missing), phase: Head, continuation: NextMessage, informational: False, offset: 0, section_start: 0, buffer: [], line_bytes: 0, saw_cr: False, section_bytes: 0, lines: 0 }
 }
 
-incremental_failed : IncrementalState, U64, U64, Parser.Problem(HTTP.Problem) -> Streaming.Step(IncrementalState, HTTP.Event, HTTP.Error)
+incremental_failed : IncrementalState, U64, U64, HTTP.Problem -> Streaming.Step(IncrementalState, HTTP.Event, Failure)
 incremental_failed = |state, consumed, offset, problem| { state: { ..state, phase: Closed, buffer: [], methods: [].iter() }, consumed, outcome: Failed({ offset, problem }) }
 
-incremental_failure : IncrementalState, U64, HTTP.Error -> Streaming.Step(IncrementalState, HTTP.Event, HTTP.Error)
+incremental_failure : IncrementalState, U64, Failure -> Streaming.Step(IncrementalState, HTTP.Event, Failure)
 incremental_failure = |state, consumed, error| incremental_failed(state, consumed, error.offset, error.problem)
 
 # Each wire byte is scanned once. Complete bounded heads/lines are then parsed
 # once by the same grammar and framing functions as the complete-input API.
-incremental_step : IncrementalState, Bytes, Streaming.InputEnd -> Streaming.Step(IncrementalState, HTTP.Event, HTTP.Error)
+incremental_step : IncrementalState, Bytes, Streaming.InputEnd -> Streaming.Step(IncrementalState, HTTP.Event, Failure)
 incremental_step = |initial, bytes, end| {
 	var $state = initial
 	var $used = 0
@@ -452,7 +452,7 @@ incremental_step = |initial, bytes, end| {
 				# transitions below; field validation occurs before head emission.
 				var $bulk = False
 				if !$state.saw_cr {
-					run_end = Utf8.find_line_end(bytes, $used)
+					run_end = Parser.Utf8.find_line_end(bytes, $used)
 					count = run_end - $used
 					if count > 0 {
 						section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
@@ -464,7 +464,7 @@ incremental_step = |initial, bytes, end| {
 							$used = $used + accepted
 						}
 						if accepted < count {
-							problem = if ($state.section_bytes >= section_limit) SectionTooLarge(section_limit) else LineTooLarge($state.props.max_line_bytes)
+							problem = if ($state.section_bytes >= section_limit) LimitExceeded({ resource: SectionBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }) else LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) })
 							return incremental_failed($state, $used, $state.offset, problem)
 						}
 						$bulk = True
@@ -480,10 +480,10 @@ incremental_step = |initial, bytes, end| {
 					}
 					section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
 					if $state.section_bytes >= section_limit {
-						return incremental_failed($state, $used, $state.offset, SectionTooLarge(section_limit))
+						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: SectionBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }))
 					}
 					if byte != '\r' and byte != '\n' and $state.line_bytes >= $state.props.max_line_bytes {
-						return incremental_failed($state, $used, $state.offset, LineTooLarge($state.props.max_line_bytes))
+						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) }))
 					}
 					$state = { ..$state, offset: $state.offset + 1, section_bytes: $state.section_bytes + 1, buffer: $state.buffer.append(byte) }
 					$used = $used + 1
@@ -504,7 +504,7 @@ incremental_step = |initial, bytes, end| {
 								} else {
 									$state = { ..$state, lines: $state.lines + 1 }
 									if $state.lines - 1 > $state.props.max_headers {
-										return incremental_failed($state, $used, $state.offset - line_length - 2, TooManyHeaders($state.props.max_headers))
+										return incremental_failed($state, $used, $state.offset - line_length - 2, LimitExceeded({ resource: Headers, max: $state.props.max_headers, observed: AtLeast(($state.props.max_headers) + 1) }))
 									}
 								}
 							}
@@ -521,7 +521,7 @@ incremental_step = |initial, bytes, end| {
 									$state = { ..$state, phase: Complete, buffer: [] }
 								} else {
 									if $state.lines >= $state.props.max_trailers {
-										return incremental_failed($state, $used, $state.section_start, TooManyTrailers($state.props.max_trailers))
+										return incremental_failed($state, $used, $state.section_start, LimitExceeded({ resource: Trailers, max: $state.props.max_trailers, observed: AtLeast(($state.props.max_trailers) + 1) }))
 									}
 									match shift(parse_field_line($state.buffer.drop_last(2)), $state.section_start) {
 										Err(error) => return incremental_failure($state, $used, error)
@@ -555,7 +555,7 @@ complete_head_end = |bytes, props| {
 		remaining = bounded.drop_first($pos)
 		ordinary = U64.min(remaining.len(), props.max_line_bytes)
 		window = remaining.take_first(ordinary + U64.min(2, remaining.len() - ordinary))
-		end = Utf8.find_line_end(window, 0)
+		end = Parser.Utf8.find_line_end(window, 0)
 		if end > props.max_line_bytes or end >= window.len() {
 			return Err(Unavailable)
 		}
@@ -579,7 +579,7 @@ complete_head_end = |bytes, props| {
 	Err(Unavailable)
 }
 
-incremental_head : IncrementalState -> Try({ state : IncrementalState, event : HTTP.Event }, HTTP.Error)
+incremental_head : IncrementalState -> Try({ state : IncrementalState, event : HTTP.Event }, Failure)
 incremental_head = |state| {
 	{ line, rest } = shift(take_line(state.buffer), state.section_start)?
 	head = shift(parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] }), state.section_start)?
@@ -612,7 +612,7 @@ incremental_head = |state| {
 
 # A failure, with `offset` relative to the start of the bytes the function
 # that produced it was given.
-Failure : HTTP.Error
+Failure : { offset : U64, problem : HTTP.Problem }
 
 # The value of a field that decides the framing or the Host check, with the
 # byte offset of its line so that errors can point at it. Only these fields
@@ -625,7 +625,7 @@ FieldKind : [Host, TransferEncoding, ContentLength]
 # framing, and the bytes after the empty line.
 Head : { headers : List(HTTP.Header), fields : List(Field), rest : Bytes }
 
-fail : U64, Parser.Problem(HTTP.Problem) -> Try(a, Failure)
+fail : U64, HTTP.Problem -> Try(a, Failure)
 fail = |offset, problem| Err({ offset, problem })
 
 # Move a failure's offset from a slice starting at `base` to the outer input.
@@ -640,7 +640,7 @@ read_requests = |bytes, total, requests| {
 	} else {
 		match shift(read_request(bytes), total - bytes.len()) {
 			Ok({ value, rest }) => read_requests(rest, total, requests.append(value))
-			Err(error) => Err(InvalidHttp(error))
+			Err(error) => Err(InvalidHttp(http_error(error)))
 		}
 	}
 }
@@ -688,24 +688,18 @@ read_response_metadata = |input| {
 	Ok({ value: { version, status_code: code, reason: start.reason, headers: head.headers, body: framed.body }, rest: framed.rest, fields: head.fields })
 }
 
-quotation_error : HTTP.ValidationProps, Failure -> [BadQuotedBytes(Str)]
-quotation_error = |props, error| {
-	position = Quotation.position(props.source, error.offset)
-	Quotation.error({ name: props.name, format: "HTTP", message: Str.inspect(error.problem), line: position.line, column: position.column })
-}
-
-validate_message : HTTP.ValidationProps, Bytes, List(Field) -> Try({}, [BadQuotedBytes(Str)])
+validate_message : HTTP.ValidationProps, Bytes, List(Field) -> Try({}, [InvalidHttp(HTTP.Error)])
 validate_message = |props, rest, fields| {
 	if !rest.is_empty() {
-		return Err(quotation_error(props, { offset: props.source.to_utf8().len() - rest.len(), problem: TrailingContent }))
+		return Err(InvalidHttp(named_http_error(props.name, { offset: props.source.to_utf8().len() - rest.len(), problem: TrailingContent })))
 	}
 	if props.lints.repeated_content_length {
 		lengths = values_named(fields, ContentLength)
 		if lengths.len() > 1 {
-			return Err(quotation_error(props, { offset: (lengths.get(1) ?? { value: [], offset: 0 }).offset, problem: RepeatedContentLength }))
+			return Err(InvalidHttp(named_http_error(props.name, { offset: (lengths.get(1) ?? { value: [], offset: 0 }).offset, problem: RepeatedContentLength })))
 		}
 		match lengths.first() {
-			Ok(field) if elements(field.value).len() > 1 => return Err(quotation_error(props, { offset: field.offset, problem: RepeatedContentLengthValues }))
+			Ok(field) if elements(field.value).len() > 1 => return Err(InvalidHttp(named_http_error(props.name, { offset: field.offset, problem: RepeatedContentLengthValues })))
 			_ => {}
 		}
 	}
@@ -736,7 +730,7 @@ take_line : Bytes -> Try({ line : Bytes, rest : Bytes }, Failure)
 take_line = |bytes| {
 	# Build the error only when there is one: a `Try` holding an error
 	# message costs an allocation even on the success path.
-	var $index = Utf8.find_line_end(bytes, 0)
+	var $index = Parser.Utf8.find_line_end(bytes, 0)
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		if byte == '\r' {
@@ -1312,15 +1306,18 @@ is_tchar = |byte| {
 		or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
 
-parse : Parser(Utf8.Bytes, a, HTTP.Problem), Str -> Try(a, [ParseError({ problem : Parser.Problem(HTTP.Problem), offset : U64 })])
-parse = |parser, text| Utf8.parse_str(parser, text)
+parse : Parser(Parser.Utf8.Bytes, a, HTTP.Problem), Str -> Try(a, [ParseError(Diagnostic(Parser.Problem(HTTP.Problem)))])
+parse = |parser, text| (parser).parse_str(text)
 
 # The error a request is rejected with.
-request_error : Str -> Try(HTTP.Error, [Accepted])
+request_error : Str -> Try(Failure, [Accepted])
 request_error = |text| {
 	match HTTP.parse_request(text.to_utf8()) {
 		Ok(_) => Err(Accepted)
-		Err(InvalidHttp(error)) => Ok(error)
+		Err(InvalidHttp(error)) => match error.location {
+			ByteOffset(offset) => Ok({ offset, problem: error.problem })
+			_ => crash "HTTP request error must identify original bytes"
+		}
 	}
 }
 
@@ -1405,7 +1402,7 @@ expect {
 
 # A request without framing fields has no body; what follows is the next message.
 expect {
-	actual = Utf8.parse_bytes_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
+	actual = (HTTP.request).run("GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
 	actual.value.body == [] and actual.rest == "GET /2".to_utf8()
 }
 
@@ -1423,7 +1420,7 @@ expect parse(HTTP.response, "HTTP/1.1 65736 OK\r\n\r\n").is_err()
 expect parse(HTTP.response, "HTTP/1.1 204\r\n\r\n").map_ok(|r| r.reason) == Ok("")
 
 # Non-UTF-8 field values are rejected instead of crashing.
-expect Utf8.parse_bytes(HTTP.request, ['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
+expect (HTTP.request).parse(['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
 
 # Request-smuggling constructs are rejected.
 expect {
@@ -1464,15 +1461,15 @@ expect request_error("POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r
 expect request_error("GET / HTTP/1.1\r\n\r\n") == Ok({ offset: 0, problem: MissingHost })
 
 # The embeddable parser preserves the native problem and offset.
-expect parse(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n") == Err(ParseError({ offset: 25, problem: DuplicateHost }))
+expect parse(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n") == Err(ParseError(Diagnostic.{ problem: DuplicateHost, location: Text({ offset: 25, line: 3, column: 1 }), path: [] }))
 
 # A response's status line errors point into the status line.
-expect HTTP.parse_response("HTTP/1.1 099 Low\r\n\r\n".to_utf8()) == Err(InvalidHttp({ offset: 9, problem: InvalidStatus }))
+expect HTTP.parse_response("HTTP/1.1 099 Low\r\n\r\n".to_utf8()) == Err(InvalidHttp(Diagnostic.{ location: ByteOffset(9), path: [], problem: InvalidStatus }))
 
 # A pipeline that ends inside a message reports the offset from the start of the input.
 expect {
 	bytes = "GET /a HTTP/1.1\r\nHost: a\r\n\r\nGET /b HTTP/1.1\r\n".to_utf8()
-	HTTP.parse_requests(bytes) == Err(InvalidHttp({ offset: 45, problem: MissingCrlf }))
+	HTTP.parse_requests(bytes) == Err(InvalidHttp(Diagnostic.{ location: ByteOffset(45), path: [], problem: MissingCrlf }))
 }
 
 # An empty pipeline has no requests.
@@ -1523,7 +1520,7 @@ expect {
 # The request example parses a simple GET request.
 expect {
 	text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	match Utf8.parse_str(HTTP.request, text) {
+	match (HTTP.request).parse_str(text) {
 		Ok(req) => req.method == Get and HTTP.header(req.headers, "host") == Ok("example.com")
 		Err(_) => False
 	}
@@ -1538,32 +1535,32 @@ expect {
 	request.value.target == "/quoted" and response.value.body == "hi".to_utf8()
 }
 expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n", name: "request.http" }) {
-	Err(BadQuotedBytes(message)) => message.contains("request.http:4:1: HTTP: RepeatedContentLength")
+	Err(InvalidHttp(error)) => error.problem == RepeatedContentLength
 	Ok(_) => False
 }
 expect HTTP.validate_response({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n", lints: { repeated_content_length: False } }).is_ok()
 expect match HTTP.validate_response({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n" }) {
-	Err(BadQuotedBytes(message)) => message.contains("RepeatedContentLength")
+	Err(InvalidHttp(error)) => error.problem == RepeatedContentLengthValues
 	Ok(_) => False
 }
 expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0, 1\r\n\r\n", lints: { repeated_content_length: False } }) {
-	Err(BadQuotedBytes(message)) => message.contains("ConflictingContentLength")
+	Err(InvalidHttp(error)) => error.problem == ConflictingContentLength
 	Ok(_) => False
 }
 expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /next HTTP/1.1\r\nHost: a\r\n\r\n" }) {
-	Err(BadQuotedBytes(message)) => message.contains("TrailingContent")
+	Err(InvalidHttp(error)) => error.problem == TrailingContent
 	Ok(_) => False
 }
 expect match HTTP.validate_request({ source: "GET / HTTP/1.1\nHost: a\n\n" }) {
-	Err(BadQuotedBytes(message)) => message.contains("LfWithoutCr")
+	Err(InvalidHttp(error)) => error.problem == LfWithoutCr
 	Ok(_) => False
 }
 
 # Normalize only transport-dependent body fragmentation; heads, trailers,
 # completion markers and errors must remain in exactly the same order.
-HttpTestResult : [Event(HTTP.Event), Finished, Failed(Streaming.ReadError(HTTP.Error))]
+HttpTestResult : [Event(HTTP.Event), Finished, Failed(Streaming.ReadError([InvalidHttp(HTTP.Error)]))]
 
-normalize_http_test : Iter(Try(Streaming.ReadEvent(HTTP.Event, HTTP.Error), Streaming.ReadError(HTTP.Error))) -> List(HttpTestResult)
+normalize_http_test : Iter(Try(Streaming.ReadEvent(HTTP.Event, [InvalidHttp(HTTP.Error)]), Streaming.ReadError([InvalidHttp(HTTP.Error)]))) -> List(HttpTestResult)
 normalize_http_test = |input| {
 	var $out = []
 	for result in input {
@@ -1597,8 +1594,8 @@ normalize_http_test = |input| {
 			Err(error) => {
 				$out = $out.append(Failed(error))
 			}
-			Ok(Rejected(error)) => {
-				$out = $out.append(Failed(ParseErr(error)))
+			Ok(Rejected(InvalidHttp(error))) => {
+				$out = $out.append(Failed(InvalidHttp(error)))
 			}
 		}
 	}
@@ -1608,11 +1605,11 @@ normalize_http_test = |input| {
 http_split_requests : Str -> Bool
 http_split_requests = |text| {
 	bytes = text.to_utf8()
-	want = normalize_http_test(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({})))
-	var $same = normalize_http_test(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), HTTP.request_decoder({}))) == want
+	want = normalize_http_test((HTTP.request_decoder({})).read_iter([bytes].iter()))
+	var $same = normalize_http_test((HTTP.request_decoder({})).read_iter(bytes.map(|byte| [byte]).iter())) == want
 	for split in (0.U64).to(bytes.len() + 1) {
 		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
-		if normalize_http_test(Streaming.read_iter(parts.iter(), HTTP.request_decoder({}))) != want {
+		if normalize_http_test((HTTP.request_decoder({})).read_iter(parts.iter())) != want {
 			$same = False
 		}
 	}
@@ -1622,11 +1619,11 @@ http_split_requests = |text| {
 http_split_responses : Str, List(HTTP.Method) -> Bool
 http_split_responses = |text, methods| {
 	bytes = text.to_utf8()
-	want = normalize_http_test(Streaming.read_iter([bytes].iter(), HTTP.response_decoder(methods.iter(), {})))
-	var $same = normalize_http_test(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), HTTP.response_decoder(methods.iter(), {}))) == want
+	want = normalize_http_test((HTTP.response_decoder(methods.iter(), {})).read_iter([bytes].iter()))
+	var $same = normalize_http_test((HTTP.response_decoder(methods.iter(), {})).read_iter(bytes.map(|byte| [byte]).iter())) == want
 	for split in (0.U64).to(bytes.len() + 1) {
 		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
-		if normalize_http_test(Streaming.read_iter(parts.iter(), HTTP.response_decoder(methods.iter(), {}))) != want {
+		if normalize_http_test((HTTP.response_decoder(methods.iter(), {})).read_iter(parts.iter())) != want {
 			$same = False
 		}
 	}
@@ -1635,14 +1632,14 @@ http_split_responses = |text, methods| {
 
 expect {
 	text = "POST /one HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhelloGET /two HTTP/1.1\r\nHost: a\r\n\r\n"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({})))?
+	events = (HTTP.request_decoder({})).collect([text.to_utf8()].iter())?
 	events == [RequestHead({ method: Post, target: "/one", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }, { name: "Content-Length", value: "5" }] }), Body("hello".to_utf8()), MessageEnd, RequestHead({ method: Get, target: "/two", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }] }), MessageEnd]
 		and http_split_requests(text)
 }
 
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b;c=\"q\\\"\"\r\nhello\r\n6\r\n world\r\n0\r\nX-Trailer: t\r\n\r\n"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({})))?
+	events = (HTTP.request_decoder({})).collect([text.to_utf8()].iter())?
 	events.drop_first(1) == [Body("hello".to_utf8()), Body(" world".to_utf8()), Trailer({ name: "X-Trailer", value: "t" }), MessageEnd]
 		and http_split_requests(text)
 }
@@ -1654,7 +1651,7 @@ expect [
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nab",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n",
-].all(|text| Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({}))).is_err() and http_split_requests(text))
+].all(|text| (HTTP.request_decoder({})).collect([text.to_utf8()].iter()).is_err() and http_split_requests(text))
 
 expect [
 	"GET / HTTP/1.1\r\nHost: a\r\n\r\ninvalid suffix",
@@ -1666,77 +1663,77 @@ expect [
 	"GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 1, 2\r\n\r\n",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;=bad\r\na\r\n0\r\n\r\n",
 	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nContent-Length: 2\r\n\r\n",
-].all(|text| Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({}))).is_err() and http_split_requests(text))
+].all(|text| (HTTP.request_decoder({})).collect([text.to_utf8()].iter()).is_err() and http_split_requests(text))
 
 expect {
 	text = "HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\nHTTP/1.1 204 Empty\r\n\r\nHTTP/1.1 304 Cached\r\n\r\n"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Head, Get, Get].iter(), {})))?
+	events = (HTTP.response_decoder([Head, Get, Get].iter(), {})).collect([text.to_utf8()].iter())?
 	events.len() == 6 and events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and http_split_responses(text, [Head, Get, Get])
 }
 
 expect {
 	text = "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Post].iter(), {})))?
+	events = (HTTP.response_decoder([Post].iter(), {})).collect([text.to_utf8()].iter())?
 	events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and events.drop_first(5) == [Body("hi".to_utf8()), MessageEnd] and http_split_responses(text, [Post])
 }
 
 expect {
 	text = "HTTP/1.1 200 OK\r\n\r\nbody\r\nHTTP/1.1 is body text"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Get].iter(), {})))?
+	events = (HTTP.response_decoder([Get].iter(), {})).collect([text.to_utf8()].iter())?
 	events.drop_first(1) == [Body("body\r\nHTTP/1.1 is body text".to_utf8()), MessageEnd] and http_split_responses(text, [Get])
 }
 
 expect {
 	text = "HTTP/1.1 200 Connected\r\n\r\ntunnel\r\nnot HTTP"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Connect].iter(), {})))?
+	events = (HTTP.response_decoder([Connect].iter(), {})).collect([text.to_utf8()].iter())?
 	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("tunnel\r\nnot HTTP".to_utf8())] and http_split_responses(text, [Connect])
 }
 
 expect {
 	text = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\nraw"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Get].iter(), {})))?
+	events = (HTTP.response_decoder([Get].iter(), {})).collect([text.to_utf8()].iter())?
 	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("raw".to_utf8())] and http_split_responses(text, [Get])
 }
 
 expect {
 	text = "HTTP/1.1 403 Forbidden\r\nContent-Length: 2\r\n\r\nnoHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
-	Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Connect, Get].iter(), {}))).is_ok() and http_split_responses(text, [Connect, Get])
+	(HTTP.response_decoder([Connect, Get].iter(), {})).collect([text.to_utf8()].iter()).is_ok() and http_split_responses(text, [Connect, Get])
 }
 
 expect {
 	text = "HTTP/1.1 100 Continue\r\n\r\n"
-	Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Post].iter(), {}))).is_err() and http_split_responses(text, [Post])
+	(HTTP.response_decoder([Post].iter(), {})).collect([text.to_utf8()].iter()).is_err() and http_split_responses(text, [Post])
 }
 
 expect {
 	bytes = "HTTP/1.1 204 Empty\r\n\r\n".to_utf8()
-	Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.response_decoder([].iter(), {}))).is_err()
-		and Streaming.collect(Streaming.read_iter([bytes.concat(bytes)].iter(), HTTP.response_decoder([Get].iter(), {}))).is_err()
+	(HTTP.response_decoder([].iter(), {})).collect([bytes].iter()).is_err()
+		and (HTTP.response_decoder([Get].iter(), {})).collect([bytes.concat(bytes)].iter()).is_err()
 }
 
 expect {
 	bytes = "GET / HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
-	Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_head_bytes: bytes.len() }))).is_ok()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_head_bytes: bytes.len() - 1 }))).is_err()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_line_bytes: 14, max_headers: 1 }))).is_ok()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_line_bytes: 13 }))).is_err()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_headers: 0 }))).is_err()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_headers: U64.highest, max_line_bytes: U64.highest }))).is_ok()
+	(HTTP.request_decoder({ max_head_bytes: bytes.len() })).collect([bytes].iter()).is_ok()
+		and (HTTP.request_decoder({ max_head_bytes: bytes.len() - 1 })).collect([bytes].iter()).is_err()
+		and (HTTP.request_decoder({ max_line_bytes: 14, max_headers: 1 })).collect([bytes].iter()).is_ok()
+		and (HTTP.request_decoder({ max_line_bytes: 13 })).collect([bytes].iter()).is_err()
+		and (HTTP.request_decoder({ max_headers: 0 })).collect([bytes].iter()).is_err()
+		and (HTTP.request_decoder({ max_headers: U64.highest, max_line_bytes: U64.highest })).collect([bytes].iter()).is_ok()
 }
 
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n\r\n"
 	bytes = text.to_utf8()
-	Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_trailer_bytes: 8, max_trailers: 1 }))).is_ok()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_trailer_bytes: 7 }))).is_err()
-		and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({ max_trailers: 0 }))).is_err()
+	(HTTP.request_decoder({ max_trailer_bytes: 8, max_trailers: 1 })).collect([bytes].iter()).is_ok()
+		and (HTTP.request_decoder({ max_trailer_bytes: 7 })).collect([bytes].iter()).is_err()
+		and (HTTP.request_decoder({ max_trailers: 0 })).collect([bytes].iter()).is_err()
 }
 
 expect {
 	text = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n0123456789"
-	events = Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.response_decoder([Get].iter(), { max_body_chunk_bytes: 3 })))?
+	events = (HTTP.response_decoder([Get].iter(), { max_body_chunk_bytes: 3 })).collect([text.to_utf8()].iter())?
 	events.drop_first(1) == [Body("012".to_utf8()), Body("345".to_utf8()), Body("678".to_utf8()), Body("9".to_utf8()), MessageEnd]
-		and Streaming.collect(Streaming.read_iter([[]].iter(), HTTP.request_decoder({ max_body_chunk_bytes: 0 }))).is_err()
+		and (HTTP.request_decoder({ max_body_chunk_bytes: 0 })).collect([[]].iter()).is_err()
 }
 
 expect {
@@ -1744,7 +1741,7 @@ expect {
 	# source chunks or the next request context.
 	chunks = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled body source before demand" else Ok(("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\n".to_utf8(), True)))
 	methods = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled next method before demand" else Ok((Get, True)))
-	match Streaming.read_iter(chunks, HTTP.response_decoder(methods, {})).next() {
+	match (HTTP.response_decoder(methods, {})).read_iter(chunks).next() {
 		One({ item: Ok(Value(ResponseHead(head))), .. }) => head.status_code == 200
 		_ => False
 	}
@@ -1753,21 +1750,21 @@ expect {
 expect {
 	# Completion validates only consumed responses; surplus context is lazy.
 	methods = Iter.custom({}, Err(Unknown), |_| crash "pulled unused context at EOF")
-	Streaming.collect(Streaming.read_iter([[], []].iter(), HTTP.response_decoder(methods, {}))) == Ok([])
+	(HTTP.response_decoder(methods, {})).collect([[], []].iter()) == Ok([])
 }
 
 expect {
 	chunks = Iter.custom({}, Err(Unknown), |_| crash "read source with invalid fragment limit")
-	match Streaming.read_iter(chunks, HTTP.request_decoder({ max_body_chunk_bytes: 0 })).next() {
-		One({ item: Err(ParseErr(_)), .. }) => True
+	match (HTTP.request_decoder({ max_body_chunk_bytes: 0 })).read_iter(chunks).next() {
+		One({ item: Err(InvalidHttp(_)), .. }) => True
 		_ => False
 	}
 }
 
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;abcdefghijklmnop=abcdefghijklmnop\r\nx\r\n0\r\n\r\n"
-	Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({ max_line_bytes: 35 }))).is_ok()
-		and Streaming.collect(Streaming.read_iter([text.to_utf8()].iter(), HTTP.request_decoder({ max_line_bytes: 34 }))).is_err()
+	(HTTP.request_decoder({ max_line_bytes: 35 })).collect([text.to_utf8()].iter()).is_ok()
+		and (HTTP.request_decoder({ max_line_bytes: 34 })).collect([text.to_utf8()].iter()).is_err()
 }
 
 # Fixed SIMD masks must recognize the complete HTTP byte classes, including
@@ -1796,8 +1793,8 @@ expect {
 		|value| {
 			bytes = prefix.concat(List.repeat('a', 32)).concat(value).concat("\r\n\r\n".to_utf8())
 			HTTP.parse_request(bytes).is_err()
-				and Streaming.collect(Streaming.read_iter([bytes].iter(), HTTP.request_decoder({}))).is_err()
-				and Streaming.collect(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), HTTP.request_decoder({}))).is_err()
+				and (HTTP.request_decoder({})).collect([bytes].iter()).is_err()
+				and (HTTP.request_decoder({})).collect(bytes.map(|byte| [byte]).iter()).is_err()
 		},
 	)
 }
@@ -1806,4 +1803,17 @@ expect {
 	text = "GET / HTTP/1.1\r\nHost: a\r\nX: ${Str.repeat("a", 15)}é${Str.repeat("b", 17)}😀\t \r\n\r\n"
 	request = HTTP.parse_request(text.to_utf8())?.request
 	HTTP.header(request.headers, "x") == Ok("${Str.repeat("a", 15)}é${Str.repeat("b", 17)}😀") and http_split_requests(text)
+}
+
+http_error : Failure -> HTTP.Error
+http_error = |error| Diagnostic.{ problem: error.problem, location: ByteOffset(error.offset), path: [] }
+
+named_http_error : Str, Failure -> HTTP.Error
+named_http_error = |name, failure| { ..http_error(failure), path: [Source(name)] }
+
+quote_http_error : Str, HTTP.Error -> [BadQuotedBytes(Str)]
+quote_http_error = |source, error| {
+	offset = Diagnostic.byte_offset(error.location) ?? 0
+	position = Parser.Quotation.position(source, offset)
+	Parser.Quotation.error({ name: "<literal>", format: "HTTP", message: Str.inspect(error.problem), line: position.line, column: position.column })
 }

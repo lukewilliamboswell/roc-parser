@@ -54,7 +54,7 @@ JsonValue := [
 	Error : Diagnostic(Problem)
 
 	## A parser resource bound, preserving its configured maximum.
-	Limit : JsonConfig.Limit
+	Resource : JsonConfig.Resource
 
 	## Why an exact numeric lexeme cannot be represented interoperably.
 	NumberProblem : JsonConfig.NumberProblem
@@ -471,7 +471,7 @@ scan = |src, bytes, options| scan_reusing(src, bytes, options, JsonWorkspace.emp
 scan_reusing : Str, List(U8), JsonValue.Props, JsonWorkspace(JsonValue) -> Try({ value : JsonValue, pos : U64, workspace : JsonWorkspace(JsonValue) }, [JsonFail(Failure)])
 scan_reusing = |src, bytes, options, workspace| {
 	if bytes.len() > options.max_bytes {
-		return fail(options.max_bytes, LimitExceeded({ limit: DocumentBytes, max: options.max_bytes, observed: AtLeast((options.max_bytes) + 1) }))
+		return fail(options.max_bytes, LimitExceeded({ resource: DocumentBytes, max: options.max_bytes, observed: AtLeast((options.max_bytes) + 1) }))
 	}
 	check = src.is_empty()
 	comments = options.comments
@@ -522,7 +522,7 @@ scan_reusing = |src, bytes, options, workspace| {
 							}
 							$close = next
 						} else if $items.len() - $first >= max_items {
-							return fail(next, LimitExceeded({ limit: ArrayItems, max: max_items, observed: AtLeast((max_items) + 1) }))
+							return fail(next, LimitExceeded({ resource: ArrayItems, max: max_items, observed: AtLeast((max_items) + 1) }))
 						} else {
 							$have = False
 							$pos = next
@@ -565,7 +565,7 @@ scan_reusing = |src, bytes, options, workspace| {
 							}
 							$close = next
 						} else if $members.len() - $first >= max_items {
-							return fail(next, LimitExceeded({ limit: ObjectMembers, max: max_items, observed: AtLeast((max_items) + 1) }))
+							return fail(next, LimitExceeded({ resource: ObjectMembers, max: max_items, observed: AtLeast((max_items) + 1) }))
 						} else {
 							member = scan_key(src, bytes, next, options)?
 							$key = member.key
@@ -604,7 +604,7 @@ scan_reusing = |src, bytes, options, workspace| {
 				$have = True
 			} else if byte == '[' {
 				if $open.len() >= max_depth {
-					return fail($pos, LimitExceeded({ limit: Nesting, max: max_depth, observed: AtLeast((max_depth) + 1) }))
+					return fail($pos, LimitExceeded({ resource: Nesting, max: max_depth, observed: AtLeast((max_depth) + 1) }))
 				}
 				next = skip_ws(bytes, $pos + 1, comments, check)?
 				if bytes.get(next) == Ok(']') {
@@ -612,7 +612,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = next + 1
 					$have = True
 				} else if max_items == 0 {
-					return fail(next, LimitExceeded({ limit: ArrayItems, max: 0, observed: AtLeast((0) + 1) }))
+					return fail(next, LimitExceeded({ resource: ArrayItems, max: 0, observed: AtLeast((0) + 1) }))
 				} else {
 					$open = $open.append({ container: $container, first: $first, key: $key, key_at: $key_at })
 					$container = InArray
@@ -621,7 +621,7 @@ scan_reusing = |src, bytes, options, workspace| {
 				}
 			} else if byte == '{' {
 				if $open.len() >= max_depth {
-					return fail($pos, LimitExceeded({ limit: Nesting, max: max_depth, observed: AtLeast((max_depth) + 1) }))
+					return fail($pos, LimitExceeded({ resource: Nesting, max: max_depth, observed: AtLeast((max_depth) + 1) }))
 				}
 				next = skip_ws(bytes, $pos + 1, comments, check)?
 				if bytes.get(next) == Ok('}') {
@@ -629,7 +629,7 @@ scan_reusing = |src, bytes, options, workspace| {
 					$pos = next + 1
 					$have = True
 				} else if max_items == 0 {
-					return fail(next, LimitExceeded({ limit: ObjectMembers, max: 0, observed: AtLeast((0) + 1) }))
+					return fail(next, LimitExceeded({ resource: ObjectMembers, max: 0, observed: AtLeast((0) + 1) }))
 				} else {
 					member = scan_key(src, bytes, next, options)?
 					$open = $open.append({ container: $container, first: $first, key: $key, key_at: $key_at })
@@ -1007,7 +1007,7 @@ scan_string = |src, bytes, start, options| {
 	run_end = plain_string_end(bytes, start + 1)
 	if bytes.get(run_end) == Ok('"') {
 		if run_end - start - 1 > options.max_string_bytes {
-			return fail(start, LimitExceeded({ limit: StringBytes, max: options.max_string_bytes, observed: AtLeast((options.max_string_bytes) + 1) }))
+			return fail(start, LimitExceeded({ resource: StringBytes, max: options.max_string_bytes, observed: AtLeast((options.max_string_bytes) + 1) }))
 		}
 		Ok({ str: slice_checked(src, bytes, start + 1, run_end)?, end: run_end + 1 })
 	} else {
@@ -1030,7 +1030,7 @@ scan_escaped_string = |bytes, start, run_end, options| {
 			}
 		if byte == '"' {
 			if $out.len() > options.max_string_bytes {
-				return fail(start, LimitExceeded({ limit: StringBytes, max: options.max_string_bytes, observed: AtLeast((options.max_string_bytes) + 1) }))
+				return fail(start, LimitExceeded({ resource: StringBytes, max: options.max_string_bytes, observed: AtLeast((options.max_string_bytes) + 1) }))
 			}
 			return match Str.from_utf8($out) {
 				Ok(str) => Ok({ str, end: $pos + 1 })
@@ -1166,7 +1166,7 @@ scan_number = |src, bytes, start, options| {
 			Err(_) => number_end(bytes, start)?
 		}
 	if end - start > options.max_number_digits {
-		return fail(start, LimitExceeded({ limit: NumberCharacters, max: options.max_number_digits, observed: AtLeast((options.max_number_digits) + 1) }))
+		return fail(start, LimitExceeded({ resource: NumberCharacters, max: options.max_number_digits, observed: AtLeast((options.max_number_digits) + 1) }))
 	}
 	if options.interoperable_numbers {
 		match interoperable(bytes, start, end) {
@@ -1944,16 +1944,16 @@ expect read_both("{\"port\": \"x\"}", "{}").is_err()
 
 # 128 levels of nesting are allowed by default, and the 129th bracket is not.
 expect JsonValue.parse_str(nested(128, "1"), {}).is_ok()
-expect error_of(nested(129, "1"), {}) == Ok({ line: 1, column: 129, problem: LimitExceeded({ limit: Nesting, max: 128, observed: AtLeast((128) + 1) }) })
-expect error_of(nested(128, "{}"), {}) == Ok({ line: 1, column: 129, problem: LimitExceeded({ limit: Nesting, max: 128, observed: AtLeast((128) + 1) }) })
-expect error_of("{\"a\":{\"b\":[]}}", { max_depth: 2 }) == Ok({ line: 1, column: 11, problem: LimitExceeded({ limit: Nesting, max: 2, observed: AtLeast((2) + 1) }) })
+expect error_of(nested(129, "1"), {}) == Ok({ line: 1, column: 129, problem: LimitExceeded({ resource: Nesting, max: 128, observed: AtLeast((128) + 1) }) })
+expect error_of(nested(128, "{}"), {}) == Ok({ line: 1, column: 129, problem: LimitExceeded({ resource: Nesting, max: 128, observed: AtLeast((128) + 1) }) })
+expect error_of("{\"a\":{\"b\":[]}}", { max_depth: 2 }) == Ok({ line: 1, column: 11, problem: LimitExceeded({ resource: Nesting, max: 2, observed: AtLeast((2) + 1) }) })
 expect JsonValue.parse_str("{\"a\":{\"b\":1}}", { max_depth: 2 }).is_ok()
 
 # With no nesting allowed, only scalars are accepted.
 expect ["1", "\"s\"", "null"].all(|text| JsonValue.parse_str(text, { max_depth: 0 }).is_ok())
-expect error_of("[]", { max_depth: 0 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ limit: Nesting, max: 0, observed: AtLeast((0) + 1) }) })
-expect error_of(" {}", { max_depth: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: Nesting, max: 0, observed: AtLeast((0) + 1) }) })
-expect JsonValue.parse_str("[1]", { max_depth: 1 }).is_ok() and error_of("[[]]", { max_depth: 1 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: Nesting, max: 1, observed: AtLeast((1) + 1) }) })
+expect error_of("[]", { max_depth: 0 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ resource: Nesting, max: 0, observed: AtLeast((0) + 1) }) })
+expect error_of(" {}", { max_depth: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: Nesting, max: 0, observed: AtLeast((0) + 1) }) })
+expect JsonValue.parse_str("[1]", { max_depth: 1 }).is_ok() and error_of("[[]]", { max_depth: 1 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: Nesting, max: 1, observed: AtLeast((1) + 1) }) })
 
 # A raised limit is checked the same way, and deep nesting does not exhaust
 # the call stack.
@@ -1962,32 +1962,32 @@ expect JsonValue.parse_str(nested(20000, "1"), { max_depth: 20000 }).map_ok(|val
 
 # `max_items` limits each array and object, at the first item past it.
 expect JsonValue.parse_str("[1,2]", { max_items: 2 }).is_ok() and JsonValue.parse_str("[[1,2],[3,4]]", { max_items: 2 }).is_ok()
-expect error_of("[1,2,3]", { max_items: 2 }) == Ok({ line: 1, column: 6, problem: LimitExceeded({ limit: ArrayItems, max: 2, observed: AtLeast((2) + 1) }) })
-expect error_of("{\"a\":1,\"b\":2,\"c\":3}", { max_items: 2 }) == Ok({ line: 1, column: 14, problem: LimitExceeded({ limit: ObjectMembers, max: 2, observed: AtLeast((2) + 1) }) })
+expect error_of("[1,2,3]", { max_items: 2 }) == Ok({ line: 1, column: 6, problem: LimitExceeded({ resource: ArrayItems, max: 2, observed: AtLeast((2) + 1) }) })
+expect error_of("{\"a\":1,\"b\":2,\"c\":3}", { max_items: 2 }) == Ok({ line: 1, column: 14, problem: LimitExceeded({ resource: ObjectMembers, max: 2, observed: AtLeast((2) + 1) }) })
 expect JsonValue.parse_str("[[],{}]", { max_items: 2 }).is_ok() and JsonValue.parse_str("[]", { max_items: 0 }).is_ok() and JsonValue.parse_str("{}", { max_items: 0 }).is_ok()
-expect error_of("[1]", { max_items: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: ArrayItems, max: 0, observed: AtLeast((0) + 1) }) })
-expect error_of("{\"a\":1}", { max_items: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: ObjectMembers, max: 0, observed: AtLeast((0) + 1) }) })
+expect error_of("[1]", { max_items: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: ArrayItems, max: 0, observed: AtLeast((0) + 1) }) })
+expect error_of("{\"a\":1}", { max_items: 0 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: ObjectMembers, max: 0, observed: AtLeast((0) + 1) }) })
 expect JsonValue.parse_str("[1,2,]", { max_items: 2, trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
-expect parser_failure("[ 1]".to_utf8(), { max_items: 0 }) == Ok({ problem: LimitExceeded({ limit: ArrayItems, max: 0, observed: AtLeast((0) + 1) }), offset: 2 })
+expect parser_failure("[ 1]".to_utf8(), { max_items: 0 }) == Ok({ problem: LimitExceeded({ resource: ArrayItems, max: 0, observed: AtLeast((0) + 1) }), offset: 2 })
 
 # Members are counted as written, before repeated keys are removed.
-expect error_of("{\"a\":1,\"a\":1}", { max_items: 1, duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
-expect error_of("{\"a\":1,\"a\":1}", { max_items: 1 }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
-expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepFirst }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
-expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepLast }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ limit: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
+expect error_of("{\"a\":1,\"a\":1}", { max_items: 1, duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ resource: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
+expect error_of("{\"a\":1,\"a\":1}", { max_items: 1 }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ resource: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
+expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepFirst }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ resource: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
+expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepLast }) == Ok({ line: 1, column: 8, problem: LimitExceeded({ resource: ObjectMembers, max: 1, observed: AtLeast((1) + 1) }) })
 expect JsonValue.parse_str("{\"a\":1,\"a\":2}", { max_items: 2, duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
 
 # `max_string_bytes` counts decoded UTF-8 bytes, keys included.
 expect ["\"abc\"", "\"\\u00e9a\"", "\"é\"", "{\"abc\":1}"].all(|text| JsonValue.parse_str(text, { max_string_bytes: 3 }).is_ok())
-expect error_of("\"abcd\"", { max_string_bytes: 3 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ limit: StringBytes, max: 3, observed: AtLeast((3) + 1) }) })
-expect error_of("[\"\\u00e9ab\"]", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: StringBytes, max: 3, observed: AtLeast((3) + 1) }) })
-expect error_of("{\"abcd\":1}", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: StringBytes, max: 3, observed: AtLeast((3) + 1) }) })
-expect problem_of("\"éé\"", { max_string_bytes: 3 }) == Ok(LimitExceeded({ limit: StringBytes, max: 3, observed: AtLeast((3) + 1) }))
+expect error_of("\"abcd\"", { max_string_bytes: 3 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ resource: StringBytes, max: 3, observed: AtLeast((3) + 1) }) })
+expect error_of("[\"\\u00e9ab\"]", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: StringBytes, max: 3, observed: AtLeast((3) + 1) }) })
+expect error_of("{\"abcd\":1}", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: StringBytes, max: 3, observed: AtLeast((3) + 1) }) })
+expect problem_of("\"éé\"", { max_string_bytes: 3 }) == Ok(LimitExceeded({ resource: StringBytes, max: 3, observed: AtLeast((3) + 1) }))
 
 # `max_number_digits` counts every character of a number.
 expect ["123", "-12", "1.5", "0"].all(|text| JsonValue.parse_str(text, { max_number_digits: 3 }).is_ok())
-expect error_of("1234", { max_number_digits: 3 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ limit: NumberCharacters, max: 3, observed: AtLeast((3) + 1) }) })
-expect error_of("[1,-123]", { max_number_digits: 3 }) == Ok({ line: 1, column: 4, problem: LimitExceeded({ limit: NumberCharacters, max: 3, observed: AtLeast((3) + 1) }) })
+expect error_of("1234", { max_number_digits: 3 }) == Ok({ line: 1, column: 1, problem: LimitExceeded({ resource: NumberCharacters, max: 3, observed: AtLeast((3) + 1) }) })
+expect error_of("[1,-123]", { max_number_digits: 3 }) == Ok({ line: 1, column: 4, problem: LimitExceeded({ resource: NumberCharacters, max: 3, observed: AtLeast((3) + 1) }) })
 
 # --- Duplicate keys.
 
@@ -2076,9 +2076,9 @@ expect error_of("Nan", { non_finite: True }) == Ok({ line: 1, column: 1, problem
 expect error_of("-NaN", { non_finite: True }) == Ok({ line: 1, column: 1, problem: ExpectedMinusDigit })
 expect error_of("[-Inf]", { non_finite: True }) == Ok({ line: 1, column: 2, problem: ExpectedMinusDigit })
 expect error_of("Infinityx", { non_finite: True }) == Ok({ line: 1, column: 9, problem: UnexpectedContent })
-expect JsonValue.parse_str("Infinity", { non_finite: True, max_number_digits: 8 }).is_ok() and problem_of("-Infinity", { non_finite: True, max_number_digits: 8 }) == Ok(LimitExceeded({ limit: NumberCharacters, max: 8, observed: AtLeast((8) + 1) }))
-expect JsonValue.parse_str("NaN", { non_finite: True, max_number_digits: 3 }).is_ok() and error_of("[NaN]", { non_finite: True, max_number_digits: 2 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ limit: NumberCharacters, max: 2, observed: AtLeast((2) + 1) }) })
-expect problem_of("Infinity", { non_finite: True, max_number_digits: 7 }) == Ok(LimitExceeded({ limit: NumberCharacters, max: 7, observed: AtLeast((7) + 1) }))
+expect JsonValue.parse_str("Infinity", { non_finite: True, max_number_digits: 8 }).is_ok() and problem_of("-Infinity", { non_finite: True, max_number_digits: 8 }) == Ok(LimitExceeded({ resource: NumberCharacters, max: 8, observed: AtLeast((8) + 1) }))
+expect JsonValue.parse_str("NaN", { non_finite: True, max_number_digits: 3 }).is_ok() and error_of("[NaN]", { non_finite: True, max_number_digits: 2 }) == Ok({ line: 1, column: 2, problem: LimitExceeded({ resource: NumberCharacters, max: 2, observed: AtLeast((2) + 1) }) })
+expect problem_of("Infinity", { non_finite: True, max_number_digits: 7 }) == Ok(LimitExceeded({ resource: NumberCharacters, max: 7, observed: AtLeast((7) + 1) }))
 
 # Raw control characters inside strings and keys.
 expect JsonValue.parse_str("{\"a\tb\":\"\u(0)\n\u(1F)\"}", { control_characters: True }) == Ok(Object([{ key: "a\tb", value: String("\u(0)\n\u(1F)") }]))
@@ -2322,7 +2322,7 @@ expect write_text(Array([Number("1"), String("two")]), { indent: 4 }) == Ok("[\n
 
 # Bounded documents retain strict grammar, caller rules and exact number text.
 expect JsonValue.parse_str("null", { max_bytes: 4 }) == Ok(Null)
-expect JsonValue.parse_str("null ", { max_bytes: 4 }) == Err(InvalidJsonValue(Diagnostic.{ location: Text({ offset: 5 - 1, line: 1, column: 5 }), path: [], problem: LimitExceeded({ limit: DocumentBytes, max: 4, observed: AtLeast((4) + 1) }) }))
+expect JsonValue.parse_str("null ", { max_bytes: 4 }) == Err(InvalidJsonValue(Diagnostic.{ location: Text({ offset: 5 - 1, line: 1, column: 5 }), path: [], problem: LimitExceeded({ resource: DocumentBytes, max: 4, observed: AtLeast((4) + 1) }) }))
 expect JsonValue.parse_str("\"é\"", { max_bytes: 4 }) == Ok(String("é"))
 expect JsonValue.parse_str("\"é\"", { max_bytes: 3 }).is_err()
 expect JsonValue.parse_str("\u(FEFF)null", { bom: True, max_bytes: 7 }) == Ok(Null)
@@ -2385,10 +2385,10 @@ expect {
 
 # The same input byte limit applies to combinators and compile-time validation.
 expect (JsonValue.parser({ max_bytes: 4 })).parse_str("null") == Ok(Null)
-expect (JsonValue.parser({ max_bytes: 4 })).run_str("null next") == Err(ParseError(Diagnostic.{ problem: LimitExceeded({ limit: DocumentBytes, max: 4, observed: AtLeast((4) + 1) }), location: Text({ offset: 4, line: 1, column: 5 }), path: [] }))
+expect (JsonValue.parser({ max_bytes: 4 })).run_str("null next") == Err(ParseError(Diagnostic.{ problem: LimitExceeded({ resource: DocumentBytes, max: 4, observed: AtLeast((4) + 1) }), location: Text({ offset: 4, line: 1, column: 5 }), path: [] }))
 expect (JsonValue.parser({ max_bytes: 9 })).run_str("null next").map_ok(|{ rest, .. }| rest) == Ok("next")
 expect JsonValue.validate({ source: "null", options: { max_bytes: 4 } }) == Ok(Null)
-expect JsonValue.validate({ source: "null ", options: { max_bytes: 4 } }) == Err(InvalidJsonValue(Diagnostic.{ problem: LimitExceeded({ limit: DocumentBytes, max: 4, observed: AtLeast(5) }), location: Text({ offset: 4, line: 1, column: 5 }), path: [Source("<literal>")] }))
+expect JsonValue.validate({ source: "null ", options: { max_bytes: 4 } }) == Err(InvalidJsonValue(Diagnostic.{ problem: LimitExceeded({ resource: DocumentBytes, max: 4, observed: AtLeast(5) }), location: Text({ offset: 4, line: 1, column: 5 }), path: [Source("<literal>")] }))
 expect write_text(Array([Null]), { indent: U64.highest }) == Err(TooLarge(U64.highest))
 
 # The specialized vector stop mask agrees with the generic JSON byte class at
@@ -2443,10 +2443,10 @@ parse_reusing = |input, options, workspace| match scan_reusing(input, input.to_u
 encoding_error : JsonConfig.WriteError -> [InvalidJsonValue(JsonValue.Error)]
 encoding_error = |problem| {
 	detail = match problem {
-		InvalidNumber(text) => InvalidNumber(text)
+		InvalidNumber(text) => InvalidNumber(Diagnostic.excerpt(text.to_utf8()))
 		DuplicateKey(key) => DuplicateKey(key)
-		TooDeep => LimitExceeded({ limit: Nesting, max: 128, observed: AtLeast((128) + 1) })
-		TooLarge(max) => LimitExceeded({ limit: DocumentBytes, max: max, observed: AtLeast((max) + 1) })
+		TooDeep => LimitExceeded({ resource: Nesting, max: 128, observed: AtLeast((128) + 1) })
+		TooLarge(max) => LimitExceeded({ resource: DocumentBytes, max: max, observed: AtLeast((max) + 1) })
 	}
 	InvalidJsonValue(Diagnostic.{ problem: detail, location: Unavailable(GeneratedValue), path: [] })
 }
@@ -2551,8 +2551,8 @@ expect {
 }
 expect List.from_iter((JsonValue.record_encoder({ framing: Array, chunk_bytes: 1 })).write_iter([].iter())) == [Ok("[".to_utf8()), Ok("]".to_utf8())]
 expect List.from_iter((JsonValue.record_encoder({ chunk_bytes: 1 })).write_iter([].iter())) == []
-expect List.from_iter((JsonValue.record_encoder({ framing: Array, chunk_bytes: 1 })).write_iter([Number("NaN")].iter())) == [Err(InvalidJsonValue(Diagnostic.{ problem: InvalidNumber("NaN"), location: Unavailable(GeneratedValue), path: [] }))]
-expect List.from_iter((JsonValue.record_encoder({ max_record_bytes: 2, chunk_bytes: 1 })).write_iter([String("x")].iter())) == [Err(InvalidJsonValue(Diagnostic.{ problem: LimitExceeded({ limit: DocumentBytes, max: 2, observed: AtLeast(3) }), location: Unavailable(GeneratedValue), path: [] }))]
+expect List.from_iter((JsonValue.record_encoder({ framing: Array, chunk_bytes: 1 })).write_iter([Number("NaN")].iter())) == [Err(InvalidJsonValue(Diagnostic.{ problem: InvalidNumber(Diagnostic.excerpt("NaN".to_utf8())), location: Unavailable(GeneratedValue), path: [] }))]
+expect List.from_iter((JsonValue.record_encoder({ max_record_bytes: 2, chunk_bytes: 1 })).write_iter([String("x")].iter())) == [Err(InvalidJsonValue(Diagnostic.{ problem: LimitExceeded({ resource: DocumentBytes, max: 2, observed: AtLeast(3) }), location: Unavailable(GeneratedValue), path: [] }))]
 expect List.from_iter((JsonValue.record_encoder({ chunk_bytes: 0 })).write_iter([Number("1")].iter())) == [Err(InvalidChunkSize(Diagnostic.{ problem: BelowMinimum({ minimum: 1, actual: 0 }), location: Unavailable(NotApplicable), path: [Key("chunk_bytes")] }))]
 expect {
 	chunks = Iter.custom(

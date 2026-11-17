@@ -1,7 +1,6 @@
+import Diagnostic
 import Streaming
-import Literal
 import Parser
-import Utf8
 
 ## Incremental Quicken Interchange Format records and bank/cash/card decoding.
 ## Raw events preserve section changes, field order and repeated unknown fields.
@@ -12,17 +11,18 @@ QIF := { events : List(QIF.Event) }.{
 	Location : { offset : U64, line : U64, column : U64 }
 
 	## A located syntax, encoding, limit or decoding failure.
-	Problem : [IncompleteInput, RecordTooLarge(U64), LineTooLarge(U64), MissingRecordTerminator, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Str, order : DateOrder }), InvalidAmount(Str), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ section : Str, account : Str }), NulCharacter, HeaderBeforeTerminator, ContextTooLarge(U64), MissingSection, TooManyFields(U64), InvalidFieldCode(U8), InvalidEncoding({ encoding : TextEncoding, error : Streaming.EncodingError })]
-	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
+	Resource : [RecordBytes, LineBytes, ContextBytes, Fields]
+	Problem : [LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), IncompleteInput, MissingRecordTerminator, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Diagnostic.Excerpt, order : DateOrder }), InvalidAmount(Diagnostic.Excerpt), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ expected : { section : Str, account : Str }, actual : { section : Str, account : Str } }), NulCharacter, HeaderBeforeTerminator, MissingSection, InvalidFieldCode(U8), InvalidEncoding({ encoding : TextEncoding, error : Streaming.EncodingError })]
+	Error : Diagnostic(Problem)
 
-	## Supported byte encodings. ASCII is a subset of Utf8.
+	## Supported byte encodings. ASCII is a subset of Parser.Utf8.
 	TextEncoding : Streaming.TextEncoding
 
 	## Date order is explicit when both first components could be months.
 	DateOrder : [RejectAmbiguous, MonthFirst, DayFirst, YearFirst]
 
 	## Limits apply to original bytes before decoding.
-	Props := { encoding : TextEncoding ?? Utf8, date_order : DateOrder ?? RejectAmbiguous, max_line_bytes : U64 ?? 1_048_576, max_record_bytes : U64 ?? 16_777_216, max_fields : U64 ?? 65_536, max_context_bytes : U64 ?? 65_536 }
+	Props := { encoding : TextEncoding ?? Utf8, date_order : DateOrder ?? RejectAmbiguous, max_line_bytes : U64 ?? 1_048_576, max_record_bytes : U64 ?? 16_777_216, max_fields : U64 ?? 65_536, max_context_bytes : U64 ?? 65_536, errors : Streaming.RecoveryProps ?? {} }
 
 	## A single ordered field, including repeated split/address/extension lines.
 	Field : { code : U8, value : Str }
@@ -43,26 +43,28 @@ QIF := { events : List(QIF.Event) }.{
 	Transaction : { raw : Record, date : Date, amount : Str, payee : Str, memo : Str, number : Str, category : Str, cleared : Str, splits : List(Split) }
 
 	## Writer layout and encoding. Invalid values fail before a record is emitted.
-	WriteProps := { encoding : TextEncoding ?? Utf8, line_ending : [Lf, CrLf, Cr] ?? CrLf, max_record_bytes : U64 ?? 16_777_216 }
+	WriteProps := { encoding : TextEncoding ?? Utf8, line_ending : [Lf, CrLf, Cr] ?? CrLf, max_record_bytes : U64 ?? 16_777_216, chunk_bytes : U64 ?? 65_536 }
 
 	## Quoted/imported source with the same parser options as runtime parsing.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Validate a complete UTF-8 source for quotation or file import.
-	validate : ValidationProps -> Try(QIF, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidQif(error)| Literal.error({ name: props.name, format: "QIF", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+	validate : ValidationProps -> Try(QIF, [InvalidQif(Error)])
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidQif(error)| InvalidQif({ ..error, path: [Source(props.name)].concat(error.path) }))
 
 	## Convert a checked source quotation.
 	from_quote : Str -> Try(QIF, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| validate({ source: source }).map_err(
+		|InvalidQif(error)| {
+			position = Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }
+			Parser.Quotation.error({ name: "<literal>", format: "QIF", message: Str.inspect(error.problem), line: position.line, column: position.column })
+		},
+	)
 
 	## Parse all raw QIF events from UTF-8 text.
-	parse_str : Str -> Try(QIF, [InvalidQif(Error)])
-	parse_str = |source| parse_with(source, {})
-
 	## Text is already decoded; encoding applies only to byte entrypoints.
-	parse_with : Str, Props -> Try(QIF, [InvalidQif(Error)])
-	parse_with = |source, props| parse_core(
+	parse_str : Str, Props -> Try(QIF, [InvalidQif(Error)])
+	parse_str = |source, props| parse_core(
 		source.to_utf8(),
 		{ ..props, encoding: Utf8 },
 		|part, offset| {
@@ -81,30 +83,30 @@ QIF := { events : List(QIF.Event) }.{
 	}
 
 	## Composable complete-document raw parser.
-	parser : Parser(Utf8.Bytes, QIF, Problem)
-	parser = Parser.custom(
-		|bytes| match parse_bytes(bytes, {}) {
+	parser : Props -> Parser(Parser.Utf8.Bytes, QIF, Problem)
+	parser = |props| Parser.custom(
+		|bytes| match parse_bytes(bytes, props) {
 			Ok(value) => Ok({ value, rest: [] })
-			Err(InvalidQif(error)) => Err(ParseError({ offset: error.offset, problem: error.problem }))
+			Err(InvalidQif(error)) => Err(ParseError(Diagnostic.{ location: InputOffset(text_position(error).offset), path: error.path, problem: error.problem }))
 		},
 	)
 
 	## Configured raw-event decoder. Scanner buffers and coordinates are private.
-	Decoder : Streaming.Decoder(DecoderState, Event, Error)
+	Decoder : Streaming.Decoder(DecoderState, Event, [InvalidQif(Error)])
 
 	## Configure raw events for Streaming.read_iter or Streaming.read_stream.
 	decoder : Props -> Decoder
-	decoder = |props| Streaming.decoder(initial_qif(props), qif_step)
+	decoder = |props| Streaming.decoder({ initial_state: initial_qif(props), step: |state, bytes, end| Streaming.map_step_error(qif_step(state, bytes, end), |error| InvalidQif(error)), errors: props.errors })
 
 	## Typed events retain section and account context.
 	TransactionEvent : [Header(Str), Account(Record), Context(Record), Transaction(Transaction)]
 
 	## Configured transaction decoder with the same bounded scanner state.
-	TransactionDecoder : Streaming.Decoder(DecoderState, TransactionEvent, Error)
+	TransactionDecoder : Streaming.Decoder(DecoderState, TransactionEvent, [InvalidQif(Error)])
 
 	## Configure typed bank, cash, and card transactions.
 	transaction_decoder : Props -> TransactionDecoder
-	transaction_decoder = |props| Streaming.decoder(initial_qif(props), typed_step)
+	transaction_decoder = |props| Streaming.decoder({ initial_state: initial_qif(props), step: |state, bytes, end| Streaming.map_step_error(typed_step(state, bytes, end), |error| InvalidQif(error)), errors: props.errors })
 
 	## Decode a complete document's bank/cash/card records without losing raw fields.
 	transactions : QIF, Props -> Try(List(Transaction), [InvalidQif(Error)])
@@ -128,7 +130,7 @@ QIF := { events : List(QIF.Event) }.{
 	## Decode one completely framed bank, cash, or credit-card record.
 	decode : Record, Props -> Try(Transaction, [InvalidQif(Error)])
 	decode = |record, props| {
-		bad = |problem| InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, problem })
+		bad = |problem| InvalidQif(Diagnostic.{ location: source_location({ offset: record.at.offset, line: record.at.line, column: record.at.column }), path: [], problem: problem })
 		if record.section != "Bank" and record.section != "Cash" and record.section != "CCard" {
 			return Err(bad(UnsupportedSection(record.section)))
 		}
@@ -187,10 +189,10 @@ QIF := { events : List(QIF.Event) }.{
 			return Err(bad(DuplicateCoreField))
 		}
 		date_text = $date_text.map_err(|_| bad(MissingField('D')))?
-		date = parse_date(date_text, props.date_order).map_err(|_| bad(InvalidDate({ value: date_text, order: props.date_order })))?
+		date = parse_date(date_text, props.date_order).map_err(|_| bad(InvalidDate({ value: Diagnostic.excerpt(date_text.to_utf8()), order: props.date_order })))?
 		amount = $amount_text.map_err(|_| bad(MissingField('T')))?
 		if !valid_amount(amount) {
-			return Err(bad(InvalidAmount(amount)))
+			return Err(bad(InvalidAmount(Diagnostic.excerpt(amount.to_utf8()))))
 		}
 		var $splits = []
 		var $split = { category: "", memo: "", amount: "" }
@@ -244,7 +246,7 @@ QIF := { events : List(QIF.Event) }.{
 	## Encode a header or complete raw record atomically.
 	write_event : Event, WriteProps -> Try(List(U8), [InvalidQif(Error)])
 	write_event = |event, props| {
-		bad = |problem| InvalidQif({ offset: 0, line: 0, column: 0, problem })
+		bad = |problem| InvalidQif(Diagnostic.{ location: Unavailable(GeneratedValue), path: [], problem: problem })
 		ending = match props.line_ending {
 			Lf => "\n"
 			CrLf => "\r\n"
@@ -270,34 +272,31 @@ QIF := { events : List(QIF.Event) }.{
 		}
 		bytes = encode_text(text, props.encoding).map_err(|_| bad(UnrepresentableCharacter(props.encoding)))?
 		if bytes.len() > props.max_record_bytes {
-			return Err(bad(RecordTooLarge(props.max_record_bytes)))
+			return Err(bad(LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: Exact(bytes.len()) })))
 		}
 		Ok(bytes)
 	}
 
 	## Validate each complete event atomically before emitting bytes.
 	encoder : WriteProps -> Streaming.Encoder({ section : Str, account : Str }, Event, [InvalidQif(Error)])
-	encoder = |props| Streaming.encoder({ section: "", account: "" }, |state, event| encode_event(state, event, props), |_| Ok([]))
+	encoder = |props| Streaming.encoder({ initial_state: { section: "", account: "" }, encode: |state, event| encode_event(state, event, props).map_err(|InvalidQif(error)| InvalidQif({ ..error, location: Unavailable(GeneratedValue) })), finish: |_| Ok([]), chunk_bytes: props.chunk_bytes })
 
 	## Write a complete document; streaming writers use the same per-record encoder.
-	to_bytes : QIF, WriteProps -> Try(List(U8), [InvalidQif(Error)])
-	to_bytes = |doc, props| {
+	encode : QIF, WriteProps -> Try(List(U8), [InvalidQif(Error), InvalidChunkSize(Diagnostic(Streaming.ChunkSizeProblem))])
+	encode = |doc, props| {
 		var $bytes = []
-		for result in Streaming.write_iter(doc.events.iter(), encoder(props)) {
+		for result in (encoder(props)).write_iter(doc.events.iter()) {
 			match result {
 				Ok(bytes) => {
 					$bytes = $bytes.concat(bytes)
 				}
-				Err(EncodeErr(error)) => return Err(error)
-				Err(InvalidChunkSize) => return Err(InvalidQif({ offset: 0, line: 0, column: 0, problem: InvalidChunkSize }))
+				Err(InvalidQif(error)) => return Err(InvalidQif(error))
+				Err(InvalidChunkSize(error)) => return Err(InvalidChunkSize(error))
 			}
 		}
 		Ok($bytes)
 	}
 
-	## Render canonical UTF-8 text.
-	to_str : QIF -> Try(Str, [InvalidQif(Error)])
-	to_str = |doc| to_bytes(doc, {}).map_ok(Str.from_utf8_lossy)
 }
 
 DecoderState :: { props : QIF.Props, offset : U64, line_number : U64, column : U64, line_start : U64, line_bytes : List(U8), skip_lf : Bool, fields : List(QIF.Field), section : Str, account : Str, record_at : QIF.Location, record_bytes : U64, done : Bool }
@@ -321,12 +320,12 @@ encode_event = |state, event, props| {
 		}
 		Record(record) => {
 			if state.section == "" or record.section != state.section or record.account != state.account {
-				return Err(InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, problem: ContextMismatch({ section: record.section, account: record.account }) }))
+				return Err(InvalidQif(Diagnostic.{ location: source_location({ offset: record.at.offset, line: record.at.line, column: record.at.column }), path: [], problem: ContextMismatch({ expected: state, actual: { section: record.section, account: record.account } }) }))
 			}
 			if record.section == "Account" {
 				account = QIF.field(record, 'N') ?? ""
 				if account == "" {
-					return Err(InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, problem: MissingField('N') }))
+					return Err(InvalidQif(Diagnostic.{ location: source_location({ offset: record.at.offset, line: record.at.line, column: record.at.column }), path: [], problem: MissingField('N') }))
 				}
 				{ ..state, account }
 			} else state
@@ -410,7 +409,7 @@ step_with_decode = |initial, bytes, end, decode| {
 			$line_start = $offset
 			if $record_bytes > props.max_record_bytes {
 				state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
-				return { state: terminal(state), consumed: $pos, outcome: Failed(located_problem(state, RecordTooLarge(props.max_record_bytes))) }
+				return { state: terminal(state), consumed: $pos, outcome: Failed(located_problem(state, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast(props.max_record_bytes + 1) }))) }
 			}
 		} else {
 			record_room = props.max_record_bytes - $record_bytes
@@ -419,7 +418,7 @@ step_with_decode = |initial, bytes, end, decode| {
 			remaining = bytes.len() - $pos
 			# Inspect at most the budget plus its first violating byte.
 			scan_len = if (room < remaining) room + 1 else remaining
-			stop = Utf8.find_line_end(bytes.take_first($pos + scan_len), $pos)
+			stop = Parser.Utf8.find_line_end(bytes.take_first($pos + scan_len), $pos)
 			len = stop - $pos
 			if len > record_room or len > line_room {
 				record_first = record_room <= line_room
@@ -429,7 +428,7 @@ step_with_decode = |initial, bytes, end, decode| {
 				$record_bytes = $record_bytes + consumed
 				$column = $column + accepted + (if (record_first) 0 else 1)
 				state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
-				return { state: terminal(state), consumed: $pos + consumed, outcome: Failed(located_problem(state, if (record_first) RecordTooLarge(props.max_record_bytes) else LineTooLarge(props.max_line_bytes))) }
+				return { state: terminal(state), consumed: $pos + consumed, outcome: Failed(located_problem(state, if (record_first) LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast(props.max_record_bytes + 1) }) else LimitExceeded({ resource: LineBytes, max: props.max_line_bytes, observed: AtLeast((props.max_line_bytes) + 1) }))) }
 			}
 			span = bytes.sublist({ start: $pos, len })
 			accumulated = if $line_bytes.is_empty() {
@@ -461,7 +460,7 @@ step_with_decode = |initial, bytes, end, decode| {
 			$record_bytes = $record_bytes + additional
 			if $record_bytes > props.max_record_bytes {
 				state = decoder_at(props, $line_state, $offset, $line_number, $column, $line_start, $line_bytes, $skip_lf, $record_bytes)
-				return { state: terminal(state), consumed: $pos, outcome: Failed(located_problem(state, RecordTooLarge(props.max_record_bytes))) }
+				return { state: terminal(state), consumed: $pos, outcome: Failed(located_problem(state, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast(props.max_record_bytes + 1) }))) }
 			}
 			$line_number = $line_number + 1
 			$column = 1
@@ -509,8 +508,8 @@ step_with_decode = |initial, bytes, end, decode| {
 terminal : DecoderState -> DecoderState
 terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done: True }
 
-located_problem : DecoderState, Parser.Problem(QIF.Problem) -> QIF.Error
-located_problem = |s, problem| { offset: s.offset, line: s.line_number, column: s.column, problem }
+located_problem : DecoderState, QIF.Problem -> QIF.Error
+located_problem = |s, problem| Diagnostic.{ location: source_location({ offset: s.offset, line: s.line_number, column: s.column }), path: [], problem: problem }
 
 process_line : LineState, List(U8), QIF.Location, QIF.Props, (List(U8), U64 -> Try(Str, [BadEncoding(Streaming.EncodingError)])) -> { state : LineState, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
 process_line = |s, bytes, origin, props, decode| {
@@ -518,7 +517,7 @@ process_line = |s, bytes, origin, props, decode| {
 	content = if (bom) bytes.drop_first(3) else bytes
 	prefix = if (bom) 3 else 0
 	at = { offset: origin.offset + prefix, line: origin.line, column: origin.column + prefix }
-	bad = |problem| { offset: at.offset, line: at.line, column: at.column, problem }
+	bad = |problem| Diagnostic.{ location: source_location({ offset: at.offset, line: at.line, column: at.column }), path: [], problem: problem }
 	code = content.first() ?? 0
 	if code >= 33 and code <= 126 and code != '!' and code != '^' {
 		# An ASCII field indicator needs no conversion. Decode the payload once;
@@ -529,7 +528,7 @@ process_line = |s, bytes, origin, props, decode| {
 				# Keep the nested diagnostic relative to the full decoded line,
 				# even though only the payload needed UTF-8 validation.
 				line_error = { ..error, index: error.index + 1 }
-				return { state: s, result: Error({ offset: at.offset + line_error.index, line: at.line, column: at.column + line_error.index, problem: InvalidEncoding({ encoding: props.encoding, error: line_error }) }) }
+				return { state: s, result: Error(Diagnostic.{ location: source_location({ offset: at.offset + line_error.index, line: at.line, column: at.column + line_error.index }), path: [], problem: InvalidEncoding({ encoding: props.encoding, error: line_error }) }) }
 			}
 		}
 		if contains_nul(content) {
@@ -539,7 +538,7 @@ process_line = |s, bytes, origin, props, decode| {
 			return { state: s, result: Error(bad(MissingSection)) }
 		}
 		if s.fields.len() >= props.max_fields {
-			return { state: s, result: Error(bad(TooManyFields(props.max_fields))) }
+			return { state: s, result: Error(bad(LimitExceeded({ resource: Fields, max: props.max_fields, observed: AtLeast((props.max_fields) + 1) }))) }
 		}
 		record_at = if (s.fields.is_empty()) at else s.record_at
 		# Most records have several fields. Reserve only after the first field
@@ -550,7 +549,7 @@ process_line = |s, bytes, origin, props, decode| {
 	}
 	text = match decode(content, at.offset) {
 		Ok(value) => value
-		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, problem: InvalidEncoding({ encoding: props.encoding, error }) }) }
+		Err(BadEncoding(error)) => return { state: s, result: Error(Diagnostic.{ location: source_location({ offset: at.offset + error.index, line: at.line, column: at.column + error.index }), path: [], problem: InvalidEncoding({ encoding: props.encoding, error }) }) }
 	}
 	if contains_nul(bytes) {
 		return { state: s, result: Error(bad(NulCharacter)) }
@@ -563,7 +562,7 @@ process_line = |s, bytes, origin, props, decode| {
 			return { state: s, result: Error(bad(HeaderBeforeTerminator)) }
 		}
 		if bytes.len() > props.max_context_bytes {
-			return { state: s, result: Error(bad(ContextTooLarge(props.max_context_bytes))) }
+			return { state: s, result: Error(bad(LimitExceeded({ resource: ContextBytes, max: props.max_context_bytes, observed: AtLeast((props.max_context_bytes) + 1) }))) }
 		}
 		section = if (text == "!Account") "Account" else if (text.starts_with("!Type:")) Str.from_utf8_lossy(text.to_utf8().drop_first(6)) else s.section
 		return { state: { ..s, section }, result: Emitted(Header(text)) }
@@ -578,7 +577,7 @@ process_line = |s, bytes, origin, props, decode| {
 			return { state: s, result: Error(bad(MissingField('N'))) }
 		}
 		if account.count_utf8_bytes() > props.max_context_bytes {
-			return { state: s, result: Error(bad(ContextTooLarge(props.max_context_bytes))) }
+			return { state: s, result: Error(bad(LimitExceeded({ resource: ContextBytes, max: props.max_context_bytes, observed: AtLeast((props.max_context_bytes) + 1) }))) }
 		}
 		return { state: { ..s, fields: [], account }, result: Emitted(Record(record)) }
 	}
@@ -586,7 +585,7 @@ process_line = |s, bytes, origin, props, decode| {
 		return { state: s, result: Error(bad(MissingSection)) }
 	}
 	if s.fields.len() >= props.max_fields {
-		return { state: s, result: Error(bad(TooManyFields(props.max_fields))) }
+		return { state: s, result: Error(bad(LimitExceeded({ resource: Fields, max: props.max_fields, observed: AtLeast((props.max_fields) + 1) }))) }
 	}
 	{ state: s, result: Error(bad(InvalidFieldCode(code))) }
 }
@@ -756,10 +755,10 @@ encode_text = |text, encoding| {
 	Ok($out)
 }
 
-expect QIF.parse_str("!Type:Bank\nD27/08/2024\nT-12.3400\nPCafé\n^\n").is_ok()
-expect QIF.parse_str("!Type:Bank\nT1\n").is_err()
-expect QIF.parse_str("T1\n^\n").is_err()
-expect QIF.parse_str("!Type:Bank\nT1\n!Type:Cash\n").is_err()
+expect QIF.parse_str("!Type:Bank\nD27/08/2024\nT-12.3400\nPCafé\n^\n", {}).is_ok()
+expect QIF.parse_str("!Type:Bank\nT1\n", {}).is_err()
+expect QIF.parse_str("T1\n^\n", {}).is_err()
+expect QIF.parse_str("!Type:Bank\nT1\n!Type:Cash\n", {}).is_err()
 expect parse_date("29/02/2024", RejectAmbiguous) == Ok({ year: 2024, month: 2, day: 29 })
 expect parse_date("29/02/2023", DayFirst).is_err()
 expect parse_date("01/02/2024", RejectAmbiguous).is_err()
@@ -780,14 +779,14 @@ semantic_events = |events| events.map(
 )
 
 expect {
-	doc = QIF.parse_str(sample)?
-	written = doc.to_str()?
-	again = QIF.parse_str(written)?
+	doc = QIF.parse_str(sample, {})?
+	written = qif_text(doc)?
+	again = QIF.parse_str(written, {})?
 	semantic_events(doc.events) == semantic_events(again.events)
 }
 
 expect {
-	doc = QIF.parse_str(sample)?
+	doc = QIF.parse_str(sample, {})?
 	rows = doc.transactions({})?
 	row = rows.first()?
 	row.raw.account == "Current" and row.amount == "-12.3400" and row.splits == [{ category: "Food", memo: "coffee", amount: "-12.34" }]
@@ -798,8 +797,8 @@ expect {
 	var $valid = True
 	for split in (0).to(bytes.len() + 1) {
 		chunks = [bytes.take_first(split), [], bytes.drop_first(split)]
-		found = Streaming.collect(Streaming.read_iter(chunks.iter(), QIF.decoder({})))?
-		expected = QIF.parse_str(sample)?
+		found = (QIF.decoder({})).collect(chunks.iter())?
+		expected = QIF.parse_str(sample, {})?
 		$valid = $valid and semantic_events(found) == semantic_events(expected.events)
 	}
 	$valid
@@ -807,29 +806,29 @@ expect {
 
 expect {
 	bad = "!Type:Bank\nD27/08/2024\nTbad\n^\nD27/08/2024\nT1\n^\n".to_utf8()
-	all = List.from_iter(Streaming.read_iter([bad].iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords })))
+	all = List.from_iter((QIF.transaction_decoder({ errors: { policy: ReportInvalidRecords } })).read_iter([bad].iter()))
 	all.len() == 4 and all.last() == Ok(Ok(Finished({ emitted_items: 2, rejected_records: 1 })))
 }
 
 expect {
 	bad = "!Type:Bank\nD27/08/2024\nTbad\n^\n".to_utf8()
-	all = List.from_iter(Streaming.read_iter([bad].iter(), QIF.transaction_decoder({})))
+	all = List.from_iter((QIF.transaction_decoder({})).read_iter([bad].iter()))
 	match all.last() {
-		Ok(Err(ParseErr(_))) => all.len() == 2
+		Ok(Err(InvalidQif(_))) => all.len() == 2
 		_ => False
 	}
 }
 
 expect QIF.parse_bytes("!Type:Bank\n".to_utf8().concat([80, 233, 10, 94]), { encoding: Windows1252 }).is_ok()
 expect QIF.parse_bytes("!Type:Bank\n".to_utf8().concat([80, 129, 10, 94]), { encoding: Windows1252 }).is_err()
-expect QIF.parse_str("!Type:Bank\nP\u(0)\n^\n").is_err()
-expect QIF.parse_with("!Type:Bank\nPabc\n^\n", { max_line_bytes: 3 }).is_err()
+expect QIF.parse_str("!Type:Bank\nP\u(0)\n^\n", {}).is_err()
+expect QIF.parse_str("!Type:Bank\nPabc\n^\n", { max_line_bytes: 3 }).is_err()
 
 expect {
-	doc = QIF.parse_str(sample)?
+	doc = QIF.parse_str(sample, {})?
 	var $bytes = []
 	var $valid = True
-	for result in Streaming.write_iter(doc.events.iter(), QIF.encoder({}).with_chunk_bytes(1)) {
+	for result in (QIF.encoder({ chunk_bytes: 1 })).write_iter(doc.events.iter()) {
 		chunk = result?
 		$valid = $valid and chunk.len() <= 1
 		$bytes = $bytes.concat(chunk)
@@ -840,24 +839,24 @@ expect {
 
 expect {
 	events = [Header("!Type:Bank")]
-	List.from_iter(Streaming.write_iter(events.iter(), QIF.encoder({}).with_chunk_bytes(0))) == [Err(InvalidChunkSize)]
+	List.from_iter((QIF.encoder({ chunk_bytes: 0 })).write_iter(events.iter())) == [Err(InvalidChunkSize(Diagnostic.{ problem: BelowMinimum({ minimum: 1, actual: 0 }), location: Unavailable(NotApplicable), path: [Key("chunk_bytes")] }))]
 }
 
 expect {
 	bad = "!Type:Bank\nD27/08/2024\nTbad\n^\n".to_utf8()
-	all = List.from_iter(Streaming.read_iter([bad].iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords, max_errors: 0 })))
+	all = List.from_iter((QIF.transaction_decoder({ errors: { policy: ReportInvalidRecords, max_errors: 0 } })).read_iter([bad].iter()))
 	match all.last() {
-		Ok(Err(ErrorLimitExceeded({ max: 0, .. }))) => True
+		Ok(Err(RecoveryLimitExceeded(Diagnostic.{ problem: RejectedRecords({ max: 0, .. }), .. }))) => True
 		_ => False
 	}
 }
 
-expect QIF.parse_str("!Account\nTBank\n^\n").is_err()
-expect QIF.parse_str("!Type:Bank\n^oops\n^\n").is_err()
+expect QIF.parse_str("!Account\nTBank\n^\n", {}).is_err()
+expect QIF.parse_str("!Type:Bank\n^oops\n^\n", {}).is_err()
 expect {
 	bytes = "!Type:Bank\nP".to_utf8().concat([0x81, '\n', '^', '\n'])
 	match QIF.parse_bytes(bytes, { encoding: Windows1252 }) {
-		Err(InvalidQif(error)) => error.offset == 12 and error.line == 2 and error.column == 2
+		Err(InvalidQif(error)) => text_position(error).offset == 12 and text_position(error).line == 2 and text_position(error).column == 2
 		_ => False
 	}
 }
@@ -865,7 +864,7 @@ expect {
 expect QIF.amount_to_dec("0.0000000000000000001").is_err()
 expect {
 	bytes = "!Type:Bank\nD27/08/2024\nTbad\n^\nD27/08/2024\nT1\n^\n".to_utf8()
-	report = Streaming.collect_report(Streaming.read_iter([bytes].iter(), QIF.transaction_decoder({}).with_errors({ error_policy: ReportInvalidRecords })))?
+	report = (QIF.transaction_decoder({ errors: { policy: ReportInvalidRecords } })).collect_report([bytes].iter())?
 	report.errors.len() == 1 and report.report == { emitted_items: 2, rejected_records: 1 }
 		and match report.values {
 			[Header("!Type:Bank"), Transaction(row)] => row.amount == "1"
@@ -873,17 +872,17 @@ expect {
 		}
 }
 expect {
-	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTbad\n^\n")?
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTbad\n^\n", {})?
 	match doc.transactions({}) {
-		Err(InvalidQif({ problem: InvalidAmount("bad"), .. })) => True
+		Err(InvalidQif(error)) => error.problem == InvalidAmount(Diagnostic.excerpt("bad".to_utf8()))
 		_ => False
 	}
 }
 
 expect {
 	bytes = [0xef, 0xbb, 0xbf].concat("!Type:Bank\r\nD27/08/2024\r\nT1\r\n^\r\n".to_utf8())
-	found = Streaming.collect(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), QIF.decoder({})))?
-	expected = QIF.parse_str("!Type:Bank\r\nD27/08/2024\r\nT1\r\n^\r\n")?
+	found = (QIF.decoder({})).collect(bytes.map(|byte| [byte]).iter())?
+	expected = QIF.parse_str("!Type:Bank\r\nD27/08/2024\r\nT1\r\n^\r\n", {})?
 	semantic_events(found) == semantic_events(expected.events)
 }
 expect QIF.parse_bytes([0xef, 0xbb, 0xbf], {}).is_ok()
@@ -897,9 +896,9 @@ expect {
 	for text in ["!Type:Bank\nP1234567890\n^\n", "!Type:Bank\r\nP1234567890\r\n^\r\n", "!Type:Bank\rP1234567890\r^", "!Type:Bank\n\nP1234567890"] {
 		bytes = text.to_utf8()
 		for props in limits {
-			expected = List.from_iter(Streaming.read_iter([bytes].iter(), QIF.decoder(props)))
+			expected = List.from_iter((QIF.decoder(props)).read_iter([bytes].iter()))
 			for split in (0.U64).to(bytes.len() + 1) {
-				found = List.from_iter(Streaming.read_iter([bytes.take_first(split), [], bytes.drop_first(split)].iter(), QIF.decoder(props)))
+				found = List.from_iter((QIF.decoder(props)).read_iter([bytes.take_first(split), [], bytes.drop_first(split)].iter()))
 				$same = $same and found == expected
 			}
 		}
@@ -914,7 +913,7 @@ expect {
 	var $same = True
 	for date in dates {
 		text = "!Type:Bank\r\nD${date}\r\nT-12.340000000000000000001\r\nP日本語 Café € 😀\r\n^\r\n"
-		str_doc = QIF.parse_str(text)?
+		str_doc = QIF.parse_str(text, {})?
 		byte_doc = QIF.parse_bytes(text.to_utf8(), {})?
 		for props in options {
 			$same = $same and str_doc.transactions(props) == byte_doc.transactions(props)
@@ -922,22 +921,22 @@ expect {
 	}
 	$same
 }
-expect match QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_line_bytes: 10 }) {
-	Err(InvalidQif(error)) => error == { offset: 22, line: 2, column: 12, problem: LineTooLarge(10) }
+expect match QIF.parse_str("!Type:Bank\nP1234567890\n^\n", { max_line_bytes: 10 }) {
+	Err(InvalidQif(error)) => error == Diagnostic.{ location: source_location({ offset: 22, line: 2, column: 12 }), path: [], problem: LimitExceeded({ resource: LineBytes, max: 10, observed: AtLeast((10) + 1) }) }
 	_ => False
 }
-expect match QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_record_bytes: 11 }) {
-	Err(InvalidQif(error)) => error == { offset: 23, line: 2, column: 12, problem: RecordTooLarge(11) }
+expect match QIF.parse_str("!Type:Bank\nP1234567890\n^\n", { max_record_bytes: 11 }) {
+	Err(InvalidQif(error)) => error == Diagnostic.{ location: source_location({ offset: 23, line: 2, column: 12 }), path: [], problem: LimitExceeded({ resource: RecordBytes, max: 11, observed: AtLeast((11) + 1) }) }
 	_ => False
 }
 
 expect {
-	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT-12.3400000000000000000001\nPfirst\nPsecond\nM\nMsecond\nNfirst\nNsecond\nLfirst\nLsecond\nCfirst\nCsecond\nXone\nXtwo\n^\n")?
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT-12.3400000000000000000001\nPfirst\nPsecond\nM\nMsecond\nNfirst\nNsecond\nLfirst\nLsecond\nCfirst\nCsecond\nXone\nXtwo\n^\n", {})?
 	row = doc.transactions({})?.first()?
 	row.payee == "first" and row.memo == "" and row.number == "first" and row.category == "first" and row.cleared == "first" and row.amount == "-12.3400000000000000000001" and row.raw.fields.len() == 14
 }
 expect {
-	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nD27/08/2024\n^\n")?
+	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nD27/08/2024\n^\n", {})?
 	match doc.transactions({}) {
 		Err(InvalidQif(error)) => error.problem == DuplicateCoreField
 		_ => False
@@ -953,21 +952,21 @@ expect {
 	cases.all(|case| valid_amount(case.text) == case.valid)
 }
 expect {
-	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nEorphan\n^\n")?
+	doc = QIF.parse_str("!Type:Bank\nDinvalid\nT1\nEorphan\n^\n", {})?
 	match doc.transactions({}) {
-		Err(InvalidQif(error)) => error.problem == InvalidDate({ value: "invalid", order: RejectAmbiguous })
+		Err(InvalidQif(error)) => error.problem == InvalidDate({ value: Diagnostic.excerpt("invalid".to_utf8()), order: RejectAmbiguous })
 		_ => False
 	}
 }
 expect {
-	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTinvalid\nEorphan\n^\n")?
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nTinvalid\nEorphan\n^\n", {})?
 	match doc.transactions({}) {
-		Err(InvalidQif(error)) => error.problem == InvalidAmount("invalid")
+		Err(InvalidQif(error)) => error.problem == InvalidAmount(Diagnostic.excerpt("invalid".to_utf8()))
 		_ => False
 	}
 }
 expect {
-	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT1\nEorphan\n^\n")?
+	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT1\nEorphan\n^\n", {})?
 	match doc.transactions({}) {
 		Err(InvalidQif(error)) => error.problem == MissingSplitCategory
 		_ => False
@@ -976,14 +975,14 @@ expect {
 expect {
 	bytes = ['P', 0, 0xff, '\n']
 	match QIF.parse_bytes(bytes, {}) {
-		Err(InvalidQif(error)) => error == { offset: 2, line: 1, column: 3, problem: InvalidEncoding({ encoding: Utf8, error: { index: 2, problem: InvalidUtf8 } }) }
+		Err(InvalidQif(error)) => error == Diagnostic.{ location: source_location({ offset: 2, line: 1, column: 3 }), path: [], problem: InvalidEncoding({ encoding: Utf8, error: { index: 2, problem: InvalidUtf8 } }) }
 		_ => False
 	}
 }
 expect {
 	bytes = "!Type:Bank\nP".to_utf8().concat([0xff, '\n'])
 	match QIF.parse_bytes(bytes, { max_fields: 0 }) {
-		Err(InvalidQif(error)) => error == { offset: 12, line: 2, column: 2, problem: InvalidEncoding({ encoding: Utf8, error: { index: 1, problem: InvalidUtf8 } }) }
+		Err(InvalidQif(error)) => error == Diagnostic.{ location: source_location({ offset: 12, line: 2, column: 2 }), path: [], problem: InvalidEncoding({ encoding: Utf8, error: { index: 1, problem: InvalidUtf8 } }) }
 		_ => False
 	}
 }
@@ -994,25 +993,25 @@ expect {
 	section = "LongSectionNameBeyondShortStringStorage"
 	value = "A field value beyond short string storage"
 	large = List.repeat('\n', 8192).concat("!Type:${section}\nP${value}\n".to_utf8())
-	header = QIF.decoder({ max_line_bytes: 128, max_context_bytes: 128 }).step(large, More)
-	pending = header.state.step(large.drop_first(header.consumed), More)
-	finished = pending.state.step("^\n".to_utf8(), Final)
+	header = QIF.decoder({ max_line_bytes: 128, max_context_bytes: 128 }).step({ bytes: large, end: More })
+	pending = header.state.step({ bytes: large.drop_first(header.consumed), end: More })
+	finished = pending.state.step({ bytes: "^\n".to_utf8(), end: Final })
 	match (header.outcome, pending.outcome, finished.outcome) {
-		(Item(Header(text)), NeedInput, Item(Record(record))) => text == "!Type:${section}" and pending.state.state().line_bytes.is_empty() and pending.state.state().fields == [{ code: 'P', value }] and record.section == section and record.fields == [{ code: 'P', value }]
+		(Item(Header(text)), NeedInput, Item(Record(record))) => text == "!Type:${section}" and Streaming.internal_state(pending.state).line_bytes.is_empty() and Streaming.internal_state(pending.state).fields == [{ code: 'P', value }] and record.section == section and record.fields == [{ code: 'P', value }]
 		_ => False
 	}
 }
 expect {
 	name = "An account name beyond short string storage"
 	large = List.repeat('\n', 8192).concat("!Account\nN${name}\n".to_utf8())
-	header = QIF.decoder({ max_line_bytes: 128, max_context_bytes: 128 }).step(large, More)
-	pending = header.state.step(large.drop_first(header.consumed), More)
-	account = pending.state.step("^\n".to_utf8(), More)
-	bank = account.state.step("!Type:Bank\n".to_utf8(), More)
-	field = bank.state.step("Ppaid\n".to_utf8(), More)
-	finished = field.state.step("^\n".to_utf8(), Final)
+	header = QIF.decoder({ max_line_bytes: 128, max_context_bytes: 128 }).step({ bytes: large, end: More })
+	pending = header.state.step({ bytes: large.drop_first(header.consumed), end: More })
+	account = pending.state.step({ bytes: "^\n".to_utf8(), end: More })
+	bank = account.state.step({ bytes: "!Type:Bank\n".to_utf8(), end: More })
+	field = bank.state.step({ bytes: "Ppaid\n".to_utf8(), end: More })
+	finished = field.state.step({ bytes: "^\n".to_utf8(), end: Final })
 	match (pending.outcome, account.outcome, bank.outcome, field.outcome, finished.outcome) {
-		(NeedInput, Item(Record(_)), Item(Header(_)), NeedInput, Item(Record(record))) => account.state.state().account == name and field.state.state().account == name and record.account == name and record.fields == [{ code: 'P', value: "paid" }]
+		(NeedInput, Item(Record(_)), Item(Header(_)), NeedInput, Item(Record(record))) => Streaming.internal_state(account.state).account == name and Streaming.internal_state(field.state).account == name and record.account == name and record.fields == [{ code: 'P', value: "paid" }]
 		_ => False
 	}
 }
@@ -1037,7 +1036,7 @@ expect {
 	var $same = True
 	for text in texts {
 		for props in options {
-			match (QIF.parse_with(text, props), QIF.parse_bytes(text.to_utf8(), { ..props, encoding: Utf8 })) {
+			match (QIF.parse_str(text, props), QIF.parse_bytes(text.to_utf8(), { ..props, encoding: Utf8 })) {
 				(Ok(a), Ok(b)) => {
 					$same = $same and a.events == b.events
 				}
@@ -1061,8 +1060,8 @@ expect {
 	for text in texts {
 		bytes = text.to_utf8()
 		for options in props {
-			bulk = List.from_iter(Streaming.read_iter([bytes].iter(), QIF.decoder(options)))
-			bytewise = List.from_iter(Streaming.read_iter(bytes.map(|byte| [byte]).iter(), QIF.decoder(options)))
+			bulk = List.from_iter((QIF.decoder(options)).read_iter([bytes].iter()))
+			bytewise = List.from_iter((QIF.decoder(options)).read_iter(bytes.map(|byte| [byte]).iter()))
 			$same = $same and bulk == bytewise
 		}
 	}
@@ -1071,9 +1070,21 @@ expect {
 
 expect {
 	bytes = "!Type:Bank\r\nPone\r\n".to_utf8()
-	header = QIF.decoder({}).step(bytes, More)
-	body = header.state.step(bytes.drop_first(header.consumed), More)
-	record = body.state.step("^".to_utf8(), Final)
-	finished = record.state.step([], Final)
-	body.outcome == NeedInput and body.state.state().offset == 18 and body.state.state().line_number == 3 and body.state.state().column == 1 and body.state.state().line_start == 18 and body.state.state().record_bytes == 6 and !body.state.state().skip_lf and body.state.state().line_bytes.is_empty() and body.state.state().record_at == { offset: 12, line: 2, column: 1 } and record.state.state().offset == 19 and record.state.state().line_number == 3 and record.state.state().column == 2 and record.state.state().line_start == 18 and record.state.state().record_bytes == 0 and finished.outcome == Done and finished.state.state().done
+	header = QIF.decoder({}).step({ bytes: bytes, end: More })
+	body = header.state.step({ bytes: bytes.drop_first(header.consumed), end: More })
+	record = body.state.step({ bytes: "^".to_utf8(), end: Final })
+	finished = record.state.step({ bytes: [], end: Final })
+	body.outcome == NeedInput and Streaming.internal_state(body.state).offset == 18 and Streaming.internal_state(body.state).line_number == 3 and Streaming.internal_state(body.state).column == 1 and Streaming.internal_state(body.state).line_start == 18 and Streaming.internal_state(body.state).record_bytes == 6 and !Streaming.internal_state(body.state).skip_lf and Streaming.internal_state(body.state).line_bytes.is_empty() and Streaming.internal_state(body.state).record_at == { offset: 12, line: 2, column: 1 } and Streaming.internal_state(record.state).offset == 19 and Streaming.internal_state(record.state).line_number == 3 and Streaming.internal_state(record.state).column == 2 and Streaming.internal_state(record.state).line_start == 18 and Streaming.internal_state(record.state).record_bytes == 0 and finished.outcome == Done and Streaming.internal_state(finished.state).done
 }
+
+text_position : QIF.Error -> { offset : U64, line : U64, column : U64 }
+text_position = |error| match error.location {
+	Text(position) => position
+	_ => crash "QIF: text coordinates requested for a non-source diagnostic"
+}
+
+source_location : { offset : U64, line : U64, column : U64 } -> Diagnostic.Location
+source_location = |position| if (position.line > 0 and position.column > 0) Text(position) else Unavailable(NotRetained)
+
+qif_text : QIF -> Try(Str, [InvalidQif(QIF.Error), InvalidChunkSize(Diagnostic(Streaming.ChunkSizeProblem))])
+qif_text = |document| document.encode({}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "UTF-8 QIF encoding produced invalid UTF-8")

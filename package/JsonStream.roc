@@ -209,7 +209,7 @@ ndjson_step = |initial, bytes, end| {
 			$state = { ..$state, record: $state.record.append_sublist(bytes, { start: $index, len }), column: $state.column + len, previous_cr: False }
 			$index = $index + len
 			if $index < run_end {
-				return { state: $state, consumed: $index, outcome: Failed(problem($state, LimitExceeded({ limit: RecordBytes, max: $state.props.max_record_bytes, observed: AtLeast(($state.props.max_record_bytes) + 1) }))) }
+				return { state: $state, consumed: $index, outcome: Failed(problem($state, LimitExceeded({ resource: RecordBytes, max: $state.props.max_record_bytes, observed: AtLeast(($state.props.max_record_bytes) + 1) }))) }
 			}
 		} else {
 			if byte >= 0x80 or $state.utf8_remaining > 0 {
@@ -229,7 +229,7 @@ ndjson_step = |initial, bytes, end| {
 				$state = { ..$state, record: [], record_offset: initial.offset + $index, record_line: $state.line, record_column: $state.column }
 			} else {
 				if $state.record.len() >= $state.props.max_record_bytes {
-					return { state: $state, consumed: $index, outcome: Failed(problem($state, LimitExceeded({ limit: RecordBytes, max: $state.props.max_record_bytes, observed: AtLeast(($state.props.max_record_bytes) + 1) }))) }
+					return { state: $state, consumed: $index, outcome: Failed(problem($state, LimitExceeded({ resource: RecordBytes, max: $state.props.max_record_bytes, observed: AtLeast(($state.props.max_record_bytes) + 1) }))) }
 				}
 				$state = move({ ..$state, record: $state.record.append(byte) }, byte)
 				$index = $index + 1
@@ -319,7 +319,7 @@ array_step = |initial, bytes, end| {
 			$index = $index + len
 			$record_bytes = $record_bytes + len
 			if $index < run_end {
-				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
 			}
 		} else if $scan.string and $scan.comment == Normal {
 			if byte >= 0x80 or $scan.utf8_remaining > 0 {
@@ -331,7 +331,7 @@ array_step = |initial, bytes, end| {
 				}
 			}
 			if $record_bytes >= props.max_record_bytes {
-				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
 			}
 			if $scan.escape {
 				$scan = { ..$scan, escape: False }
@@ -360,7 +360,7 @@ array_step = |initial, bytes, end| {
 			$index = $index + len
 			$record_bytes = $record_bytes + len
 			if $index < run_end {
-				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
+				return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
 			}
 		} else {
 			if byte >= 0x80 or $scan.utf8_remaining > 0 {
@@ -380,7 +380,7 @@ array_step = |initial, bytes, end| {
 			} else if $scan.comment != Normal {
 				if $collecting {
 					if $record_bytes >= props.max_record_bytes {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
 					}
 				}
 				match $scan.comment {
@@ -431,7 +431,7 @@ array_step = |initial, bytes, end| {
 					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, if ($scan.phase == Start) ExpectedArray else if ($scan.phase == End) UnexpectedContent else ExpectedArrayItem)) }
 				} else {
 					if props.max_record_bytes == 0 {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
 					}
 					$scan = { ..$scan, record_offset: initial.offset + $index, record_line: $scan.line, record_column: $scan.column }
 					$collecting = True
@@ -446,7 +446,7 @@ array_step = |initial, bytes, end| {
 			}
 			if $scan_byte {
 				if $record_bytes >= props.max_record_bytes {
-					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
+					return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: RecordBytes, max: props.max_record_bytes, observed: AtLeast((props.max_record_bytes) + 1) }))) }
 				}
 				if byte == '"' {
 					$scan = { ..$scan, string: True }
@@ -456,7 +456,7 @@ array_step = |initial, bytes, end| {
 				}
 				else if byte == '[' or byte == '{' {
 					if $scan.stack.len() >= props.json.max_depth {
-						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ limit: Nesting, max: props.json.max_depth, observed: AtLeast((props.json.max_depth) + 1) }))) }
+						return { state: pack_array(base, $scan, $record), consumed: $index, outcome: Failed(array_problem(base, $scan, $index, LimitExceeded({ resource: Nesting, max: props.json.max_depth, observed: AtLeast((props.json.max_depth) + 1) }))) }
 					}
 					$scan = { ..$scan, stack: $scan.stack.append(if (byte == '[') ']' else '}') }
 				} else if byte == ']' or byte == '}' {

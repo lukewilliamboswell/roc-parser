@@ -1,11 +1,11 @@
 import Diagnostic
 # Private JSON configuration and problem vocabulary shared by both scanners.
 JsonConfig :: [].{
-	Limit : [RecordBytes, DocumentBytes, Nesting, ArrayItems, ObjectMembers, StringBytes, NumberCharacters]
+	Resource : [RecordBytes, DocumentBytes, Nesting, ArrayItems, ObjectMembers, StringBytes, NumberCharacters]
 
 	NumberProblem : [NotFinite, UnsafeInteger, SignificantDigits, DoubleOverflow, DoubleUnderflow]
 
-	Problem : [InvalidNumber(Str), IncompleteUtf8, InvalidBom, ExpectedComment, ExpectedArray, ExpectedArrayItem, IncompleteArray, MismatchedDelimiter, LimitExceeded({ limit : Limit, max : U64, observed : Diagnostic.Observed }), TrailingComma, ExpectedArrayDelimiter, ExpectedObjectDelimiter, InvalidLiteral, ExpectedValue, UnexpectedContent, BomNotAllowed, TopLevelRequired([Object, ObjectOrArray]), ExpectedStringKey, ExpectedKeyColon, DuplicateKey(Str), ConflictingDuplicateKey(Str), CommentsNotAllowed, UnterminatedComment, InvalidUtf8, UnterminatedString, InvalidUnicodeEscape, UnpairedSurrogate, InvalidEscape, ControlCharacter(U32), LeadingZero, ExpectedMinusDigit, ExpectedFractionDigit, ExpectedExponentDigit, NonInteroperableNumber({ text : Str, reason : NumberProblem })]
+	Problem : [InvalidNumber(Diagnostic.Excerpt), IncompleteUtf8, InvalidBom, ExpectedComment, ExpectedArray, ExpectedArrayItem, IncompleteArray, MismatchedDelimiter, LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), TrailingComma, ExpectedArrayDelimiter, ExpectedObjectDelimiter, InvalidLiteral, ExpectedValue, UnexpectedContent, BomNotAllowed, TopLevelRequired([Object, ObjectOrArray]), ExpectedStringKey, ExpectedKeyColon, DuplicateKey(Str), ConflictingDuplicateKey(Str), CommentsNotAllowed, UnterminatedComment, InvalidUtf8, UnterminatedString, InvalidUnicodeEscape, UnpairedSurrogate, InvalidEscape, ControlCharacter(U32), LeadingZero, ExpectedMinusDigit, ExpectedFractionDigit, ExpectedExponentDigit, NonInteroperableNumber({ text : Str, reason : NumberProblem })]
 
 	WriteProps := { sort_keys : Bool ?? False, indent : U64 ?? 0, max_bytes : U64 ?? U64.highest }
 
