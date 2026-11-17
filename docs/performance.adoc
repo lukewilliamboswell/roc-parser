@@ -122,8 +122,8 @@ avoids copies but retains the original allocation while a slice is reachable.
   `Utf8.ByteClass` to one combinator call and append per byte.
 * Keep backtracking shallow. `Parser.one_of` and `Parser.alt` retry from the same
   position; dispatch on a leading keyword or punctuation when practical.
-* Build error messages on the failure path, rather than rebuilding them inside
-  successful loops.
+* Build structured problems on the failure path and render diagnostic text at
+  display boundaries.
 * Avoid converting literals to byte lists or rebuilding lookup lists in a loop.
 * Slice complete runs and convert text once per value the caller keeps.
 * Separate outer record/line scanning from combinators for smaller pieces; see

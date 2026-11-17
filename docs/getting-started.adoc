@@ -132,7 +132,8 @@ tags:
 every row has been read successfully.
 
 To see the error path, change `Mars,2` to `Mars,two` and run the program
-again. It prints a message that names line 4 and quotes `two`. Rename the `moons`
+again. It reports line 4 and an `ExpectedValue` problem containing the expected
+`U64` type and the original cell bytes. Rename the `moons`
 column and it prints `no moons column`. <<errors>> shows how to report every
 kind of failure, and <<csv>> shows optional columns, empty cells and
 hand-built row parsers that match columns by position.

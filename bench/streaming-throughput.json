@@ -6,7 +6,7 @@
       "schema": 1,
       "label": "final-whole",
       "quick": false,
-      "date": "2026-11-17T07:00:57+00:00",
+      "date": "2026-11-17T07:31:21+00:00",
       "machine": {
         "description": "Apple M2 (8 CPUs, arm64)",
         "cpu": "Apple M2",
@@ -16,7 +16,7 @@
         "python": "3.13.16"
       },
       "git": {
-        "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+        "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
         "dirty": false
       },
       "environment": {
@@ -254,93 +254,93 @@
         "kind": "medium",
         "bytes": 65662,
         "workload": "collect",
-        "median_ns": 457062.0,
-        "min_ns": 456213.776,
-        "max_ns": 462164.1093333333,
-        "stdev_ns": 2259.283706459381,
-        "spread_pct": 1.3018656841595482,
-        "mb_per_s": 143.66103504557367,
-        "iterations": 375,
+        "median_ns": 459785.76115485566,
+        "min_ns": 455596.56692913384,
+        "max_ns": 490681.8687664042,
+        "stdev_ns": 12199.257684719005,
+        "spread_pct": 7.6307934697990065,
+        "mb_per_s": 142.80999010294505,
+        "iterations": 381,
         "accepted": true,
-        "checksum": 24885750,
-        "peak_rss_bytes": 3375104,
+        "checksum": 25283922,
+        "peak_rss_bytes": 4194304,
         "batch_elapsed_ns": [
-          173311541,
-          172473417,
-          171080166,
-          171163791,
-          171110250,
-          171908875,
-          171398250
+          173582292,
+          174133666,
+          186949792,
+          176191250,
+          175178375,
+          176333250,
+          174344000
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/roc-json"
           ],
-          "measured_at": "2026-11-17T07:00:58+00:00",
+          "measured_at": "2026-11-17T07:31:22+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 534334,
+            "elapsed_ns": 525625,
             "successes": 1,
             "checksum": 66362,
             "peak_rss_bytes": 2719744
           },
           "warmup": {
-            "iterations": 375,
-            "elapsed_ns": 171936375,
-            "successes": 375,
-            "checksum": 24885750,
-            "peak_rss_bytes": 2686976
+            "iterations": 381,
+            "elapsed_ns": 175842875,
+            "successes": 381,
+            "checksum": 25283922,
+            "peak_rss_bytes": 2719744
           },
           "batches": [
             {
-              "iterations": 375,
-              "elapsed_ns": 173311541,
-              "successes": 375,
-              "checksum": 24885750,
-              "peak_rss_bytes": 3375104
+              "iterations": 381,
+              "elapsed_ns": 173582292,
+              "successes": 381,
+              "checksum": 25283922,
+              "peak_rss_bytes": 3014656
             },
             {
-              "iterations": 375,
-              "elapsed_ns": 172473417,
-              "successes": 375,
-              "checksum": 24885750,
-              "peak_rss_bytes": 2932736
-            },
-            {
-              "iterations": 375,
-              "elapsed_ns": 171080166,
-              "successes": 375,
-              "checksum": 24885750,
+              "iterations": 381,
+              "elapsed_ns": 174133666,
+              "successes": 381,
+              "checksum": 25283922,
               "peak_rss_bytes": 2686976
             },
             {
-              "iterations": 375,
-              "elapsed_ns": 171163791,
-              "successes": 375,
-              "checksum": 24885750,
-              "peak_rss_bytes": 2686976
+              "iterations": 381,
+              "elapsed_ns": 186949792,
+              "successes": 381,
+              "checksum": 25283922,
+              "peak_rss_bytes": 4194304
             },
             {
-              "iterations": 375,
-              "elapsed_ns": 171110250,
-              "successes": 375,
-              "checksum": 24885750,
-              "peak_rss_bytes": 2768896
+              "iterations": 381,
+              "elapsed_ns": 176191250,
+              "successes": 381,
+              "checksum": 25283922,
+              "peak_rss_bytes": 3325952
             },
             {
-              "iterations": 375,
-              "elapsed_ns": 171908875,
-              "successes": 375,
-              "checksum": 24885750,
-              "peak_rss_bytes": 3047424
+              "iterations": 381,
+              "elapsed_ns": 175178375,
+              "successes": 381,
+              "checksum": 25283922,
+              "peak_rss_bytes": 3014656
             },
             {
-              "iterations": 375,
-              "elapsed_ns": 171398250,
-              "successes": 375,
-              "checksum": 24885750,
-              "peak_rss_bytes": 2883584
+              "iterations": 381,
+              "elapsed_ns": 176333250,
+              "successes": 381,
+              "checksum": 25283922,
+              "peak_rss_bytes": 3014656
+            },
+            {
+              "iterations": 381,
+              "elapsed_ns": 174344000,
+              "successes": 381,
+              "checksum": 25283922,
+              "peak_rss_bytes": 3178496
             }
           ]
         }
@@ -353,93 +353,93 @@
         "kind": "medium",
         "bytes": 65662,
         "workload": "collect",
-        "median_ns": 427278.90173410403,
-        "min_ns": 424908.7225433526,
-        "max_ns": 436541.6647398844,
-        "stdev_ns": 4609.036592591683,
-        "spread_pct": 2.722564149392752,
-        "mb_per_s": 153.67480054248387,
-        "iterations": 173,
+        "median_ns": 430358.5878787879,
+        "min_ns": 425811.1151515152,
+        "max_ns": 451104.296969697,
+        "stdev_ns": 8978.572037161819,
+        "spread_pct": 5.877234132319847,
+        "mb_per_s": 152.5750893543083,
+        "iterations": 165,
         "accepted": true,
-        "checksum": 11485297,
+        "checksum": 10954185,
         "peak_rss_bytes": 7946240,
         "batch_elapsed_ns": [
-          73787750,
-          75209083,
-          75521708,
-          74212709,
-          73509209,
-          73919250,
-          73614000
+          72751250,
+          74432209,
+          71589791,
+          70719500,
+          70258834,
+          70648834,
+          71009167
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
             "serde_json"
           ],
-          "measured_at": "2026-11-17T07:00:59+00:00",
+          "measured_at": "2026-11-17T07:31:23+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 1157959,
+            "elapsed_ns": 1212541,
             "successes": 1,
             "checksum": 66389,
-            "peak_rss_bytes": 7634944
+            "peak_rss_bytes": 7651328
           },
           "warmup": {
-            "iterations": 173,
-            "elapsed_ns": 73990958,
-            "successes": 173,
-            "checksum": 11485297,
+            "iterations": 165,
+            "elapsed_ns": 70860792,
+            "successes": 165,
+            "checksum": 10954185,
             "peak_rss_bytes": 7929856
           },
           "batches": [
             {
-              "iterations": 173,
-              "elapsed_ns": 73787750,
-              "successes": 173,
-              "checksum": 11485297,
-              "peak_rss_bytes": 7946240
+              "iterations": 165,
+              "elapsed_ns": 72751250,
+              "successes": 165,
+              "checksum": 10954185,
+              "peak_rss_bytes": 7897088
             },
             {
-              "iterations": 173,
-              "elapsed_ns": 75209083,
-              "successes": 173,
-              "checksum": 11485297,
-              "peak_rss_bytes": 7946240
+              "iterations": 165,
+              "elapsed_ns": 74432209,
+              "successes": 165,
+              "checksum": 10954185,
+              "peak_rss_bytes": 7897088
             },
             {
-              "iterations": 173,
-              "elapsed_ns": 75521708,
-              "successes": 173,
-              "checksum": 11485297,
+              "iterations": 165,
+              "elapsed_ns": 71589791,
+              "successes": 165,
+              "checksum": 10954185,
               "peak_rss_bytes": 7913472
             },
             {
-              "iterations": 173,
-              "elapsed_ns": 74212709,
-              "successes": 173,
-              "checksum": 11485297,
+              "iterations": 165,
+              "elapsed_ns": 70719500,
+              "successes": 165,
+              "checksum": 10954185,
               "peak_rss_bytes": 7913472
             },
             {
-              "iterations": 173,
-              "elapsed_ns": 73509209,
-              "successes": 173,
-              "checksum": 11485297,
+              "iterations": 165,
+              "elapsed_ns": 70258834,
+              "successes": 165,
+              "checksum": 10954185,
               "peak_rss_bytes": 7946240
             },
             {
-              "iterations": 173,
-              "elapsed_ns": 73919250,
-              "successes": 173,
-              "checksum": 11485297,
-              "peak_rss_bytes": 7929856
+              "iterations": 165,
+              "elapsed_ns": 70648834,
+              "successes": 165,
+              "checksum": 10954185,
+              "peak_rss_bytes": 7946240
             },
             {
-              "iterations": 173,
-              "elapsed_ns": 73614000,
-              "successes": 173,
-              "checksum": 11485297,
+              "iterations": 165,
+              "elapsed_ns": 71009167,
+              "successes": 165,
+              "checksum": 10954185,
               "peak_rss_bytes": 7913472
             }
           ]
@@ -450,10 +450,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:00:59+00:00"
+            "measured_at": "2026-11-17T07:31:23+00:00"
           }
         }
       },
@@ -465,94 +465,94 @@
         "kind": "medium",
         "bytes": 65662,
         "workload": "collect",
-        "median_ns": 668920.0450450451,
-        "min_ns": 664323.3873873873,
-        "max_ns": 673209.4594594594,
-        "stdev_ns": 3482.9498912312924,
-        "spread_pct": 1.3284206592244792,
-        "mb_per_s": 98.16120848281399,
-        "iterations": 222,
+        "median_ns": 672529.3427230048,
+        "min_ns": 667213.220657277,
+        "max_ns": 678723.985915493,
+        "stdev_ns": 3713.455125411087,
+        "spread_pct": 1.7115632771664655,
+        "mb_per_s": 97.63440169634987,
+        "iterations": 213,
         "accepted": true,
-        "checksum": 14732364,
-        "peak_rss_bytes": 18726912,
+        "checksum": 14135106,
+        "peak_rss_bytes": 18481152,
         "batch_elapsed_ns": [
-          149452500,
-          147479792,
-          148035000,
-          147888834,
-          149245125,
-          149212916,
-          148500250
+          143261125,
+          143248750,
+          143328792,
+          142116416,
+          144568209,
+          142490750,
+          142701125
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/go-compare",
             "encoding-json"
           ],
-          "measured_at": "2026-11-17T07:01:00+00:00",
+          "measured_at": "2026-11-17T07:31:24+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 901625,
+            "elapsed_ns": 940875,
             "successes": 1,
             "checksum": 66362,
-            "peak_rss_bytes": 13369344
+            "peak_rss_bytes": 13549568
           },
           "warmup": {
-            "iterations": 222,
-            "elapsed_ns": 149716959,
-            "successes": 222,
-            "checksum": 14732364,
-            "peak_rss_bytes": 19283968
+            "iterations": 213,
+            "elapsed_ns": 142714458,
+            "successes": 213,
+            "checksum": 14135106,
+            "peak_rss_bytes": 18137088
           },
           "batches": [
             {
-              "iterations": 222,
-              "elapsed_ns": 149452500,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 18579456
+              "iterations": 213,
+              "elapsed_ns": 143261125,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 17825792
             },
             {
-              "iterations": 222,
-              "elapsed_ns": 147479792,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 18333696
+              "iterations": 213,
+              "elapsed_ns": 143248750,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 18153472
             },
             {
-              "iterations": 222,
-              "elapsed_ns": 148035000,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 18432000
+              "iterations": 213,
+              "elapsed_ns": 143328792,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 18202624
             },
             {
-              "iterations": 222,
-              "elapsed_ns": 147888834,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 18006016
+              "iterations": 213,
+              "elapsed_ns": 142116416,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 18153472
             },
             {
-              "iterations": 222,
-              "elapsed_ns": 149245125,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 18726912
+              "iterations": 213,
+              "elapsed_ns": 144568209,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 18481152
             },
             {
-              "iterations": 222,
-              "elapsed_ns": 149212916,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 17989632
+              "iterations": 213,
+              "elapsed_ns": 142490750,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 18055168
             },
             {
-              "iterations": 222,
-              "elapsed_ns": 148500250,
-              "successes": 222,
-              "checksum": 14732364,
-              "peak_rss_bytes": 18317312
+              "iterations": 213,
+              "elapsed_ns": 142701125,
+              "successes": 213,
+              "checksum": 14135106,
+              "peak_rss_bytes": 17924096
             }
           ]
         },
@@ -562,10 +562,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:00+00:00"
+            "measured_at": "2026-11-17T07:31:24+00:00"
           }
         }
       },
@@ -577,24 +577,24 @@
         "kind": "medium",
         "bytes": 65662,
         "workload": "collect",
-        "median_ns": 1246891.6083916083,
-        "min_ns": 1240591.4965034965,
-        "max_ns": 1257592.944055944,
-        "stdev_ns": 5553.016569144385,
-        "spread_pct": 1.3635064538110064,
-        "mb_per_s": 52.660551693582086,
-        "iterations": 143,
+        "median_ns": 1244918.3070866142,
+        "min_ns": 1236277.2283464568,
+        "max_ns": 1255175.1968503937,
+        "stdev_ns": 6939.872220141127,
+        "spread_pct": 1.5180087236537105,
+        "mb_per_s": 52.744023142902996,
+        "iterations": 127,
         "accepted": true,
-        "checksum": 8705411,
+        "checksum": 7731379,
         "peak_rss_bytes": 18923520,
         "batch_elapsed_ns": [
-          178042959,
-          177746500,
-          178820875,
-          179835791,
-          177404584,
-          178379333,
-          178305500
+          158995625,
+          159094917,
+          157007208,
+          157852833,
+          157659958,
+          159407250,
+          158104625
         ],
         "receipts": {
           "command": [
@@ -602,70 +602,70 @@
             "/private/tmp/roc-parser-streaming-integration/scripts/bench_python.py",
             "json"
           ],
-          "measured_at": "2026-11-17T07:01:02+00:00",
+          "measured_at": "2026-11-17T07:31:25+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 1407666,
+            "elapsed_ns": 1582666,
             "successes": 1,
             "checksum": 60877,
             "peak_rss_bytes": 18825216
           },
           "warmup": {
-            "iterations": 143,
-            "elapsed_ns": 177389917,
-            "successes": 143,
-            "checksum": 8705411,
-            "peak_rss_bytes": 18923520
+            "iterations": 127,
+            "elapsed_ns": 158115625,
+            "successes": 127,
+            "checksum": 7731379,
+            "peak_rss_bytes": 18841600
           },
           "batches": [
             {
-              "iterations": 143,
-              "elapsed_ns": 178042959,
-              "successes": 143,
-              "checksum": 8705411,
+              "iterations": 127,
+              "elapsed_ns": 158995625,
+              "successes": 127,
+              "checksum": 7731379,
+              "peak_rss_bytes": 18907136
+            },
+            {
+              "iterations": 127,
+              "elapsed_ns": 159094917,
+              "successes": 127,
+              "checksum": 7731379,
+              "peak_rss_bytes": 18907136
+            },
+            {
+              "iterations": 127,
+              "elapsed_ns": 157007208,
+              "successes": 127,
+              "checksum": 7731379,
+              "peak_rss_bytes": 18907136
+            },
+            {
+              "iterations": 127,
+              "elapsed_ns": 157852833,
+              "successes": 127,
+              "checksum": 7731379,
               "peak_rss_bytes": 18874368
             },
             {
-              "iterations": 143,
-              "elapsed_ns": 177746500,
-              "successes": 143,
-              "checksum": 8705411,
+              "iterations": 127,
+              "elapsed_ns": 157659958,
+              "successes": 127,
+              "checksum": 7731379,
+              "peak_rss_bytes": 18841600
+            },
+            {
+              "iterations": 127,
+              "elapsed_ns": 159407250,
+              "successes": 127,
+              "checksum": 7731379,
               "peak_rss_bytes": 18857984
             },
             {
-              "iterations": 143,
-              "elapsed_ns": 178820875,
-              "successes": 143,
-              "checksum": 8705411,
-              "peak_rss_bytes": 18857984
-            },
-            {
-              "iterations": 143,
-              "elapsed_ns": 179835791,
-              "successes": 143,
-              "checksum": 8705411,
-              "peak_rss_bytes": 18857984
-            },
-            {
-              "iterations": 143,
-              "elapsed_ns": 177404584,
-              "successes": 143,
-              "checksum": 8705411,
-              "peak_rss_bytes": 18825216
-            },
-            {
-              "iterations": 143,
-              "elapsed_ns": 178379333,
-              "successes": 143,
-              "checksum": 8705411,
+              "iterations": 127,
+              "elapsed_ns": 158104625,
+              "successes": 127,
+              "checksum": 7731379,
               "peak_rss_bytes": 18923520
-            },
-            {
-              "iterations": 143,
-              "elapsed_ns": 178305500,
-              "successes": 143,
-              "checksum": 8705411,
-              "peak_rss_bytes": 18857984
             }
           ]
         },
@@ -675,10 +675,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:02+00:00"
+            "measured_at": "2026-11-17T07:31:25+00:00"
           }
         }
       },
@@ -690,93 +690,93 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "collect",
-        "median_ns": 365042.15764705883,
-        "min_ns": 364016.4705882353,
-        "max_ns": 366423.1364705882,
-        "stdev_ns": 790.35757041515,
-        "spread_pct": 0.659284368102985,
-        "mb_per_s": 179.73266546225892,
-        "iterations": 425,
+        "median_ns": 365482.83101851854,
+        "min_ns": 364663.4837962963,
+        "max_ns": 366581.6921296296,
+        "stdev_ns": 661.7053028838725,
+        "spread_pct": 0.5248422553770031,
+        "mb_per_s": 179.51595651472786,
+        "iterations": 432,
         "accepted": true,
-        "checksum": 20606975,
-        "peak_rss_bytes": 4489216,
+        "checksum": 20946384,
+        "peak_rss_bytes": 4292608,
         "batch_elapsed_ns": [
-          155729833,
-          155328000,
-          154830625,
-          155125250,
-          155254083,
-          154707000,
-          155142917
+          158108084,
+          157815958,
+          157622792,
+          158023584,
+          157534625,
+          157888583,
+          158363291
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/roc-xml"
           ],
-          "measured_at": "2026-11-17T07:01:03+00:00",
+          "measured_at": "2026-11-17T07:31:27+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 471208,
+            "elapsed_ns": 463042,
             "successes": 1,
             "checksum": 48487,
             "peak_rss_bytes": 2981888
           },
           "warmup": {
-            "iterations": 425,
-            "elapsed_ns": 155932583,
-            "successes": 425,
-            "checksum": 20606975,
-            "peak_rss_bytes": 2981888
+            "iterations": 432,
+            "elapsed_ns": 157597875,
+            "successes": 432,
+            "checksum": 20946384,
+            "peak_rss_bytes": 2932736
           },
           "batches": [
             {
-              "iterations": 425,
-              "elapsed_ns": 155729833,
-              "successes": 425,
-              "checksum": 20606975,
-              "peak_rss_bytes": 4489216
-            },
-            {
-              "iterations": 425,
-              "elapsed_ns": 155328000,
-              "successes": 425,
-              "checksum": 20606975,
-              "peak_rss_bytes": 4096000
-            },
-            {
-              "iterations": 425,
-              "elapsed_ns": 154830625,
-              "successes": 425,
-              "checksum": 20606975,
-              "peak_rss_bytes": 3915776
-            },
-            {
-              "iterations": 425,
-              "elapsed_ns": 155125250,
-              "successes": 425,
-              "checksum": 20606975,
-              "peak_rss_bytes": 3145728
-            },
-            {
-              "iterations": 425,
-              "elapsed_ns": 155254083,
-              "successes": 425,
-              "checksum": 20606975,
+              "iterations": 432,
+              "elapsed_ns": 158108084,
+              "successes": 432,
+              "checksum": 20946384,
               "peak_rss_bytes": 3522560
             },
             {
-              "iterations": 425,
-              "elapsed_ns": 154707000,
-              "successes": 425,
-              "checksum": 20606975,
+              "iterations": 432,
+              "elapsed_ns": 157815958,
+              "successes": 432,
+              "checksum": 20946384,
+              "peak_rss_bytes": 3522560
+            },
+            {
+              "iterations": 432,
+              "elapsed_ns": 157622792,
+              "successes": 432,
+              "checksum": 20946384,
+              "peak_rss_bytes": 3522560
+            },
+            {
+              "iterations": 432,
+              "elapsed_ns": 158023584,
+              "successes": 432,
+              "checksum": 20946384,
+              "peak_rss_bytes": 4096000
+            },
+            {
+              "iterations": 432,
+              "elapsed_ns": 157534625,
+              "successes": 432,
+              "checksum": 20946384,
+              "peak_rss_bytes": 3522560
+            },
+            {
+              "iterations": 432,
+              "elapsed_ns": 157888583,
+              "successes": 432,
+              "checksum": 20946384,
               "peak_rss_bytes": 2965504
             },
             {
-              "iterations": 425,
-              "elapsed_ns": 155142917,
-              "successes": 425,
-              "checksum": 20606975,
-              "peak_rss_bytes": 2932736
+              "iterations": 432,
+              "elapsed_ns": 158363291,
+              "successes": 432,
+              "checksum": 20946384,
+              "peak_rss_bytes": 4292608
             }
           ]
         }
@@ -789,94 +789,94 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "collect",
-        "median_ns": 398945.5818965517,
-        "min_ns": 397660.2025862069,
-        "max_ns": 399588.1853448276,
-        "stdev_ns": 762.9485922732378,
-        "spread_pct": 0.4832696102198294,
-        "mb_per_s": 164.45852010215506,
+        "median_ns": 397697.0172413793,
+        "min_ns": 397404.275862069,
+        "max_ns": 400725.9310344828,
+        "stdev_ns": 1179.6944155222118,
+        "spread_pct": 0.8352225509395115,
+        "mb_per_s": 164.9748355044325,
         "iterations": 232,
         "accepted": true,
         "checksum": 11621576,
         "peak_rss_bytes": 7815168,
         "batch_elapsed_ns": [
-          92419000,
-          92671875,
-          92649166,
-          92335625,
-          92555375,
-          92257167,
-          92704459
+          92197792,
+          92405917,
+          92225041,
+          92968416,
+          92245375,
+          92513708,
+          92265708
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
             "quick-xml"
           ],
-          "measured_at": "2026-11-17T07:01:04+00:00",
+          "measured_at": "2026-11-17T07:31:28+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 864208,
+            "elapsed_ns": 863417,
             "successes": 1,
             "checksum": 50093,
-            "peak_rss_bytes": 7602176
+            "peak_rss_bytes": 7585792
           },
           "warmup": {
             "iterations": 232,
-            "elapsed_ns": 92383750,
+            "elapsed_ns": 92336750,
             "successes": 232,
             "checksum": 11621576,
-            "peak_rss_bytes": 7733248
+            "peak_rss_bytes": 7798784
           },
           "batches": [
             {
               "iterations": 232,
-              "elapsed_ns": 92419000,
-              "successes": 232,
-              "checksum": 11621576,
-              "peak_rss_bytes": 7815168
-            },
-            {
-              "iterations": 232,
-              "elapsed_ns": 92671875,
-              "successes": 232,
-              "checksum": 11621576,
-              "peak_rss_bytes": 7749632
-            },
-            {
-              "iterations": 232,
-              "elapsed_ns": 92649166,
-              "successes": 232,
-              "checksum": 11621576,
-              "peak_rss_bytes": 7749632
-            },
-            {
-              "iterations": 232,
-              "elapsed_ns": 92335625,
-              "successes": 232,
-              "checksum": 11621576,
-              "peak_rss_bytes": 7782400
-            },
-            {
-              "iterations": 232,
-              "elapsed_ns": 92555375,
-              "successes": 232,
-              "checksum": 11621576,
-              "peak_rss_bytes": 7782400
-            },
-            {
-              "iterations": 232,
-              "elapsed_ns": 92257167,
+              "elapsed_ns": 92197792,
               "successes": 232,
               "checksum": 11621576,
               "peak_rss_bytes": 7798784
             },
             {
               "iterations": 232,
-              "elapsed_ns": 92704459,
+              "elapsed_ns": 92405917,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7815168
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92225041,
               "successes": 232,
               "checksum": 11621576,
               "peak_rss_bytes": 7782400
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92968416,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7749632
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92245375,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7782400
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92513708,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7749632
+            },
+            {
+              "iterations": 232,
+              "elapsed_ns": 92265708,
+              "successes": 232,
+              "checksum": 11621576,
+              "peak_rss_bytes": 7766016
             }
           ]
         },
@@ -886,10 +886,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:04+00:00"
+            "measured_at": "2026-11-17T07:31:28+00:00"
           }
         }
       },
@@ -901,94 +901,94 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "collect-borrowed",
-        "median_ns": 269078.0,
-        "min_ns": 268709.8214285714,
-        "max_ns": 270243.4285714286,
-        "stdev_ns": 586.559595353266,
-        "spread_pct": 0.569948915502999,
-        "mb_per_s": 243.832643322754,
-        "iterations": 336,
+        "median_ns": 269186.9596541787,
+        "min_ns": 268740.0345821326,
+        "max_ns": 270816.16426512966,
+        "stdev_ns": 743.7003096588907,
+        "spread_pct": 0.7712593825734524,
+        "mb_per_s": 243.73394641511754,
+        "iterations": 347,
         "accepted": true,
-        "checksum": 24808560,
+        "checksum": 25620745,
         "peak_rss_bytes": 7405568,
         "batch_elapsed_ns": [
-          90408334,
-          90692500,
-          90410208,
-          90801792,
-          90430417,
-          90286500,
-          90293916
+          93376375,
+          93289666,
+          93407875,
+          93647958,
+          93252792,
+          93662417,
+          93973209
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
             "roxmltree"
           ],
-          "measured_at": "2026-11-17T07:01:05+00:00",
+          "measured_at": "2026-11-17T07:31:28+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 596209,
+            "elapsed_ns": 577833,
             "successes": 1,
             "checksum": 73835,
-            "peak_rss_bytes": 7192576
+            "peak_rss_bytes": 7241728
           },
           "warmup": {
-            "iterations": 336,
-            "elapsed_ns": 91402916,
-            "successes": 336,
-            "checksum": 24808560,
-            "peak_rss_bytes": 7421952
+            "iterations": 347,
+            "elapsed_ns": 93376792,
+            "successes": 347,
+            "checksum": 25620745,
+            "peak_rss_bytes": 7405568
           },
           "batches": [
             {
-              "iterations": 336,
-              "elapsed_ns": 90408334,
-              "successes": 336,
-              "checksum": 24808560,
-              "peak_rss_bytes": 7356416
-            },
-            {
-              "iterations": 336,
-              "elapsed_ns": 90692500,
-              "successes": 336,
-              "checksum": 24808560,
-              "peak_rss_bytes": 7389184
-            },
-            {
-              "iterations": 336,
-              "elapsed_ns": 90410208,
-              "successes": 336,
-              "checksum": 24808560,
-              "peak_rss_bytes": 7340032
-            },
-            {
-              "iterations": 336,
-              "elapsed_ns": 90801792,
-              "successes": 336,
-              "checksum": 24808560,
-              "peak_rss_bytes": 7389184
-            },
-            {
-              "iterations": 336,
-              "elapsed_ns": 90430417,
-              "successes": 336,
-              "checksum": 24808560,
+              "iterations": 347,
+              "elapsed_ns": 93376375,
+              "successes": 347,
+              "checksum": 25620745,
               "peak_rss_bytes": 7372800
             },
             {
-              "iterations": 336,
-              "elapsed_ns": 90286500,
-              "successes": 336,
-              "checksum": 24808560,
+              "iterations": 347,
+              "elapsed_ns": 93289666,
+              "successes": 347,
+              "checksum": 25620745,
+              "peak_rss_bytes": 7356416
+            },
+            {
+              "iterations": 347,
+              "elapsed_ns": 93407875,
+              "successes": 347,
+              "checksum": 25620745,
+              "peak_rss_bytes": 7372800
+            },
+            {
+              "iterations": 347,
+              "elapsed_ns": 93647958,
+              "successes": 347,
+              "checksum": 25620745,
               "peak_rss_bytes": 7405568
             },
             {
-              "iterations": 336,
-              "elapsed_ns": 90293916,
-              "successes": 336,
-              "checksum": 24808560,
+              "iterations": 347,
+              "elapsed_ns": 93252792,
+              "successes": 347,
+              "checksum": 25620745,
               "peak_rss_bytes": 7356416
+            },
+            {
+              "iterations": 347,
+              "elapsed_ns": 93662417,
+              "successes": 347,
+              "checksum": 25620745,
+              "peak_rss_bytes": 7389184
+            },
+            {
+              "iterations": 347,
+              "elapsed_ns": 93973209,
+              "successes": 347,
+              "checksum": 25620745,
+              "peak_rss_bytes": 7405568
             }
           ]
         },
@@ -998,10 +998,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:05+00:00"
+            "measured_at": "2026-11-17T07:31:28+00:00"
           }
         }
       },
@@ -1013,94 +1013,94 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "collect",
-        "median_ns": 1151930.7953216375,
-        "min_ns": 1143530.9415204679,
-        "max_ns": 1161214.6725146198,
-        "stdev_ns": 5656.165984741071,
-        "spread_pct": 1.5351383143823605,
-        "mb_per_s": 56.95654657941551,
-        "iterations": 171,
+        "median_ns": 1154665.6419753085,
+        "min_ns": 1144308.12345679,
+        "max_ns": 1313910.2345679011,
+        "stdev_ns": 60749.60118657093,
+        "spread_pct": 14.688417576967947,
+        "mb_per_s": 56.82164395899035,
+        "iterations": 162,
         "accepted": true,
-        "checksum": 7883100,
-        "peak_rss_bytes": 19202048,
+        "checksum": 7468200,
+        "peak_rss_bytes": 19365888,
         "batch_elapsed_ns": [
-          197641833,
-          196800208,
-          195543791,
-          196980166,
-          197184875,
-          198567709,
-          196259541
+          187055834,
+          185377916,
+          212853458,
+          188249625,
+          185610667,
+          189154125,
+          186897334
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/go-compare",
             "encoding-xml"
           ],
-          "measured_at": "2026-11-17T07:01:06+00:00",
+          "measured_at": "2026-11-17T07:31:30+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 1172750,
+            "elapsed_ns": 1237708,
             "successes": 1,
             "checksum": 46100,
-            "peak_rss_bytes": 13254656
+            "peak_rss_bytes": 13271040
           },
           "warmup": {
-            "iterations": 171,
-            "elapsed_ns": 196556709,
-            "successes": 171,
-            "checksum": 7883100,
-            "peak_rss_bytes": 18694144
+            "iterations": 162,
+            "elapsed_ns": 205286416,
+            "successes": 162,
+            "checksum": 7468200,
+            "peak_rss_bytes": 19120128
           },
           "batches": [
             {
-              "iterations": 171,
-              "elapsed_ns": 197641833,
-              "successes": 171,
-              "checksum": 7883100,
-              "peak_rss_bytes": 18497536
+              "iterations": 162,
+              "elapsed_ns": 187055834,
+              "successes": 162,
+              "checksum": 7468200,
+              "peak_rss_bytes": 19234816
             },
             {
-              "iterations": 171,
-              "elapsed_ns": 196800208,
-              "successes": 171,
-              "checksum": 7883100,
-              "peak_rss_bytes": 18579456
-            },
-            {
-              "iterations": 171,
-              "elapsed_ns": 195543791,
-              "successes": 171,
-              "checksum": 7883100,
-              "peak_rss_bytes": 18890752
-            },
-            {
-              "iterations": 171,
-              "elapsed_ns": 196980166,
-              "successes": 171,
-              "checksum": 7883100,
-              "peak_rss_bytes": 18841600
-            },
-            {
-              "iterations": 171,
-              "elapsed_ns": 197184875,
-              "successes": 171,
-              "checksum": 7883100,
-              "peak_rss_bytes": 18776064
-            },
-            {
-              "iterations": 171,
-              "elapsed_ns": 198567709,
-              "successes": 171,
-              "checksum": 7883100,
+              "iterations": 162,
+              "elapsed_ns": 185377916,
+              "successes": 162,
+              "checksum": 7468200,
               "peak_rss_bytes": 18628608
             },
             {
-              "iterations": 171,
-              "elapsed_ns": 196259541,
-              "successes": 171,
-              "checksum": 7883100,
-              "peak_rss_bytes": 19202048
+              "iterations": 162,
+              "elapsed_ns": 212853458,
+              "successes": 162,
+              "checksum": 7468200,
+              "peak_rss_bytes": 19365888
+            },
+            {
+              "iterations": 162,
+              "elapsed_ns": 188249625,
+              "successes": 162,
+              "checksum": 7468200,
+              "peak_rss_bytes": 18743296
+            },
+            {
+              "iterations": 162,
+              "elapsed_ns": 185610667,
+              "successes": 162,
+              "checksum": 7468200,
+              "peak_rss_bytes": 18939904
+            },
+            {
+              "iterations": 162,
+              "elapsed_ns": 189154125,
+              "successes": 162,
+              "checksum": 7468200,
+              "peak_rss_bytes": 18644992
+            },
+            {
+              "iterations": 162,
+              "elapsed_ns": 186897334,
+              "successes": 162,
+              "checksum": 7468200,
+              "peak_rss_bytes": 18776064
             }
           ]
         },
@@ -1110,10 +1110,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:06+00:00"
+            "measured_at": "2026-11-17T07:31:30+00:00"
           }
         }
       },
@@ -1125,24 +1125,24 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "collect",
-        "median_ns": 1910044.1176470588,
-        "min_ns": 1906011.2705882352,
-        "max_ns": 1921610.294117647,
-        "stdev_ns": 5282.461480222191,
-        "spread_pct": 0.8166839386216823,
-        "mb_per_s": 34.34999191580115,
-        "iterations": 85,
+        "median_ns": 1924332.03125,
+        "min_ns": 1906806.8541666667,
+        "max_ns": 1943265.1875,
+        "stdev_ns": 11197.645119715995,
+        "spread_pct": 1.8945968128821717,
+        "mb_per_s": 34.09494771927759,
+        "iterations": 96,
         "accepted": true,
-        "checksum": 3813525,
-        "peak_rss_bytes": 19365888,
+        "checksum": 4307040,
+        "peak_rss_bytes": 19316736,
         "batch_elapsed_ns": [
-          162353750,
-          162010958,
-          162159583,
-          163336875,
-          162733166,
-          162426625,
-          162211292
+          186553458,
+          183053458,
+          184735875,
+          184418541,
+          184786000,
+          184060875,
+          185239458
         ],
         "receipts": {
           "command": [
@@ -1150,70 +1150,70 @@
             "/private/tmp/roc-parser-streaming-integration/scripts/bench_python.py",
             "etree"
           ],
-          "measured_at": "2026-11-17T07:01:08+00:00",
+          "measured_at": "2026-11-17T07:31:32+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 2361750,
+            "elapsed_ns": 2102916,
             "successes": 1,
             "checksum": 44865,
-            "peak_rss_bytes": 19251200
+            "peak_rss_bytes": 19218432
           },
           "warmup": {
-            "iterations": 85,
-            "elapsed_ns": 164579750,
-            "successes": 85,
-            "checksum": 3813525,
+            "iterations": 96,
+            "elapsed_ns": 184112750,
+            "successes": 96,
+            "checksum": 4307040,
             "peak_rss_bytes": 19316736
           },
           "batches": [
             {
-              "iterations": 85,
-              "elapsed_ns": 162353750,
-              "successes": 85,
-              "checksum": 3813525,
-              "peak_rss_bytes": 19300352
-            },
-            {
-              "iterations": 85,
-              "elapsed_ns": 162010958,
-              "successes": 85,
-              "checksum": 3813525,
+              "iterations": 96,
+              "elapsed_ns": 186553458,
+              "successes": 96,
+              "checksum": 4307040,
               "peak_rss_bytes": 19316736
             },
             {
-              "iterations": 85,
-              "elapsed_ns": 162159583,
-              "successes": 85,
-              "checksum": 3813525,
-              "peak_rss_bytes": 19333120
+              "iterations": 96,
+              "elapsed_ns": 183053458,
+              "successes": 96,
+              "checksum": 4307040,
+              "peak_rss_bytes": 19316736
             },
             {
-              "iterations": 85,
-              "elapsed_ns": 163336875,
-              "successes": 85,
-              "checksum": 3813525,
-              "peak_rss_bytes": 19333120
+              "iterations": 96,
+              "elapsed_ns": 184735875,
+              "successes": 96,
+              "checksum": 4307040,
+              "peak_rss_bytes": 19316736
             },
             {
-              "iterations": 85,
-              "elapsed_ns": 162733166,
-              "successes": 85,
-              "checksum": 3813525,
-              "peak_rss_bytes": 19300352
-            },
-            {
-              "iterations": 85,
-              "elapsed_ns": 162426625,
-              "successes": 85,
-              "checksum": 3813525,
+              "iterations": 96,
+              "elapsed_ns": 184418541,
+              "successes": 96,
+              "checksum": 4307040,
               "peak_rss_bytes": 19218432
             },
             {
-              "iterations": 85,
-              "elapsed_ns": 162211292,
-              "successes": 85,
-              "checksum": 3813525,
-              "peak_rss_bytes": 19365888
+              "iterations": 96,
+              "elapsed_ns": 184786000,
+              "successes": 96,
+              "checksum": 4307040,
+              "peak_rss_bytes": 19300352
+            },
+            {
+              "iterations": 96,
+              "elapsed_ns": 184060875,
+              "successes": 96,
+              "checksum": 4307040,
+              "peak_rss_bytes": 19251200
+            },
+            {
+              "iterations": 96,
+              "elapsed_ns": 185239458,
+              "successes": 96,
+              "checksum": 4307040,
+              "peak_rss_bytes": 19283968
             }
           ]
         },
@@ -1223,10 +1223,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:08+00:00"
+            "measured_at": "2026-11-17T07:31:32+00:00"
           }
         }
       },
@@ -1238,93 +1238,93 @@
         "kind": "sample",
         "bytes": 555,
         "workload": "collect",
-        "median_ns": 824.4706342117016,
-        "min_ns": 802.7626172398392,
-        "max_ns": 844.9223983921394,
-        "stdev_ns": 13.710894642388675,
-        "spread_pct": 5.113557645701993,
-        "mb_per_s": 673.1592090367783,
-        "iterations": 8956,
+        "median_ns": 822.6196685352181,
+        "min_ns": 814.7899098220814,
+        "max_ns": 843.4173775286375,
+        "stdev_ns": 9.437181592525295,
+        "spread_pct": 3.4800368629078675,
+        "mb_per_s": 674.6738757027899,
+        "iterations": 8206,
         "accepted": true,
-        "checksum": 447800,
-        "peak_rss_bytes": 2179072,
+        "checksum": 410300,
+        "peak_rss_bytes": 2048000,
         "batch_elapsed_ns": [
-          7383167,
-          7189542,
-          7409375,
-          7479375,
-          7383959,
-          7567125,
-          7287042
+          6686166,
+          6921083,
+          6777667,
+          6729458,
+          6711959,
+          6796708,
+          6750417
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/roc-http"
           ],
-          "measured_at": "2026-11-17T07:01:08+00:00",
+          "measured_at": "2026-11-17T07:31:32+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 22333,
+            "elapsed_ns": 24375,
             "successes": 1,
             "checksum": 50,
-            "peak_rss_bytes": 2031616
+            "peak_rss_bytes": 2015232
           },
           "warmup": {
-            "iterations": 8956,
-            "elapsed_ns": 7332125,
-            "successes": 8956,
-            "checksum": 447800,
-            "peak_rss_bytes": 2048000
+            "iterations": 8206,
+            "elapsed_ns": 6892167,
+            "successes": 8206,
+            "checksum": 410300,
+            "peak_rss_bytes": 2031616
           },
           "batches": [
             {
-              "iterations": 8956,
-              "elapsed_ns": 7383167,
-              "successes": 8956,
-              "checksum": 447800,
+              "iterations": 8206,
+              "elapsed_ns": 6686166,
+              "successes": 8206,
+              "checksum": 410300,
+              "peak_rss_bytes": 2031616
+            },
+            {
+              "iterations": 8206,
+              "elapsed_ns": 6921083,
+              "successes": 8206,
+              "checksum": 410300,
               "peak_rss_bytes": 2048000
             },
             {
-              "iterations": 8956,
-              "elapsed_ns": 7189542,
-              "successes": 8956,
-              "checksum": 447800,
-              "peak_rss_bytes": 2064384
-            },
-            {
-              "iterations": 8956,
-              "elapsed_ns": 7409375,
-              "successes": 8956,
-              "checksum": 447800,
+              "iterations": 8206,
+              "elapsed_ns": 6777667,
+              "successes": 8206,
+              "checksum": 410300,
               "peak_rss_bytes": 2048000
             },
             {
-              "iterations": 8956,
-              "elapsed_ns": 7479375,
-              "successes": 8956,
-              "checksum": 447800,
+              "iterations": 8206,
+              "elapsed_ns": 6729458,
+              "successes": 8206,
+              "checksum": 410300,
               "peak_rss_bytes": 2048000
             },
             {
-              "iterations": 8956,
-              "elapsed_ns": 7383959,
-              "successes": 8956,
-              "checksum": 447800,
+              "iterations": 8206,
+              "elapsed_ns": 6711959,
+              "successes": 8206,
+              "checksum": 410300,
               "peak_rss_bytes": 2048000
             },
             {
-              "iterations": 8956,
-              "elapsed_ns": 7567125,
-              "successes": 8956,
-              "checksum": 447800,
+              "iterations": 8206,
+              "elapsed_ns": 6796708,
+              "successes": 8206,
+              "checksum": 410300,
               "peak_rss_bytes": 2048000
             },
             {
-              "iterations": 8956,
-              "elapsed_ns": 7287042,
-              "successes": 8956,
-              "checksum": 447800,
-              "peak_rss_bytes": 2179072
+              "iterations": 8206,
+              "elapsed_ns": 6750417,
+              "successes": 8206,
+              "checksum": 410300,
+              "peak_rss_bytes": 2048000
             }
           ]
         }
@@ -1337,93 +1337,93 @@
         "kind": "sample",
         "bytes": 555,
         "workload": "collect",
-        "median_ns": 750.1842051974351,
-        "min_ns": 746.3887951400608,
-        "max_ns": 754.2861964225447,
-        "stdev_ns": 2.9577177643619983,
-        "spread_pct": 1.0527282803035594,
-        "mb_per_s": 739.8182954997486,
-        "iterations": 29630,
+        "median_ns": 748.1890910219794,
+        "min_ns": 742.1483919036384,
+        "max_ns": 754.9994412020366,
+        "stdev_ns": 4.185098939568962,
+        "spread_pct": 1.7176205123285646,
+        "mb_per_s": 741.7910881885552,
+        "iterations": 32212,
         "accepted": true,
-        "checksum": 414820,
+        "checksum": 450968,
         "peak_rss_bytes": 6455296,
         "batch_elapsed_ns": [
-          22285709,
-          22115500,
-          22349500,
-          22147958,
-          22227958,
-          22149958,
-          22283000
+          24320042,
+          24111208,
+          23906084,
+          23993000,
+          24127417,
+          23979875,
+          24100667
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/rust-target/release/compare",
             "httparse"
           ],
-          "measured_at": "2026-11-17T07:01:08+00:00",
+          "measured_at": "2026-11-17T07:31:32+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 6750,
+            "elapsed_ns": 6209,
             "successes": 1,
             "checksum": 14,
             "peak_rss_bytes": 6209536
           },
           "warmup": {
-            "iterations": 29630,
-            "elapsed_ns": 22375333,
-            "successes": 29630,
-            "checksum": 414820,
+            "iterations": 32212,
+            "elapsed_ns": 24082875,
+            "successes": 32212,
+            "checksum": 450968,
             "peak_rss_bytes": 6455296
           },
           "batches": [
             {
-              "iterations": 29630,
-              "elapsed_ns": 22285709,
-              "successes": 29630,
-              "checksum": 414820,
+              "iterations": 32212,
+              "elapsed_ns": 24320042,
+              "successes": 32212,
+              "checksum": 450968,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 32212,
+              "elapsed_ns": 24111208,
+              "successes": 32212,
+              "checksum": 450968,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 32212,
+              "elapsed_ns": 23906084,
+              "successes": 32212,
+              "checksum": 450968,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 32212,
+              "elapsed_ns": 23993000,
+              "successes": 32212,
+              "checksum": 450968,
+              "peak_rss_bytes": 6455296
+            },
+            {
+              "iterations": 32212,
+              "elapsed_ns": 24127417,
+              "successes": 32212,
+              "checksum": 450968,
+              "peak_rss_bytes": 6422528
+            },
+            {
+              "iterations": 32212,
+              "elapsed_ns": 23979875,
+              "successes": 32212,
+              "checksum": 450968,
               "peak_rss_bytes": 6438912
             },
             {
-              "iterations": 29630,
-              "elapsed_ns": 22115500,
-              "successes": 29630,
-              "checksum": 414820,
-              "peak_rss_bytes": 6455296
-            },
-            {
-              "iterations": 29630,
-              "elapsed_ns": 22349500,
-              "successes": 29630,
-              "checksum": 414820,
-              "peak_rss_bytes": 6455296
-            },
-            {
-              "iterations": 29630,
-              "elapsed_ns": 22147958,
-              "successes": 29630,
-              "checksum": 414820,
-              "peak_rss_bytes": 6422528
-            },
-            {
-              "iterations": 29630,
-              "elapsed_ns": 22227958,
-              "successes": 29630,
-              "checksum": 414820,
-              "peak_rss_bytes": 6455296
-            },
-            {
-              "iterations": 29630,
-              "elapsed_ns": 22149958,
-              "successes": 29630,
-              "checksum": 414820,
-              "peak_rss_bytes": 6422528
-            },
-            {
-              "iterations": 29630,
-              "elapsed_ns": 22283000,
-              "successes": 29630,
-              "checksum": 414820,
+              "iterations": 32212,
+              "elapsed_ns": 24100667,
+              "successes": 32212,
+              "checksum": 450968,
               "peak_rss_bytes": 6422528
             }
           ]
@@ -1434,10 +1434,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:08+00:00"
+            "measured_at": "2026-11-17T07:31:32+00:00"
           }
         }
       },
@@ -1449,94 +1449,94 @@
         "kind": "sample",
         "bytes": 555,
         "workload": "collect",
-        "median_ns": 2665.560351848835,
-        "min_ns": 2546.9605798990065,
-        "max_ns": 2899.3593419123636,
-        "stdev_ns": 121.70383911894015,
-        "spread_pct": 13.220438313052377,
-        "mb_per_s": 208.2113802507047,
-        "iterations": 6139,
+        "median_ns": 2923.876021798365,
+        "min_ns": 2801.8283378746596,
+        "max_ns": 3413.543596730245,
+        "stdev_ns": 221.5748931511529,
+        "spread_pct": 20.921381559787978,
+        "mb_per_s": 189.81652979206714,
+        "iterations": 734,
         "accepted": true,
-        "checksum": 79807,
-        "peak_rss_bytes": 18399232,
+        "checksum": 9542,
+        "peak_rss_bytes": 16662528,
         "batch_elapsed_ns": [
-          16441000,
-          15695166,
-          17799167,
-          16363875,
-          15802333,
-          16456292,
-          15635791
+          2146125,
+          2325333,
+          2505541,
+          2217291,
+          2079083,
+          2093625,
+          2056542
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/bin/go-compare",
             "net-http"
           ],
-          "measured_at": "2026-11-17T07:01:08+00:00",
+          "measured_at": "2026-11-17T07:31:32+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 32583,
+            "elapsed_ns": 272667,
             "successes": 1,
             "checksum": 13,
-            "peak_rss_bytes": 12075008
+            "peak_rss_bytes": 12337152
           },
           "warmup": {
-            "iterations": 6139,
-            "elapsed_ns": 16686791,
-            "successes": 6139,
-            "checksum": 79807,
-            "peak_rss_bytes": 18219008
+            "iterations": 734,
+            "elapsed_ns": 2508916,
+            "successes": 734,
+            "checksum": 9542,
+            "peak_rss_bytes": 16400384
           },
           "batches": [
             {
-              "iterations": 6139,
-              "elapsed_ns": 16441000,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 17924096
+              "iterations": 734,
+              "elapsed_ns": 2146125,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 16400384
             },
             {
-              "iterations": 6139,
-              "elapsed_ns": 15695166,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 17661952
+              "iterations": 734,
+              "elapsed_ns": 2325333,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 16662528
             },
             {
-              "iterations": 6139,
-              "elapsed_ns": 17799167,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 17645568
+              "iterations": 734,
+              "elapsed_ns": 2505541,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 16465920
             },
             {
-              "iterations": 6139,
-              "elapsed_ns": 16363875,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 18153472
+              "iterations": 734,
+              "elapsed_ns": 2217291,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 15958016
             },
             {
-              "iterations": 6139,
-              "elapsed_ns": 15802333,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 18399232
+              "iterations": 734,
+              "elapsed_ns": 2079083,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 16433152
             },
             {
-              "iterations": 6139,
-              "elapsed_ns": 16456292,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 17874944
+              "iterations": 734,
+              "elapsed_ns": 2093625,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 16515072
             },
             {
-              "iterations": 6139,
-              "elapsed_ns": 15635791,
-              "successes": 6139,
-              "checksum": 79807,
-              "peak_rss_bytes": 17760256
+              "iterations": 734,
+              "elapsed_ns": 2056542,
+              "successes": 734,
+              "checksum": 9542,
+              "peak_rss_bytes": 15958016
             }
           ]
         },
@@ -1546,10 +1546,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:08+00:00"
+            "measured_at": "2026-11-17T07:31:32+00:00"
           }
         }
       },
@@ -1561,24 +1561,24 @@
         "kind": "sample",
         "bytes": 555,
         "workload": "collect",
-        "median_ns": 28093.41782868526,
-        "min_ns": 27981.32470119522,
-        "max_ns": 28321.4437250996,
-        "stdev_ns": 132.83503448408547,
-        "spread_pct": 1.210671574311255,
-        "mb_per_s": 19.755517231275004,
-        "iterations": 2008,
+        "median_ns": 28408.344873501996,
+        "min_ns": 28177.5965379494,
+        "max_ns": 28719.207723035954,
+        "stdev_ns": 209.89808669711616,
+        "spread_pct": 1.9065214376207564,
+        "mb_per_s": 19.536513037677132,
+        "iterations": 751,
         "accepted": true,
-        "checksum": 28112,
+        "checksum": 10514,
         "peak_rss_bytes": 20905984,
         "batch_elapsed_ns": [
-          56794750,
-          56411583,
-          56869459,
-          56703750,
-          56359042,
-          56186500,
-          56304042
+          21474833,
+          21161375,
+          21334667,
+          21432458,
+          21202416,
+          21568125,
+          21200500
         ],
         "receipts": {
           "command": [
@@ -1586,70 +1586,70 @@
             "/private/tmp/roc-parser-streaming-integration/scripts/bench_python.py",
             "h11"
           ],
-          "measured_at": "2026-11-17T07:01:09+00:00",
+          "measured_at": "2026-11-17T07:31:32+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 99625,
+            "elapsed_ns": 266500,
             "successes": 1,
             "checksum": 14,
-            "peak_rss_bytes": 20873216
+            "peak_rss_bytes": 20774912
           },
           "warmup": {
-            "iterations": 2008,
-            "elapsed_ns": 56836500,
-            "successes": 2008,
-            "checksum": 28112,
+            "iterations": 751,
+            "elapsed_ns": 21105167,
+            "successes": 751,
+            "checksum": 10514,
             "peak_rss_bytes": 20856832
           },
           "batches": [
             {
-              "iterations": 2008,
-              "elapsed_ns": 56794750,
-              "successes": 2008,
-              "checksum": 28112,
-              "peak_rss_bytes": 20840448
+              "iterations": 751,
+              "elapsed_ns": 21474833,
+              "successes": 751,
+              "checksum": 10514,
+              "peak_rss_bytes": 20824064
             },
             {
-              "iterations": 2008,
-              "elapsed_ns": 56411583,
-              "successes": 2008,
-              "checksum": 28112,
+              "iterations": 751,
+              "elapsed_ns": 21161375,
+              "successes": 751,
+              "checksum": 10514,
+              "peak_rss_bytes": 20905984
+            },
+            {
+              "iterations": 751,
+              "elapsed_ns": 21334667,
+              "successes": 751,
+              "checksum": 10514,
               "peak_rss_bytes": 20889600
             },
             {
-              "iterations": 2008,
-              "elapsed_ns": 56869459,
-              "successes": 2008,
-              "checksum": 28112,
+              "iterations": 751,
+              "elapsed_ns": 21432458,
+              "successes": 751,
+              "checksum": 10514,
+              "peak_rss_bytes": 20840448
+            },
+            {
+              "iterations": 751,
+              "elapsed_ns": 21202416,
+              "successes": 751,
+              "checksum": 10514,
+              "peak_rss_bytes": 20840448
+            },
+            {
+              "iterations": 751,
+              "elapsed_ns": 21568125,
+              "successes": 751,
+              "checksum": 10514,
               "peak_rss_bytes": 20856832
             },
             {
-              "iterations": 2008,
-              "elapsed_ns": 56703750,
-              "successes": 2008,
-              "checksum": 28112,
-              "peak_rss_bytes": 20840448
-            },
-            {
-              "iterations": 2008,
-              "elapsed_ns": 56359042,
-              "successes": 2008,
-              "checksum": 28112,
-              "peak_rss_bytes": 20873216
-            },
-            {
-              "iterations": 2008,
-              "elapsed_ns": 56186500,
-              "successes": 2008,
-              "checksum": 28112,
-              "peak_rss_bytes": 20840448
-            },
-            {
-              "iterations": 2008,
-              "elapsed_ns": 56304042,
-              "successes": 2008,
-              "checksum": 28112,
-              "peak_rss_bytes": 20905984
+              "iterations": 751,
+              "elapsed_ns": 21200500,
+              "successes": 751,
+              "checksum": 10514,
+              "peak_rss_bytes": 20824064
             }
           ]
         },
@@ -1659,10 +1659,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-whole/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:01:09+00:00"
+            "measured_at": "2026-11-17T07:31:32+00:00"
           }
         }
       }
@@ -1674,9 +1674,9 @@
         "impl": "go/encoding-xml",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.3168959100057162,
-        "impl_mb_per_s": 56.9565465794155,
-        "roc_mb_per_s": 179.73266546225895
+        "speedup_vs_roc": 0.3165269821255616,
+        "impl_mb_per_s": 56.82164395899034,
+        "roc_mb_per_s": 179.51595651472783
       },
       {
         "format": "xml",
@@ -1684,9 +1684,9 @@
         "impl": "python/etree",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.19111713403601704,
-        "impl_mb_per_s": 34.349991915801155,
-        "roc_mb_per_s": 179.73266546225895
+        "speedup_vs_roc": 0.18992711501097326,
+        "impl_mb_per_s": 34.094947719277584,
+        "roc_mb_per_s": 179.51595651472783
       },
       {
         "format": "xml",
@@ -1694,9 +1694,9 @@
         "impl": "rust/quick-xml",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.9150174214530237,
-        "impl_mb_per_s": 164.45852010215515,
-        "roc_mb_per_s": 179.73266546225895
+        "speedup_vs_roc": 0.9189981698974911,
+        "impl_mb_per_s": 164.9748355044325,
+        "roc_mb_per_s": 179.51595651472783
       },
       {
         "format": "json",
@@ -1704,9 +1704,9 @@
         "impl": "go/encoding-json",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.683283455751758,
-        "impl_mb_per_s": 98.16120848281398,
-        "roc_mb_per_s": 143.66103504557364
+        "speedup_vs_roc": 0.6836664691732685,
+        "impl_mb_per_s": 97.6344016963499,
+        "roc_mb_per_s": 142.809990102945
       },
       {
         "format": "json",
@@ -1714,9 +1714,9 @@
         "impl": "python/json",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.3665611324384273,
-        "impl_mb_per_s": 52.66055169358209,
-        "roc_mb_per_s": 143.66103504557364
+        "speedup_vs_roc": 0.3693300665092287,
+        "impl_mb_per_s": 52.74402314290299,
+        "roc_mb_per_s": 142.809990102945
       },
       {
         "format": "json",
@@ -1724,9 +1724,9 @@
         "impl": "rust/serde_json",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 1.0697041163161152,
-        "impl_mb_per_s": 153.67480054248384,
-        "roc_mb_per_s": 143.66103504557364
+        "speedup_vs_roc": 1.0683782643239736,
+        "impl_mb_per_s": 152.57508935430826,
+        "roc_mb_per_s": 142.809990102945
       },
       {
         "format": "http",
@@ -1734,9 +1734,9 @@
         "impl": "go/net-http",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.3093048085142203,
-        "impl_mb_per_s": 208.21138025070476,
-        "roc_mb_per_s": 673.1592090367785
+        "speedup_vs_roc": 0.2813456050811813,
+        "impl_mb_per_s": 189.81652979206712,
+        "roc_mb_per_s": 674.6738757027902
       },
       {
         "format": "http",
@@ -1744,9 +1744,9 @@
         "impl": "python/h11",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 0.029347466343872974,
-        "impl_mb_per_s": 19.755517231275,
-        "roc_mb_per_s": 673.1592090367785
+        "speedup_vs_roc": 0.02895697275565393,
+        "impl_mb_per_s": 19.53651303767713,
+        "roc_mb_per_s": 674.6738757027902
       },
       {
         "format": "http",
@@ -1754,9 +1754,9 @@
         "impl": "rust/httparse",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 1.0990242509767527,
-        "impl_mb_per_s": 739.8182954997487,
-        "roc_mb_per_s": 673.1592090367785
+        "speedup_vs_roc": 1.0994809713298161,
+        "impl_mb_per_s": 741.7910881885555,
+        "roc_mb_per_s": 674.6738757027902
       }
     ],
     "performance_targets": [
@@ -1766,9 +1766,9 @@
         "maximum_slowdown": 1.5,
         "status": "passed",
         "reference": "rust/serde_json",
-        "slowdown": 1.0697041163161152,
-        "roc_ns": 457062.0,
-        "reference_ns": 427278.90173410403,
+        "slowdown": 1.0683782643239736,
+        "roc_ns": 459785.76115485566,
+        "reference_ns": 430358.5878787879,
         "reference_workload": "collect",
         "checksum_equal": false
       },
@@ -1778,9 +1778,9 @@
         "maximum_slowdown": 1.5,
         "status": "passed",
         "reference": "rust/roxmltree",
-        "slowdown": 1.3566406679366534,
-        "roc_ns": 365042.15764705883,
-        "reference_ns": 269078.0,
+        "slowdown": 1.3577285894088258,
+        "roc_ns": 365482.83101851854,
+        "reference_ns": 269186.9596541787,
         "reference_workload": "collect-borrowed",
         "checksum_equal": false
       },
@@ -1790,9 +1790,9 @@
         "maximum_slowdown": 1.5,
         "status": "passed",
         "reference": "rust/httparse",
-        "slowdown": 1.0990242509767527,
-        "roc_ns": 824.4706342117016,
-        "reference_ns": 750.1842051974351,
+        "slowdown": 1.0994809713298161,
+        "roc_ns": 822.6196685352181,
+        "reference_ns": 748.1890910219794,
         "reference_workload": "collect",
         "checksum_equal": false
       }
@@ -1803,7 +1803,7 @@
       "schema": 1,
       "label": "final-streaming",
       "quick": false,
-      "date": "2026-11-17T07:02:50+00:00",
+      "date": "2026-11-17T07:32:27+00:00",
       "machine": {
         "description": "Apple M2 (8 CPUs, arm64)",
         "cpu": "Apple M2",
@@ -1813,7 +1813,7 @@
         "python": "3.13.16"
       },
       "git": {
-        "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+        "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
         "dirty": false
       },
       "environment": {
@@ -1985,24 +1985,24 @@
         "kind": "medium",
         "bytes": 65145,
         "workload": "consume",
-        "median_ns": 606297.4602649007,
-        "min_ns": 600771.9370860927,
-        "max_ns": 609515.4536423841,
-        "stdev_ns": 2767.7758827059274,
-        "spread_pct": 1.4421166389961975,
-        "mb_per_s": 107.44725859735111,
-        "iterations": 302,
+        "median_ns": 605522.2724137931,
+        "min_ns": 600353.1620689655,
+        "max_ns": 608594.1068965517,
+        "stdev_ns": 2783.8971984840773,
+        "spread_pct": 1.3609647742163646,
+        "mb_per_s": 107.5848122651418,
+        "iterations": 290,
         "accepted": true,
-        "checksum": 19936228,
-        "peak_rss_bytes": 3031040,
+        "checksum": 19144060,
+        "peak_rss_bytes": 3014656,
         "batch_elapsed_ns": [
-          181433125,
-          182921083,
-          184073667,
-          183255084,
-          183101833,
-          183534708,
-          182531167
+          175296250,
+          175041583,
+          175601459,
+          176492291,
+          176307208,
+          174102417,
+          175745666
         ],
         "receipts": {
           "command": [
@@ -2010,70 +2010,70 @@
             "array",
             "4096"
           ],
-          "measured_at": "2026-11-17T07:02:52+00:00",
+          "measured_at": "2026-11-17T07:32:28+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 663083,
+            "elapsed_ns": 690458,
             "successes": 1,
             "checksum": 66014,
             "peak_rss_bytes": 2490368
           },
           "warmup": {
-            "iterations": 302,
-            "elapsed_ns": 183966750,
-            "successes": 302,
-            "checksum": 19936228,
-            "peak_rss_bytes": 2867200
+            "iterations": 290,
+            "elapsed_ns": 174975041,
+            "successes": 290,
+            "checksum": 19144060,
+            "peak_rss_bytes": 2457600
           },
           "batches": [
             {
-              "iterations": 302,
-              "elapsed_ns": 181433125,
-              "successes": 302,
-              "checksum": 19936228,
+              "iterations": 290,
+              "elapsed_ns": 175296250,
+              "successes": 290,
+              "checksum": 19144060,
+              "peak_rss_bytes": 2736128
+            },
+            {
+              "iterations": 290,
+              "elapsed_ns": 175041583,
+              "successes": 290,
+              "checksum": 19144060,
+              "peak_rss_bytes": 3014656
+            },
+            {
+              "iterations": 290,
+              "elapsed_ns": 175601459,
+              "successes": 290,
+              "checksum": 19144060,
               "peak_rss_bytes": 2752512
             },
             {
-              "iterations": 302,
-              "elapsed_ns": 182921083,
-              "successes": 302,
-              "checksum": 19936228,
-              "peak_rss_bytes": 2785280
+              "iterations": 290,
+              "elapsed_ns": 176492291,
+              "successes": 290,
+              "checksum": 19144060,
+              "peak_rss_bytes": 2736128
             },
             {
-              "iterations": 302,
-              "elapsed_ns": 184073667,
-              "successes": 302,
-              "checksum": 19936228,
-              "peak_rss_bytes": 3031040
+              "iterations": 290,
+              "elapsed_ns": 176307208,
+              "successes": 290,
+              "checksum": 19144060,
+              "peak_rss_bytes": 2605056
             },
             {
-              "iterations": 302,
-              "elapsed_ns": 183255084,
-              "successes": 302,
-              "checksum": 19936228,
-              "peak_rss_bytes": 2703360
+              "iterations": 290,
+              "elapsed_ns": 174102417,
+              "successes": 290,
+              "checksum": 19144060,
+              "peak_rss_bytes": 2457600
             },
             {
-              "iterations": 302,
-              "elapsed_ns": 183101833,
-              "successes": 302,
-              "checksum": 19936228,
-              "peak_rss_bytes": 2949120
-            },
-            {
-              "iterations": 302,
-              "elapsed_ns": 183534708,
-              "successes": 302,
-              "checksum": 19936228,
-              "peak_rss_bytes": 2998272
-            },
-            {
-              "iterations": 302,
-              "elapsed_ns": 182531167,
-              "successes": 302,
-              "checksum": 19936228,
-              "peak_rss_bytes": 2588672
+              "iterations": 290,
+              "elapsed_ns": 175745666,
+              "successes": 290,
+              "checksum": 19144060,
+              "peak_rss_bytes": 2752512
             }
           ]
         },
@@ -2089,94 +2089,94 @@
         "kind": "medium",
         "bytes": 65145,
         "workload": "consume",
-        "median_ns": 402201.3152173913,
-        "min_ns": 400136.54891304346,
-        "max_ns": 403611.1847826087,
-        "stdev_ns": 1321.1831681459098,
-        "spread_pct": 0.8639046512533635,
-        "mb_per_s": 161.97112623758798,
-        "iterations": 184,
+        "median_ns": 401542.75916230364,
+        "min_ns": 399318.4973821989,
+        "max_ns": 404606.4554973822,
+        "stdev_ns": 1862.968357254902,
+        "spread_pct": 1.3169103400631585,
+        "mb_per_s": 162.2367693440797,
+        "iterations": 191,
         "accepted": true,
-        "checksum": 12151544,
-        "peak_rss_bytes": 6914048,
+        "checksum": 12613831,
+        "peak_rss_bytes": 6946816,
         "batch_elapsed_ns": [
-          73849375,
-          74237041,
-          74005042,
-          74264458,
-          73625125,
-          73822833,
-          74183959
+          77279833,
+          76269833,
+          76751042,
+          76694667,
+          76981791,
+          76325584,
+          76572375
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
             "serde-json-array-consume"
           ],
-          "measured_at": "2026-11-17T07:02:52+00:00",
+          "measured_at": "2026-11-17T07:32:29+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 1092083,
+            "elapsed_ns": 1051041,
             "successes": 1,
             "checksum": 66041,
             "peak_rss_bytes": 6701056
           },
           "warmup": {
-            "iterations": 184,
-            "elapsed_ns": 74406375,
-            "successes": 184,
-            "checksum": 12151544,
+            "iterations": 191,
+            "elapsed_ns": 77004750,
+            "successes": 191,
+            "checksum": 12613831,
             "peak_rss_bytes": 6914048
           },
           "batches": [
             {
-              "iterations": 184,
-              "elapsed_ns": 73849375,
-              "successes": 184,
-              "checksum": 12151544,
-              "peak_rss_bytes": 6897664
-            },
-            {
-              "iterations": 184,
-              "elapsed_ns": 74237041,
-              "successes": 184,
-              "checksum": 12151544,
+              "iterations": 191,
+              "elapsed_ns": 77279833,
+              "successes": 191,
+              "checksum": 12613831,
               "peak_rss_bytes": 6914048
             },
             {
-              "iterations": 184,
-              "elapsed_ns": 74005042,
-              "successes": 184,
-              "checksum": 12151544,
-              "peak_rss_bytes": 6914048
+              "iterations": 191,
+              "elapsed_ns": 76269833,
+              "successes": 191,
+              "checksum": 12613831,
+              "peak_rss_bytes": 6946816
             },
             {
-              "iterations": 184,
-              "elapsed_ns": 74264458,
-              "successes": 184,
-              "checksum": 12151544,
+              "iterations": 191,
+              "elapsed_ns": 76751042,
+              "successes": 191,
+              "checksum": 12613831,
               "peak_rss_bytes": 6897664
             },
             {
-              "iterations": 184,
-              "elapsed_ns": 73625125,
-              "successes": 184,
-              "checksum": 12151544,
-              "peak_rss_bytes": 6881280
+              "iterations": 191,
+              "elapsed_ns": 76694667,
+              "successes": 191,
+              "checksum": 12613831,
+              "peak_rss_bytes": 6930432
             },
             {
-              "iterations": 184,
-              "elapsed_ns": 73822833,
-              "successes": 184,
-              "checksum": 12151544,
-              "peak_rss_bytes": 6897664
-            },
-            {
-              "iterations": 184,
-              "elapsed_ns": 74183959,
-              "successes": 184,
-              "checksum": 12151544,
+              "iterations": 191,
+              "elapsed_ns": 76981791,
+              "successes": 191,
+              "checksum": 12613831,
               "peak_rss_bytes": 6914048
+            },
+            {
+              "iterations": 191,
+              "elapsed_ns": 76325584,
+              "successes": 191,
+              "checksum": 12613831,
+              "peak_rss_bytes": 6914048
+            },
+            {
+              "iterations": 191,
+              "elapsed_ns": 76572375,
+              "successes": 191,
+              "checksum": 12613831,
+              "peak_rss_bytes": 6897664
             }
           ]
         },
@@ -2189,10 +2189,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:02:52+00:00"
+            "measured_at": "2026-11-17T07:32:29+00:00"
           }
         }
       },
@@ -2204,24 +2204,24 @@
         "kind": "medium",
         "bytes": 65143,
         "workload": "consume",
-        "median_ns": 545710.5382352942,
-        "min_ns": 539154.9,
-        "max_ns": 556124.7529411765,
-        "stdev_ns": 5695.338458706199,
-        "spread_pct": 3.109680270432969,
-        "mb_per_s": 119.37280927478128,
-        "iterations": 340,
+        "median_ns": 546466.275659824,
+        "min_ns": 543365.8357771261,
+        "max_ns": 550453.4457478006,
+        "stdev_ns": 2573.97637938809,
+        "spread_pct": 1.2969894550430678,
+        "mb_per_s": 119.20772223563823,
+        "iterations": 341,
         "accepted": true,
-        "checksum": 22442720,
-        "peak_rss_bytes": 3194880,
+        "checksum": 22508728,
+        "peak_rss_bytes": 3014656,
         "batch_elapsed_ns": [
-          185541583,
-          183312666,
-          184355791,
-          189082416,
-          184138000,
-          186300708,
-          186580292
+          186692625,
+          185582959,
+          186345000,
+          187145750,
+          185783208,
+          187704625,
+          185287750
         ],
         "receipts": {
           "command": [
@@ -2229,70 +2229,70 @@
             "ndjson",
             "4096"
           ],
-          "measured_at": "2026-11-17T07:02:54+00:00",
+          "measured_at": "2026-11-17T07:32:30+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 589833,
+            "elapsed_ns": 587125,
             "successes": 1,
             "checksum": 66008,
-            "peak_rss_bytes": 2473984
+            "peak_rss_bytes": 2506752
           },
           "warmup": {
-            "iterations": 340,
-            "elapsed_ns": 184836958,
-            "successes": 340,
-            "checksum": 22442720,
-            "peak_rss_bytes": 2441216
+            "iterations": 341,
+            "elapsed_ns": 185247042,
+            "successes": 341,
+            "checksum": 22508728,
+            "peak_rss_bytes": 2473984
           },
           "batches": [
             {
-              "iterations": 340,
-              "elapsed_ns": 185541583,
-              "successes": 340,
-              "checksum": 22442720,
-              "peak_rss_bytes": 3178496
+              "iterations": 341,
+              "elapsed_ns": 186692625,
+              "successes": 341,
+              "checksum": 22508728,
+              "peak_rss_bytes": 2752512
             },
             {
-              "iterations": 340,
-              "elapsed_ns": 183312666,
-              "successes": 340,
-              "checksum": 22442720,
-              "peak_rss_bytes": 2473984
+              "iterations": 341,
+              "elapsed_ns": 185582959,
+              "successes": 341,
+              "checksum": 22508728,
+              "peak_rss_bytes": 2752512
             },
             {
-              "iterations": 340,
-              "elapsed_ns": 184355791,
-              "successes": 340,
-              "checksum": 22442720,
-              "peak_rss_bytes": 2768896
+              "iterations": 341,
+              "elapsed_ns": 186345000,
+              "successes": 341,
+              "checksum": 22508728,
+              "peak_rss_bytes": 2490368
             },
             {
-              "iterations": 340,
-              "elapsed_ns": 189082416,
-              "successes": 340,
-              "checksum": 22442720,
-              "peak_rss_bytes": 3194880
-            },
-            {
-              "iterations": 340,
-              "elapsed_ns": 184138000,
-              "successes": 340,
-              "checksum": 22442720,
-              "peak_rss_bytes": 2506752
-            },
-            {
-              "iterations": 340,
-              "elapsed_ns": 186300708,
-              "successes": 340,
-              "checksum": 22442720,
-              "peak_rss_bytes": 2506752
-            },
-            {
-              "iterations": 340,
-              "elapsed_ns": 186580292,
-              "successes": 340,
-              "checksum": 22442720,
+              "iterations": 341,
+              "elapsed_ns": 187145750,
+              "successes": 341,
+              "checksum": 22508728,
               "peak_rss_bytes": 3014656
+            },
+            {
+              "iterations": 341,
+              "elapsed_ns": 185783208,
+              "successes": 341,
+              "checksum": 22508728,
+              "peak_rss_bytes": 2441216
+            },
+            {
+              "iterations": 341,
+              "elapsed_ns": 187704625,
+              "successes": 341,
+              "checksum": 22508728,
+              "peak_rss_bytes": 2949120
+            },
+            {
+              "iterations": 341,
+              "elapsed_ns": 185287750,
+              "successes": 341,
+              "checksum": 22508728,
+              "peak_rss_bytes": 2490368
             }
           ]
         },
@@ -2308,94 +2308,94 @@
         "kind": "medium",
         "bytes": 65143,
         "workload": "consume",
-        "median_ns": 414526.891966759,
-        "min_ns": 412830.6786703601,
-        "max_ns": 419575.02216066484,
-        "stdev_ns": 2289.234030600787,
-        "spread_pct": 1.626997818719454,
-        "mb_per_s": 157.15023865140174,
-        "iterations": 361,
+        "median_ns": 415772.21546961326,
+        "min_ns": 413393.76243093924,
+        "max_ns": 418164.82320441987,
+        "stdev_ns": 1763.4151753001697,
+        "spread_pct": 1.147517942749428,
+        "mb_per_s": 156.67954128782083,
+        "iterations": 362,
         "accepted": true,
-        "checksum": 23838635,
-        "peak_rss_bytes": 7045120,
+        "checksum": 23904670,
+        "peak_rss_bytes": 7012352,
         "batch_elapsed_ns": [
-          149678625,
-          150425208,
-          149409208,
-          149644208,
-          149031875,
-          149381709,
-          151466583
+          150932750,
+          149648542,
+          149763458,
+          150509542,
+          151375666,
+          150608708,
+          149971250
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
             "serde-json-ndjson-consume"
           ],
-          "measured_at": "2026-11-17T07:02:55+00:00",
+          "measured_at": "2026-11-17T07:32:32+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 554458,
+            "elapsed_ns": 552500,
             "successes": 1,
             "checksum": 66035,
-            "peak_rss_bytes": 6750208
+            "peak_rss_bytes": 6733824
           },
           "warmup": {
-            "iterations": 361,
-            "elapsed_ns": 149394041,
-            "successes": 361,
-            "checksum": 23838635,
+            "iterations": 362,
+            "elapsed_ns": 150087792,
+            "successes": 362,
+            "checksum": 23904670,
             "peak_rss_bytes": 6963200
           },
           "batches": [
             {
-              "iterations": 361,
-              "elapsed_ns": 149678625,
-              "successes": 361,
-              "checksum": 23838635,
-              "peak_rss_bytes": 6979584
-            },
-            {
-              "iterations": 361,
-              "elapsed_ns": 150425208,
-              "successes": 361,
-              "checksum": 23838635,
-              "peak_rss_bytes": 6979584
-            },
-            {
-              "iterations": 361,
-              "elapsed_ns": 149409208,
-              "successes": 361,
-              "checksum": 23838635,
+              "iterations": 362,
+              "elapsed_ns": 150932750,
+              "successes": 362,
+              "checksum": 23904670,
               "peak_rss_bytes": 6963200
             },
             {
-              "iterations": 361,
-              "elapsed_ns": 149644208,
-              "successes": 361,
-              "checksum": 23838635,
+              "iterations": 362,
+              "elapsed_ns": 149648542,
+              "successes": 362,
+              "checksum": 23904670,
+              "peak_rss_bytes": 7012352
+            },
+            {
+              "iterations": 362,
+              "elapsed_ns": 149763458,
+              "successes": 362,
+              "checksum": 23904670,
               "peak_rss_bytes": 6963200
             },
             {
-              "iterations": 361,
-              "elapsed_ns": 149031875,
-              "successes": 361,
-              "checksum": 23838635,
-              "peak_rss_bytes": 7045120
-            },
-            {
-              "iterations": 361,
-              "elapsed_ns": 149381709,
-              "successes": 361,
-              "checksum": 23838635,
-              "peak_rss_bytes": 6963200
-            },
-            {
-              "iterations": 361,
-              "elapsed_ns": 151466583,
-              "successes": 361,
-              "checksum": 23838635,
+              "iterations": 362,
+              "elapsed_ns": 150509542,
+              "successes": 362,
+              "checksum": 23904670,
               "peak_rss_bytes": 6979584
+            },
+            {
+              "iterations": 362,
+              "elapsed_ns": 151375666,
+              "successes": 362,
+              "checksum": 23904670,
+              "peak_rss_bytes": 6946816
+            },
+            {
+              "iterations": 362,
+              "elapsed_ns": 150608708,
+              "successes": 362,
+              "checksum": 23904670,
+              "peak_rss_bytes": 6979584
+            },
+            {
+              "iterations": 362,
+              "elapsed_ns": 149971250,
+              "successes": 362,
+              "checksum": 23904670,
+              "peak_rss_bytes": 6963200
             }
           ]
         },
@@ -2408,10 +2408,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:02:55+00:00"
+            "measured_at": "2026-11-17T07:32:32+00:00"
           }
         }
       },
@@ -2423,24 +2423,24 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "consume",
-        "median_ns": 1006931.543956044,
-        "min_ns": 1000749.5384615385,
-        "max_ns": 1010077.6098901099,
-        "stdev_ns": 3400.1742727777405,
-        "spread_pct": 0.9263858585582819,
-        "mb_per_s": 65.15835201887776,
-        "iterations": 182,
+        "median_ns": 1005851.9553072626,
+        "min_ns": 1001760.9441340782,
+        "max_ns": 1011656.8882681564,
+        "stdev_ns": 4345.068928474498,
+        "spread_pct": 0.9838370430025418,
+        "mb_per_s": 65.22828697982476,
+        "iterations": 179,
         "accepted": true,
-        "checksum": 8824634,
-        "peak_rss_bytes": 2867200,
+        "checksum": 8679173,
+        "peak_rss_bytes": 3162112,
         "batch_elapsed_ns": [
-          182402334,
-          183834125,
-          183156041,
-          183261541,
-          183463875,
-          183527625,
-          182136416
+          181086583,
+          179583583,
+          180047500,
+          179315209,
+          180898833,
+          179456584,
+          180985167
         ],
         "receipts": {
           "command": [
@@ -2448,70 +2448,70 @@
             "chunked",
             "4096"
           ],
-          "measured_at": "2026-11-17T07:02:57+00:00",
+          "measured_at": "2026-11-17T07:32:33+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 1101625,
+            "elapsed_ns": 1122125,
             "successes": 1,
             "checksum": 48487,
             "peak_rss_bytes": 2588672
           },
           "warmup": {
-            "iterations": 182,
-            "elapsed_ns": 183968250,
-            "successes": 182,
-            "checksum": 8824634,
-            "peak_rss_bytes": 3162112
+            "iterations": 179,
+            "elapsed_ns": 181094458,
+            "successes": 179,
+            "checksum": 8679173,
+            "peak_rss_bytes": 2867200
           },
           "batches": [
             {
-              "iterations": 182,
-              "elapsed_ns": 182402334,
-              "successes": 182,
-              "checksum": 8824634,
-              "peak_rss_bytes": 2867200
-            },
-            {
-              "iterations": 182,
-              "elapsed_ns": 183834125,
-              "successes": 182,
-              "checksum": 8824634,
+              "iterations": 179,
+              "elapsed_ns": 181086583,
+              "successes": 179,
+              "checksum": 8679173,
               "peak_rss_bytes": 2850816
             },
             {
-              "iterations": 182,
-              "elapsed_ns": 183156041,
-              "successes": 182,
-              "checksum": 8824634,
-              "peak_rss_bytes": 2605056
-            },
-            {
-              "iterations": 182,
-              "elapsed_ns": 183261541,
-              "successes": 182,
-              "checksum": 8824634,
-              "peak_rss_bytes": 2867200
-            },
-            {
-              "iterations": 182,
-              "elapsed_ns": 183463875,
-              "successes": 182,
-              "checksum": 8824634,
-              "peak_rss_bytes": 2768896
-            },
-            {
-              "iterations": 182,
-              "elapsed_ns": 183527625,
-              "successes": 182,
-              "checksum": 8824634,
+              "iterations": 179,
+              "elapsed_ns": 179583583,
+              "successes": 179,
+              "checksum": 8679173,
               "peak_rss_bytes": 2850816
             },
             {
-              "iterations": 182,
-              "elapsed_ns": 182136416,
-              "successes": 182,
-              "checksum": 8824634,
+              "iterations": 179,
+              "elapsed_ns": 180047500,
+              "successes": 179,
+              "checksum": 8679173,
               "peak_rss_bytes": 2572288
+            },
+            {
+              "iterations": 179,
+              "elapsed_ns": 179315209,
+              "successes": 179,
+              "checksum": 8679173,
+              "peak_rss_bytes": 2949120
+            },
+            {
+              "iterations": 179,
+              "elapsed_ns": 180898833,
+              "successes": 179,
+              "checksum": 8679173,
+              "peak_rss_bytes": 2850816
+            },
+            {
+              "iterations": 179,
+              "elapsed_ns": 179456584,
+              "successes": 179,
+              "checksum": 8679173,
+              "peak_rss_bytes": 2572288
+            },
+            {
+              "iterations": 179,
+              "elapsed_ns": 180985167,
+              "successes": 179,
+              "checksum": 8679173,
+              "peak_rss_bytes": 3162112
             }
           ]
         }
@@ -2524,94 +2524,94 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "consume",
-        "median_ns": 337397.0823970037,
-        "min_ns": 336709.2696629214,
-        "max_ns": 338205.6797752809,
-        "stdev_ns": 620.9389422330165,
-        "spread_pct": 0.4435160202715469,
-        "mb_per_s": 194.45929862190962,
-        "iterations": 534,
+        "median_ns": 337506.2566539924,
+        "min_ns": 336265.60456273763,
+        "max_ns": 338234.39543726237,
+        "stdev_ns": 769.0789655672089,
+        "spread_pct": 0.5833346303097198,
+        "mb_per_s": 194.39639623410784,
+        "iterations": 526,
         "accepted": true,
-        "checksum": 25892058,
-        "peak_rss_bytes": 3031040,
+        "checksum": 25504162,
+        "peak_rss_bytes": 3014656,
         "batch_elapsed_ns": [
-          179989958,
-          180601833,
-          179816500,
-          180170042,
-          179802750,
-          180590959,
-          180231375
+          177356583,
+          177911292,
+          177672500,
+          177528291,
+          176978167,
+          176875708,
+          177840291
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/bin/roc-xml-events",
             "reader"
           ],
-          "measured_at": "2026-11-17T07:02:58+00:00",
+          "measured_at": "2026-11-17T07:32:35+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 374667,
+            "elapsed_ns": 380333,
             "successes": 1,
             "checksum": 48487,
-            "peak_rss_bytes": 2539520
+            "peak_rss_bytes": 2555904
           },
           "warmup": {
-            "iterations": 534,
-            "elapsed_ns": 180364625,
-            "successes": 534,
-            "checksum": 25892058,
-            "peak_rss_bytes": 2801664
+            "iterations": 526,
+            "elapsed_ns": 177445750,
+            "successes": 526,
+            "checksum": 25504162,
+            "peak_rss_bytes": 2719744
           },
           "batches": [
             {
-              "iterations": 534,
-              "elapsed_ns": 179989958,
-              "successes": 534,
-              "checksum": 25892058,
-              "peak_rss_bytes": 2850816
-            },
-            {
-              "iterations": 534,
-              "elapsed_ns": 180601833,
-              "successes": 534,
-              "checksum": 25892058,
-              "peak_rss_bytes": 2883584
-            },
-            {
-              "iterations": 534,
-              "elapsed_ns": 179816500,
-              "successes": 534,
-              "checksum": 25892058,
-              "peak_rss_bytes": 2834432
-            },
-            {
-              "iterations": 534,
-              "elapsed_ns": 180170042,
-              "successes": 534,
-              "checksum": 25892058,
-              "peak_rss_bytes": 2834432
-            },
-            {
-              "iterations": 534,
-              "elapsed_ns": 179802750,
-              "successes": 534,
-              "checksum": 25892058,
+              "iterations": 526,
+              "elapsed_ns": 177356583,
+              "successes": 526,
+              "checksum": 25504162,
               "peak_rss_bytes": 2539520
             },
             {
-              "iterations": 534,
-              "elapsed_ns": 180590959,
-              "successes": 534,
-              "checksum": 25892058,
-              "peak_rss_bytes": 3031040
+              "iterations": 526,
+              "elapsed_ns": 177911292,
+              "successes": 526,
+              "checksum": 25504162,
+              "peak_rss_bytes": 3014656
             },
             {
-              "iterations": 534,
-              "elapsed_ns": 180231375,
-              "successes": 534,
-              "checksum": 25892058,
-              "peak_rss_bytes": 2834432
+              "iterations": 526,
+              "elapsed_ns": 177672500,
+              "successes": 526,
+              "checksum": 25504162,
+              "peak_rss_bytes": 2539520
+            },
+            {
+              "iterations": 526,
+              "elapsed_ns": 177528291,
+              "successes": 526,
+              "checksum": 25504162,
+              "peak_rss_bytes": 2539520
+            },
+            {
+              "iterations": 526,
+              "elapsed_ns": 176978167,
+              "successes": 526,
+              "checksum": 25504162,
+              "peak_rss_bytes": 2572288
+            },
+            {
+              "iterations": 526,
+              "elapsed_ns": 176875708,
+              "successes": 526,
+              "checksum": 25504162,
+              "peak_rss_bytes": 2801664
+            },
+            {
+              "iterations": 526,
+              "elapsed_ns": 177840291,
+              "successes": 526,
+              "checksum": 25504162,
+              "peak_rss_bytes": 2539520
             }
           ]
         }
@@ -2624,94 +2624,94 @@
         "kind": "medium",
         "bytes": 65610,
         "workload": "consume",
-        "median_ns": 161134.0206185567,
-        "min_ns": 160177.19072164947,
-        "max_ns": 162140.78608247422,
-        "stdev_ns": 737.1912497873509,
-        "spread_pct": 1.218610044785674,
-        "mb_per_s": 407.1765834932822,
-        "iterations": 388,
+        "median_ns": 160948.547979798,
+        "min_ns": 160753.47222222222,
+        "max_ns": 161943.18181818182,
+        "stdev_ns": 461.80791583926896,
+        "spread_pct": 0.7391862871039601,
+        "mb_per_s": 407.645802484874,
+        "iterations": 396,
         "accepted": true,
-        "checksum": 18812956,
+        "checksum": 19200852,
         "peak_rss_bytes": 6520832,
         "batch_elapsed_ns": [
-          62375333,
-          62910625,
-          62280666,
-          62817667,
-          62520000,
-          62148750,
-          62709166
+          63722834,
+          64016583,
+          63673834,
+          63873750,
+          63658375,
+          63735625,
+          64129500
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
             "quick-xml-consume"
           ],
-          "measured_at": "2026-11-17T07:02:59+00:00",
+          "measured_at": "2026-11-17T07:32:35+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 516541,
+            "elapsed_ns": 505208,
             "successes": 1,
             "checksum": 48487,
             "peak_rss_bytes": 6455296
           },
           "warmup": {
-            "iterations": 388,
-            "elapsed_ns": 62411041,
-            "successes": 388,
-            "checksum": 18812956,
+            "iterations": 396,
+            "elapsed_ns": 63927125,
+            "successes": 396,
+            "checksum": 19200852,
             "peak_rss_bytes": 6504448
           },
           "batches": [
             {
-              "iterations": 388,
-              "elapsed_ns": 62375333,
-              "successes": 388,
-              "checksum": 18812956,
-              "peak_rss_bytes": 6520832
-            },
-            {
-              "iterations": 388,
-              "elapsed_ns": 62910625,
-              "successes": 388,
-              "checksum": 18812956,
-              "peak_rss_bytes": 6520832
-            },
-            {
-              "iterations": 388,
-              "elapsed_ns": 62280666,
-              "successes": 388,
-              "checksum": 18812956,
-              "peak_rss_bytes": 6488064
-            },
-            {
-              "iterations": 388,
-              "elapsed_ns": 62817667,
-              "successes": 388,
-              "checksum": 18812956,
-              "peak_rss_bytes": 6520832
-            },
-            {
-              "iterations": 388,
-              "elapsed_ns": 62520000,
-              "successes": 388,
-              "checksum": 18812956,
+              "iterations": 396,
+              "elapsed_ns": 63722834,
+              "successes": 396,
+              "checksum": 19200852,
               "peak_rss_bytes": 6504448
             },
             {
-              "iterations": 388,
-              "elapsed_ns": 62148750,
-              "successes": 388,
-              "checksum": 18812956,
+              "iterations": 396,
+              "elapsed_ns": 64016583,
+              "successes": 396,
+              "checksum": 19200852,
+              "peak_rss_bytes": 6488064
+            },
+            {
+              "iterations": 396,
+              "elapsed_ns": 63673834,
+              "successes": 396,
+              "checksum": 19200852,
+              "peak_rss_bytes": 6504448
+            },
+            {
+              "iterations": 396,
+              "elapsed_ns": 63873750,
+              "successes": 396,
+              "checksum": 19200852,
               "peak_rss_bytes": 6520832
             },
             {
-              "iterations": 388,
-              "elapsed_ns": 62709166,
-              "successes": 388,
-              "checksum": 18812956,
-              "peak_rss_bytes": 6488064
+              "iterations": 396,
+              "elapsed_ns": 63658375,
+              "successes": 396,
+              "checksum": 19200852,
+              "peak_rss_bytes": 6504448
+            },
+            {
+              "iterations": 396,
+              "elapsed_ns": 63735625,
+              "successes": 396,
+              "checksum": 19200852,
+              "peak_rss_bytes": 6520832
+            },
+            {
+              "iterations": 396,
+              "elapsed_ns": 64129500,
+              "successes": 396,
+              "checksum": 19200852,
+              "peak_rss_bytes": 6504448
             }
           ]
         },
@@ -2721,10 +2721,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:02:59+00:00"
+            "measured_at": "2026-11-17T07:32:35+00:00"
           }
         }
       },
@@ -2736,24 +2736,24 @@
         "kind": "sample",
         "bytes": 555,
         "workload": "consume",
-        "median_ns": 1738.9745817944818,
-        "min_ns": 1728.9359113621551,
-        "max_ns": 1773.5715837497285,
-        "stdev_ns": 16.19216350590131,
-        "spread_pct": 2.5667811855831095,
-        "mb_per_s": 319.15360109938166,
-        "iterations": 4603,
+        "median_ns": 1740.1282281607905,
+        "min_ns": 1726.6355266112732,
+        "max_ns": 1760.208398832248,
+        "stdev_ns": 12.578760724829174,
+        "spread_pct": 1.9293332340490297,
+        "mb_per_s": 318.942013018547,
+        "iterations": 4453,
         "accepted": true,
-        "checksum": 230150,
-        "peak_rss_bytes": 2080768,
+        "checksum": 222650,
+        "peak_rss_bytes": 2211840,
         "batch_elapsed_ns": [
-          7958292,
-          8004500,
-          8163750,
-          7959125,
-          8055458,
-          8059500,
-          7972542
+          7759250,
+          7688708,
+          7711042,
+          7838208,
+          7797250,
+          7690959,
+          7748791
         ],
         "receipts": {
           "command": [
@@ -2761,69 +2761,69 @@
             "4096",
             "auto"
           ],
-          "measured_at": "2026-11-17T07:02:59+00:00",
+          "measured_at": "2026-11-17T07:32:35+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 43458,
+            "elapsed_ns": 44917,
             "successes": 1,
             "checksum": 50,
             "peak_rss_bytes": 2048000
           },
           "warmup": {
-            "iterations": 4603,
-            "elapsed_ns": 7912167,
-            "successes": 4603,
-            "checksum": 230150,
-            "peak_rss_bytes": 2211840
+            "iterations": 4453,
+            "elapsed_ns": 7661292,
+            "successes": 4453,
+            "checksum": 222650,
+            "peak_rss_bytes": 2064384
           },
           "batches": [
             {
-              "iterations": 4603,
-              "elapsed_ns": 7958292,
-              "successes": 4603,
-              "checksum": 230150,
+              "iterations": 4453,
+              "elapsed_ns": 7759250,
+              "successes": 4453,
+              "checksum": 222650,
+              "peak_rss_bytes": 2097152
+            },
+            {
+              "iterations": 4453,
+              "elapsed_ns": 7688708,
+              "successes": 4453,
+              "checksum": 222650,
               "peak_rss_bytes": 2080768
             },
             {
-              "iterations": 4603,
-              "elapsed_ns": 8004500,
-              "successes": 4603,
-              "checksum": 230150,
+              "iterations": 4453,
+              "elapsed_ns": 7711042,
+              "successes": 4453,
+              "checksum": 222650,
               "peak_rss_bytes": 2080768
             },
             {
-              "iterations": 4603,
-              "elapsed_ns": 8163750,
-              "successes": 4603,
-              "checksum": 230150,
+              "iterations": 4453,
+              "elapsed_ns": 7838208,
+              "successes": 4453,
+              "checksum": 222650,
               "peak_rss_bytes": 2080768
             },
             {
-              "iterations": 4603,
-              "elapsed_ns": 7959125,
-              "successes": 4603,
-              "checksum": 230150,
+              "iterations": 4453,
+              "elapsed_ns": 7797250,
+              "successes": 4453,
+              "checksum": 222650,
+              "peak_rss_bytes": 2211840
+            },
+            {
+              "iterations": 4453,
+              "elapsed_ns": 7690959,
+              "successes": 4453,
+              "checksum": 222650,
               "peak_rss_bytes": 2080768
             },
             {
-              "iterations": 4603,
-              "elapsed_ns": 8055458,
-              "successes": 4603,
-              "checksum": 230150,
-              "peak_rss_bytes": 2080768
-            },
-            {
-              "iterations": 4603,
-              "elapsed_ns": 8059500,
-              "successes": 4603,
-              "checksum": 230150,
-              "peak_rss_bytes": 2080768
-            },
-            {
-              "iterations": 4603,
-              "elapsed_ns": 7972542,
-              "successes": 4603,
-              "checksum": 230150,
+              "iterations": 4453,
+              "elapsed_ns": 7748791,
+              "successes": 4453,
+              "checksum": 222650,
               "peak_rss_bytes": 2080768
             }
           ]
@@ -2837,93 +2837,93 @@
         "kind": "sample",
         "bytes": 555,
         "workload": "consume",
-        "median_ns": 251.0157308052922,
-        "min_ns": 248.02713824356704,
-        "max_ns": 254.6022502343994,
-        "stdev_ns": 2.0484300327136484,
-        "spread_pct": 2.61940236563602,
-        "mb_per_s": 2211.016808466487,
-        "iterations": 38396,
+        "median_ns": 251.94180214240706,
+        "min_ns": 250.46943919344676,
+        "max_ns": 256.48811594202897,
+        "stdev_ns": 2.0252641867197347,
+        "spread_pct": 2.3889154945316395,
+        "mb_per_s": 2202.889696273162,
+        "iterations": 39675,
         "accepted": true,
-        "checksum": 1919800,
+        "checksum": 1983750,
         "peak_rss_bytes": 6225920,
         "batch_elapsed_ns": [
-          9638000,
-          9523250,
-          9775708,
-          9608708,
-          9684084,
-          9676542,
-          9608666
+          10037042,
+          9964750,
+          9937375,
+          10176166,
+          9958917,
+          9995791,
+          10029750
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
             "httparse-consume"
           ],
-          "measured_at": "2026-11-17T07:02:59+00:00",
+          "measured_at": "2026-11-17T07:32:35+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 5209,
+            "elapsed_ns": 5041,
             "successes": 1,
             "checksum": 50,
             "peak_rss_bytes": 6225920
           },
           "warmup": {
-            "iterations": 38396,
-            "elapsed_ns": 9678292,
-            "successes": 38396,
-            "checksum": 1919800,
+            "iterations": 39675,
+            "elapsed_ns": 9994625,
+            "successes": 39675,
+            "checksum": 1983750,
             "peak_rss_bytes": 6225920
           },
           "batches": [
             {
-              "iterations": 38396,
-              "elapsed_ns": 9638000,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 10037042,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             },
             {
-              "iterations": 38396,
-              "elapsed_ns": 9523250,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 9964750,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             },
             {
-              "iterations": 38396,
-              "elapsed_ns": 9775708,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 9937375,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             },
             {
-              "iterations": 38396,
-              "elapsed_ns": 9608708,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 10176166,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             },
             {
-              "iterations": 38396,
-              "elapsed_ns": 9684084,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 9958917,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             },
             {
-              "iterations": 38396,
-              "elapsed_ns": 9676542,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 9995791,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             },
             {
-              "iterations": 38396,
-              "elapsed_ns": 9608666,
-              "successes": 38396,
-              "checksum": 1919800,
+              "iterations": 39675,
+              "elapsed_ns": 10029750,
+              "successes": 39675,
+              "checksum": 1983750,
               "peak_rss_bytes": 6225920
             }
           ]
@@ -2934,10 +2934,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:02:59+00:00"
+            "measured_at": "2026-11-17T07:32:35+00:00"
           }
         }
       },
@@ -2949,24 +2949,24 @@
         "kind": "medium",
         "bytes": 65765,
         "workload": "consume",
-        "median_ns": 183675.18440463647,
-        "min_ns": 182866.57007376186,
-        "max_ns": 184785.73867228662,
-        "stdev_ns": 656.3440519279425,
-        "spread_pct": 1.0448709251309811,
-        "mb_per_s": 358.050545658469,
-        "iterations": 949,
+        "median_ns": 184084.00975081258,
+        "min_ns": 182499.86457204766,
+        "max_ns": 185034.89490790898,
+        "stdev_ns": 779.5836381959626,
+        "spread_pct": 1.3771051267803702,
+        "mb_per_s": 357.2553644883309,
+        "iterations": 923,
         "accepted": true,
-        "checksum": 2505360,
-        "peak_rss_bytes": 2703360,
+        "checksum": 2436720,
+        "peak_rss_bytes": 2834432,
         "batch_elapsed_ns": [
-          174138083,
-          173540375,
-          174307750,
-          175361666,
-          174720833,
-          174726125,
-          173779583
+          169597250,
+          168447375,
+          170787208,
+          169886958,
+          170272750,
+          169969333,
+          169909541
         ],
         "receipts": {
           "command": [
@@ -2974,70 +2974,70 @@
             "4096",
             "auto"
           ],
-          "measured_at": "2026-11-17T07:03:00+00:00",
+          "measured_at": "2026-11-17T07:32:37+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 210875,
+            "elapsed_ns": 216750,
             "successes": 1,
             "checksum": 2640,
-            "peak_rss_bytes": 2457600
+            "peak_rss_bytes": 2473984
           },
           "warmup": {
-            "iterations": 949,
-            "elapsed_ns": 174827834,
-            "successes": 949,
-            "checksum": 2505360,
-            "peak_rss_bytes": 2670592
+            "iterations": 923,
+            "elapsed_ns": 171052916,
+            "successes": 923,
+            "checksum": 2436720,
+            "peak_rss_bytes": 2736128
           },
           "batches": [
             {
-              "iterations": 949,
-              "elapsed_ns": 174138083,
-              "successes": 949,
-              "checksum": 2505360,
-              "peak_rss_bytes": 2686976
+              "iterations": 923,
+              "elapsed_ns": 169597250,
+              "successes": 923,
+              "checksum": 2436720,
+              "peak_rss_bytes": 2621440
             },
             {
-              "iterations": 949,
-              "elapsed_ns": 173540375,
-              "successes": 949,
-              "checksum": 2505360,
-              "peak_rss_bytes": 2686976
+              "iterations": 923,
+              "elapsed_ns": 168447375,
+              "successes": 923,
+              "checksum": 2436720,
+              "peak_rss_bytes": 2506752
             },
             {
-              "iterations": 949,
-              "elapsed_ns": 174307750,
-              "successes": 949,
-              "checksum": 2505360,
+              "iterations": 923,
+              "elapsed_ns": 170787208,
+              "successes": 923,
+              "checksum": 2436720,
+              "peak_rss_bytes": 2441216
+            },
+            {
+              "iterations": 923,
+              "elapsed_ns": 169886958,
+              "successes": 923,
+              "checksum": 2436720,
               "peak_rss_bytes": 2637824
             },
             {
-              "iterations": 949,
-              "elapsed_ns": 175361666,
-              "successes": 949,
-              "checksum": 2505360,
-              "peak_rss_bytes": 2670592
+              "iterations": 923,
+              "elapsed_ns": 170272750,
+              "successes": 923,
+              "checksum": 2436720,
+              "peak_rss_bytes": 2785280
             },
             {
-              "iterations": 949,
-              "elapsed_ns": 174720833,
-              "successes": 949,
-              "checksum": 2505360,
-              "peak_rss_bytes": 2588672
+              "iterations": 923,
+              "elapsed_ns": 169969333,
+              "successes": 923,
+              "checksum": 2436720,
+              "peak_rss_bytes": 2834432
             },
             {
-              "iterations": 949,
-              "elapsed_ns": 174726125,
-              "successes": 949,
-              "checksum": 2505360,
-              "peak_rss_bytes": 2703360
-            },
-            {
-              "iterations": 949,
-              "elapsed_ns": 173779583,
-              "successes": 949,
-              "checksum": 2505360,
-              "peak_rss_bytes": 2621440
+              "iterations": 923,
+              "elapsed_ns": 169909541,
+              "successes": 923,
+              "checksum": 2436720,
+              "peak_rss_bytes": 2457600
             }
           ]
         }
@@ -3050,93 +3050,93 @@
         "kind": "medium",
         "bytes": 65765,
         "workload": "consume",
-        "median_ns": 31487.102794793263,
-        "min_ns": 31184.54096477795,
-        "max_ns": 31645.992917304746,
-        "stdev_ns": 184.98602366723145,
-        "spread_pct": 1.4655268715389815,
-        "mb_per_s": 2088.632937383968,
-        "iterations": 5224,
+        "median_ns": 31762.816063764563,
+        "min_ns": 31675.38667484161,
+        "max_ns": 31898.673206621705,
+        "stdev_ns": 71.55477414354188,
+        "spread_pct": 0.7029809048789649,
+        "mb_per_s": 2070.5028127221244,
+        "iterations": 4893,
         "accepted": true,
-        "checksum": 13791360,
+        "checksum": 12917520,
         "peak_rss_bytes": 6389760,
         "batch_elapsed_ns": [
-          164952084,
-          163381041,
-          162908042,
-          163147125,
-          164488625,
-          164734750,
-          165318667
+          154987667,
+          155715875,
+          155415459,
+          155258250,
+          155340292,
+          155546292,
+          156080208
         ],
         "receipts": {
           "command": [
             "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/rust-target/release/compare",
             "httparse-consume"
           ],
-          "measured_at": "2026-11-17T07:03:02+00:00",
+          "measured_at": "2026-11-17T07:32:38+00:00",
           "calibration": {
             "iterations": 1,
-            "elapsed_ns": 38291,
+            "elapsed_ns": 40875,
             "successes": 1,
             "checksum": 2640,
             "peak_rss_bytes": 6389760
           },
           "warmup": {
-            "iterations": 5224,
-            "elapsed_ns": 164098583,
-            "successes": 5224,
-            "checksum": 13791360,
-            "peak_rss_bytes": 6389760
+            "iterations": 4893,
+            "elapsed_ns": 155009750,
+            "successes": 4893,
+            "checksum": 12917520,
+            "peak_rss_bytes": 6373376
           },
           "batches": [
             {
-              "iterations": 5224,
-              "elapsed_ns": 164952084,
-              "successes": 5224,
-              "checksum": 13791360,
-              "peak_rss_bytes": 6389760
-            },
-            {
-              "iterations": 5224,
-              "elapsed_ns": 163381041,
-              "successes": 5224,
-              "checksum": 13791360,
-              "peak_rss_bytes": 6389760
-            },
-            {
-              "iterations": 5224,
-              "elapsed_ns": 162908042,
-              "successes": 5224,
-              "checksum": 13791360,
-              "peak_rss_bytes": 6389760
-            },
-            {
-              "iterations": 5224,
-              "elapsed_ns": 163147125,
-              "successes": 5224,
-              "checksum": 13791360,
+              "iterations": 4893,
+              "elapsed_ns": 154987667,
+              "successes": 4893,
+              "checksum": 12917520,
               "peak_rss_bytes": 6373376
             },
             {
-              "iterations": 5224,
-              "elapsed_ns": 164488625,
-              "successes": 5224,
-              "checksum": 13791360,
+              "iterations": 4893,
+              "elapsed_ns": 155715875,
+              "successes": 4893,
+              "checksum": 12917520,
               "peak_rss_bytes": 6389760
             },
             {
-              "iterations": 5224,
-              "elapsed_ns": 164734750,
-              "successes": 5224,
-              "checksum": 13791360,
+              "iterations": 4893,
+              "elapsed_ns": 155415459,
+              "successes": 4893,
+              "checksum": 12917520,
               "peak_rss_bytes": 6389760
             },
             {
-              "iterations": 5224,
-              "elapsed_ns": 165318667,
-              "successes": 5224,
-              "checksum": 13791360,
+              "iterations": 4893,
+              "elapsed_ns": 155258250,
+              "successes": 4893,
+              "checksum": 12917520,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 4893,
+              "elapsed_ns": 155340292,
+              "successes": 4893,
+              "checksum": 12917520,
+              "peak_rss_bytes": 6389760
+            },
+            {
+              "iterations": 4893,
+              "elapsed_ns": 155546292,
+              "successes": 4893,
+              "checksum": 12917520,
+              "peak_rss_bytes": 6373376
+            },
+            {
+              "iterations": 4893,
+              "elapsed_ns": 156080208,
+              "successes": 4893,
+              "checksum": 12917520,
               "peak_rss_bytes": 6389760
             }
           ]
@@ -3147,10 +3147,10 @@
           "provenance": {
             "report": "/private/tmp/roc-parser-streaming-integration/.roc-parser-tmp/performance/final-streaming/results.json",
             "git": {
-              "commit": "8f459ab7ac7c9bbf56cc10766fe6c37a9e61a399",
+              "commit": "32e14f4cf330a2b3461eba0f42a6a0ea361fd44f",
               "dirty": false
             },
-            "measured_at": "2026-11-17T07:03:02+00:00"
+            "measured_at": "2026-11-17T07:32:38+00:00"
           }
         }
       }
@@ -3162,9 +3162,9 @@
         "impl": "rust/quick-xml-consume",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 6.249031334851967,
-        "impl_mb_per_s": 407.1765834932823,
-        "roc_mb_per_s": 65.15835201887774
+        "speedup_vs_roc": 6.2495248819114275,
+        "impl_mb_per_s": 407.645802484874,
+        "roc_mb_per_s": 65.22828697982476
       },
       {
         "format": "json",
@@ -3172,9 +3172,9 @@
         "impl": "rust/serde-json-array-consume",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 1.5074477315848525,
-        "impl_mb_per_s": 161.97112623758804,
-        "roc_mb_per_s": 107.44725859735108
+        "speedup_vs_roc": 1.5079895194151438,
+        "impl_mb_per_s": 162.23676934407965,
+        "roc_mb_per_s": 107.58481226514176
       },
       {
         "format": "json",
@@ -3182,9 +3182,9 @@
         "impl": "rust/serde-json-ndjson-consume",
         "documents": 1,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 1.3164659490392117,
-        "impl_mb_per_s": 157.15023865140168,
-        "roc_mb_per_s": 119.37280927478128
+        "speedup_vs_roc": 1.3143405338968894,
+        "impl_mb_per_s": 156.67954128782085,
+        "roc_mb_per_s": 119.20772223563822
       },
       {
         "format": "http",
@@ -3192,9 +3192,9 @@
         "impl": "rust/httparse-consume",
         "documents": 2,
         "semantic_mismatches": [],
-        "speedup_vs_roc": 6.357041386269327,
-        "impl_mb_per_s": 2148.9538225082188,
-        "roc_mb_per_s": 338.04307569080447
+        "speedup_vs_roc": 6.326871927784576,
+        "impl_mb_per_s": 2135.670693775182,
+        "roc_mb_per_s": 337.55554374292683
       }
     ],
     "performance_targets": [
@@ -3204,9 +3204,9 @@
         "maximum_slowdown": 1.5,
         "status": "failed",
         "reference": "rust/serde-json-array-consume",
-        "slowdown": 1.5074477315848525,
-        "roc_ns": 606297.4602649007,
-        "reference_ns": 402201.3152173913,
+        "slowdown": 1.5079895194151438,
+        "roc_ns": 605522.2724137931,
+        "reference_ns": 401542.75916230364,
         "reference_workload": "consume",
         "checksum_equal": false
       },
@@ -3216,9 +3216,9 @@
         "maximum_slowdown": 1.5,
         "status": "passed",
         "reference": "rust/serde-json-ndjson-consume",
-        "slowdown": 1.3164659490392117,
-        "roc_ns": 545710.5382352942,
-        "reference_ns": 414526.891966759,
+        "slowdown": 1.3143405338968894,
+        "roc_ns": 546466.275659824,
+        "reference_ns": 415772.21546961326,
         "reference_workload": "consume",
         "checksum_equal": false
       },
@@ -3228,9 +3228,9 @@
         "maximum_slowdown": 1.5,
         "status": "failed",
         "reference": "rust/quick-xml-consume",
-        "slowdown": 6.249031334851968,
-        "roc_ns": 1006931.543956044,
-        "reference_ns": 161134.0206185567,
+        "slowdown": 6.249524881911427,
+        "roc_ns": 1005851.9553072626,
+        "reference_ns": 160948.547979798,
         "reference_workload": "consume",
         "checksum_equal": true
       },
@@ -3240,9 +3240,9 @@
         "maximum_slowdown": 1.5,
         "status": "failed",
         "reference": "rust/quick-xml-consume",
-        "slowdown": 2.093891042387035,
-        "roc_ns": 337397.0823970037,
-        "reference_ns": 161134.0206185567,
+        "slowdown": 2.0969823020482026,
+        "roc_ns": 337506.2566539924,
+        "reference_ns": 160948.547979798,
         "reference_workload": "consume",
         "checksum_equal": true
       },
@@ -3252,9 +3252,9 @@
         "maximum_slowdown": 1.5,
         "status": "failed",
         "reference": "rust/httparse-consume",
-        "slowdown": 6.927751405123566,
-        "roc_ns": 1738.9745817944818,
-        "reference_ns": 251.0157308052922,
+        "slowdown": 6.906865845062123,
+        "roc_ns": 1740.1282281607905,
+        "reference_ns": 251.94180214240706,
         "reference_workload": "consume",
         "checksum_equal": true
       },
@@ -3264,9 +3264,9 @@
         "maximum_slowdown": 1.5,
         "status": "failed",
         "reference": "rust/httparse-consume",
-        "slowdown": 5.833346611839091,
-        "roc_ns": 183675.18440463647,
-        "reference_ns": 31487.102794793263,
+        "slowdown": 5.795582148045684,
+        "roc_ns": 184084.00975081258,
+        "reference_ns": 31762.816063764563,
         "reference_workload": "consume",
         "checksum_equal": true
       }
