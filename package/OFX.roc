@@ -250,12 +250,14 @@ markup_start = Utf8.ByteClass.from_bytes(['<'])
 # In particular, CRLF remains one line ending even when split between calls.
 move_span : State, List(U8), U64, U64 -> State
 move_span = |state, bytes, start, end| {
+	# A short token must not rescan the rest of a compact source chunk.
+	span_bytes = bytes.take_first(end)
 	var $at = start
 	var $line = state.line
 	var $column = state.column
 	var $last_cr = state.last_cr
 	while $at < end {
-		next = Utf8.find_line_end(bytes, $at)
+		next = Utf8.find_line_end(span_bytes, $at)
 		if next >= end {
 			break
 		}
@@ -1931,12 +1933,29 @@ expect ["", "+", "-", ".5", "1.", "1.2.3", "1e2", " 1", "1 ", "1\n"].all(|value|
 expect ["", "plain", "\r", "\n", "\r\n", "a\r\nb\rc\nd", "\n\r\n\r"].all(
 	|text| {
 		bytes = text.to_utf8()
-		start = move(initial({}), '\r')
-		bulk = move_span(start, bytes, 0, bytes.len())
-		individual = bytes.fold(start, move)
-		{ offset: bulk.offset, line: bulk.line, column: bulk.column, last_cr: bulk.last_cr } == { offset: individual.offset, line: individual.line, column: individual.column, last_cr: individual.last_cr }
+		base = move(initial({}), '\r')
+		var $same = True
+		for first in (0.U64).to(bytes.len() + 1) {
+			start = bytes.take_first(first).fold(base, move)
+			for last in first.to(bytes.len() + 1) {
+				bulk = move_span(start, bytes, first, last)
+				individual = bytes.sublist({ start: first, len: last - first }).fold(start, move)
+				$same = $same and { offset: bulk.offset, line: bulk.line, column: bulk.column, last_cr: bulk.last_cr } == { offset: individual.offset, line: individual.line, column: individual.column, last_cr: individual.last_cr }
+			}
+		}
+		$same
 	},
 )
+
+# Short spans ignore a distant line ending in an otherwise compact source;
+# the span that actually contains it still advances the physical line.
+expect {
+	bytes = List.repeat('x', 131072).append('\n')
+	first = move_span(initial({}), bytes, 0, 16)
+	second = move_span(first, bytes, 16, 32)
+	last = move_span(second, bytes, 32, bytes.len())
+	first.offset == 16 and first.line == 1 and first.column == 17 and second.offset == 32 and second.line == 1 and second.column == 33 and last.offset == bytes.len() and last.line == 2 and last.column == 1 and !last.last_cr
+}
 
 expect {
 	bytes = sample_xml.replace_each(">", ">\r\n").replace_each("-12.30", "bad").to_utf8()
