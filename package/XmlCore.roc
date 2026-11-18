@@ -254,6 +254,11 @@ XmlCore := {
 	decoder : StreamProps -> Decoder
 	decoder = |props| Streaming.decoder({ initial_state: ChunkDecoder.{ batch: chunk_batch_initial(props) }, step: |state, bytes, end| Streaming.map_step_error(chunk_decoder_step(state, bytes, end), |error| InvalidXml(error)), errors: props.errors })
 
+	## Internal single-event state for namespace resolution, without a batch queue.
+	NamespaceDecoder : Streaming.Decoder(NamespaceDecoderState, Event, [InvalidXml(StreamError)])
+	namespace_decoder : StreamProps -> NamespaceDecoder
+	namespace_decoder = |props| Streaming.decoder({ initial_state: NamespaceDecoderState.{ value: chunk_initial({ ..props, namespaces: True }) }, step: namespace_decoder_step, errors: props.errors })
+
 	## Position of the most recently emitted event, in original input bytes.
 	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
 	decoder_location = |current| Streaming.internal_state(current).batch.event_at
@@ -3555,6 +3560,17 @@ chunk_owned_attributes = |attributes| {
 ChunkDecoder := { batch : ChunkBatch }.{
 	metadata : ChunkDecoder -> XmlCore.Metadata
 	metadata = |current| { location: Text(current.batch.event_at), declaration: Box.unbox(Box.unbox(current.batch.decoder).declaration) }
+}
+
+NamespaceDecoderState := { value : ChunkState }.{
+	metadata : NamespaceDecoderState -> XmlCore.Metadata
+	metadata = |current| { location: Text(current.value.event_at), declaration: Box.unbox(current.value.declaration) }
+}
+
+namespace_decoder_step : NamespaceDecoderState, List(U8), Streaming.InputEnd -> Streaming.Step(NamespaceDecoderState, XmlCore.Event, [InvalidXml(XmlCore.StreamError)])
+namespace_decoder_step = |current, bytes, end| {
+	next = chunk_step(current.value, bytes, end)
+	Streaming.map_step_error({ state: NamespaceDecoderState.{ value: next.state }, consumed: next.consumed, outcome: next.outcome }, |error| InvalidXml(error))
 }
 
 chunk_decoder_step : ChunkDecoder, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkDecoder, XmlCore.Event, XmlCore.StreamError)

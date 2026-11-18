@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [flat]
+        case: [separate-states]
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
