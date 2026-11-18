@@ -241,7 +241,9 @@ XmlNs := {
 	parse = |input, props| {
 		opened = XmlNs.reader(input, props)?
 		declaration = opened.declaration()
-		match opened.next() {
+		# Explicit dispatch avoids the ReleaseSafe checker panic in
+		# https://github.com/roc-lang/roc/issues/13204; restore receiver syntax after the fix.
+		match XmlNs.Reader.next(opened) {
 			Event(Start(_), after_start) =>
 				match after_start.element() {
 					Element(root, rest) =>

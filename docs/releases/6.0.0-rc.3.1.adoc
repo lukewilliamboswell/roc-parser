@@ -1,0 +1,21 @@
+= roc-parser 6.0.0-rc.3.1
+
+== Upgrade impact
+
+This maintenance candidate preserves the 6.0.0-rc.3 API and accepted syntax.
+Use it when compiling the rc.3 API with Roc nightly-2026-11-18-a520eed,
+including its ReleaseSafe compiler. It does not include the rc.4 API cleanup.
+
+`XmlNs.parse` explicitly selects the existing reader method to avoid
+https://github.com/roc-lang/roc/issues/13204[roc#13204], a ReleaseSafe checker
+panic. Parser results, failure handling and the original tests are unchanged.
+
+Add the candidate to your application header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+The release record identifies the delivered package and compiler. Keep the
+package and its examples archive together when testing this candidate.
