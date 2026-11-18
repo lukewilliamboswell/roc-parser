@@ -43,7 +43,7 @@ jobs:
           mkdir -p .roc-parser-tmp/xml-controls
           roc version
           cat fuzz/XmlProperties.roc
-          if [[ "$CONTROL" == warm ]]; then roc test --opt=dev package/main.roc; fi
+          if [[ "$CONTROL" == warm || "$CONTROL" == isolated ]]; then roc test --opt=dev package/main.roc; fi
           if [[ "$CONTROL" == parallel ]]; then
             python3 scripts/run_fuzz.py build Text Xml --jobs 2 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
           elif [[ "$CONTROL" == isolated ]]; then
