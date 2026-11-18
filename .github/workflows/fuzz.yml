@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [bulk-clear, fresh-clear]
+        case: [flat]
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -19,22 +19,6 @@ jobs:
         with:
           version: nightly
           nightly-tag: nightly-2026-11-15-f25da45
-      - name: Prepare the selected control
-        env:
-          CONTROL: ${{ matrix.case }}
-        run: |
-          python3 - <<'SCRIPT'
-          from pathlib import Path
-          import os
-          case = os.environ['CONTROL']
-          p = Path('package/XmlCore.roc')
-          s = p.read_text()
-          before = 'var $empty = batch.events\n\twhile !$empty.is_empty() {\n\t\t$empty = $empty.drop_last(1)\n\t}'
-          replacement = 'empty = batch.events.drop_last(batch.events.len())' if case == 'bulk-clear' else 'empty = []'
-          assert before in s
-          s = s.replace(before, replacement).replace('chunk_fill(decoded, bytes, $empty)', 'chunk_fill(decoded, bytes, empty)')
-          p.write_text(s)
-          SCRIPT
       - name: Build the control
         env:
           CONTROL: ${{ matrix.case }}
@@ -43,7 +27,7 @@ jobs:
           mkdir -p .roc-parser-tmp/xml-controls
           roc version
           cat fuzz/XmlProperties.roc
-          roc build --fuzz fuzz/XmlProperties.roc --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
+          python3 scripts/run_fuzz.py smoke Xml --runs 2000 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
