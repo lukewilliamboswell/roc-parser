@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [parallel, warm, isolated]
+        case: [parallel, warm, isolated, absolute]
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -48,6 +48,8 @@ jobs:
             python3 scripts/run_fuzz.py build Text Xml --jobs 2 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
           elif [[ "$CONTROL" == isolated ]]; then
             ROC_CACHE_DIR="$PWD/.roc-parser-tmp/xml-controls/compiler-cache" roc build --fuzz fuzz/XmlProperties.roc --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
+          elif [[ "$CONTROL" == absolute ]]; then
+            roc build --fuzz "$PWD/fuzz/XmlProperties.roc" --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
           else
             roc build --fuzz fuzz/XmlProperties.roc --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
           fi
