@@ -41,12 +41,10 @@ run! = |args| {
 		return Err(InvalidArtifactArguments(mode))
 	}
 	chosen = FuzzPlan.select(if artifact names.take_first(1) else names, args.ci)?
-	jobs = CommandLine.positive("--jobs", args.jobs)?
-	runs = CommandLine.positive("--runs", args.runs)?
-	seconds = CommandLine.positive("--seconds", args.seconds)?
-	memory = CommandLine.positive("--memory-limit", args.memory_limit)?
-	_ = CommandLine.positive("--timeout", args.timeout ?? 5)?
-	_ = CommandLine.positive("--max-input-size", args.max_input_size ?? 4096)?
+	jobs = args.jobs
+	runs = args.runs
+	seconds = args.seconds
+	memory = args.memory_limit
 	if mode == "describe" {
 		Stdout.line!(Json.to_str(chosen)).map_err(|_| OutputUnavailable)?
 		return Ok({})
@@ -151,8 +149,8 @@ execute! = |target, mode, args, names, compiler, root, binary, receipt, source_h
 		}
 	} else {
 		corpus = prepare!(target, args, root)?
-		timeout = CommandLine.positive("--timeout", args.timeout ?? target.timeout)?
-		size = CommandLine.positive("--max-input-size", args.max_input_size ?? target.size)?
+		timeout = args.timeout ?? target.timeout
+		size = args.max_input_size ?? target.size
 		if target.examples {
 			_ = Process.run!([Path.display(binary), "check", "--timeout=${timeout.to_str()}"], work, [], 600_000)?
 		}
