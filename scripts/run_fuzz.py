@@ -255,17 +255,6 @@ def run_directory(target_name: str) -> Path:
     return WORK_ROOT / "runs" / target_name
 
 
-def build_flags(target_name: str) -> list[str]:
-    flags = ["--fuzz"]
-    if TARGETS[target_name].family == "Xml" and sys.platform == "linux" and os.uname().machine == "x86_64":
-        # Cached XML suite lowering reproducibly SIGSEGVs in spec_constr on
-        # nightly-2026-11-15-f25da45 (Actions run 44223623400, attempts 2/3).
-        # Remove after its cached build and all XML properties pass on Linux
-        # with the validation nightly. The underlying cause is uncertain.
-        flags.append("--no-cache")
-    return flags
-
-
 def build_identity(target_name: str, roc: str, platform: Path | None = None) -> dict:
     config = TARGETS[target_name]
     digest = hashlib.sha256()
@@ -279,7 +268,7 @@ def build_identity(target_name: str, roc: str, platform: Path | None = None) -> 
     compiler_path = Path(shutil.which(roc) or roc)
     compiler_sha256 = hashlib.sha256(compiler_path.read_bytes()).hexdigest() if compiler_path.is_file() else None
     return {"source_sha256": digest.hexdigest(), "compiler": command_output([roc, "version"], ROOT), "compiler_sha256": compiler_sha256,
-            "flags": build_flags(target_name), "roc_fuzz": ROC_FUZZ_RELEASE, "platform_override": str(platform.resolve()) if platform else None}
+            "flags": ["--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE, "platform_override": str(platform.resolve()) if platform else None}
 
 
 PRINT_LOCK = threading.Lock()
@@ -314,7 +303,7 @@ def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = 
 
     output.parent.mkdir(parents=True, exist_ok=True)
     # Coverage instrumentation requires LLVM; ordinary CI builds use dev.
-    command = [roc, "build", *build_flags(target_name), str(config.source), f"--output={output}"]
+    command = [roc, "build", "--fuzz", str(config.source), f"--output={output}"]
     if platform is not None:
         command.extend(["--replace-dep", f"https://github.com/lukewilliamboswell/roc-fuzz/releases/download/{ROC_FUZZ_RELEASE['version']}/{ROC_FUZZ_RELEASE['bundle']}", str(platform.resolve())])
     if not capture:

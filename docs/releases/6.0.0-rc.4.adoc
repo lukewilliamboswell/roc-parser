@@ -90,3 +90,5 @@ seven fuzz executables while retaining their own inputs, examples and reports.
 CSV retention runs separately for
 https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box issue],
 with its original diagnostic and allocation assertions intact.
+XML's private decoder states avoid a Linux compiler optimizer crash while
+preserving event batching and the existing namespace allocation ceilings.

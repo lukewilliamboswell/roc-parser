@@ -252,21 +252,20 @@ XmlCore := {
 	## Construct a decoder and call `.read_iter(chunks)`, `.read_stream(source)`,
 	## or `.step({ bytes, end })`. Only source exhaustion supplies Final.
 	decoder : StreamProps -> Decoder
-	decoder = |props| Streaming.decoder({ initial_state: if (props.namespaces) Single(chunk_initial(props)) else Batch(chunk_batch_initial(props)), step: |state, bytes, end| Streaming.map_step_error(chunk_decoder_step(state, bytes, end), |error| InvalidXml(error)), errors: props.errors })
+	decoder = |props| Streaming.decoder({ initial_state: ChunkDecoder.{ batch: chunk_batch_initial(props) }, step: |state, bytes, end| Streaming.map_step_error(chunk_decoder_step(state, bytes, end), |error| InvalidXml(error)), errors: props.errors })
+
+	## Internal single-event state for namespace resolution, without a batch queue.
+	NamespaceDecoder : Streaming.Decoder(NamespaceDecoderState, Event, [InvalidXml(StreamError)])
+	namespace_decoder : StreamProps -> NamespaceDecoder
+	namespace_decoder = |props| Streaming.decoder({ initial_state: NamespaceDecoderState.{ value: chunk_initial({ ..props, namespaces: True }) }, step: namespace_decoder_step, errors: props.errors })
 
 	## Position of the most recently emitted event, in original input bytes.
 	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
-	decoder_location = |current| match Streaming.internal_state(current) {
-		Single(state) => state.event_at
-		Batch(batch) => batch.event_at
-	}
+	decoder_location = |current| Streaming.internal_state(current).batch.event_at
 
 	## Declaration parsed so far; non-UTF-8 declarations are rejected.
 	decoder_declaration : Decoder -> Try(Declaration, [Missing])
-	decoder_declaration = |current| match Streaming.internal_state(current) {
-		Single(state) => Box.unbox(state.declaration)
-		Batch(batch) => Box.unbox(Box.unbox(batch.decoder).declaration)
-	}
+	decoder_declaration = |current| Box.unbox(Box.unbox(Streaming.internal_state(current).batch.decoder).declaration)
 
 	## An exact byte interval in XML source.
 	SourceSpan : { start : U64, end : U64 }
@@ -3558,24 +3557,26 @@ chunk_owned_attributes = |attributes| {
 
 # Namespace resolution consumes raw events individually, allowing its names and
 # attributes to transfer into resolved events without a second retained queue.
-ChunkDecoder := [Single(ChunkState), Batch(ChunkBatch)].{
+ChunkDecoder := { batch : ChunkBatch }.{
 	metadata : ChunkDecoder -> XmlCore.Metadata
-	metadata = |current| match current {
-		Single(state) => { location: Text(state.event_at), declaration: Box.unbox(state.declaration) }
-		Batch(batch) => { location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) }
-	}
+	metadata = |current| { location: Text(current.batch.event_at), declaration: Box.unbox(Box.unbox(current.batch.decoder).declaration) }
+}
+
+NamespaceDecoderState := { value : ChunkState }.{
+	metadata : NamespaceDecoderState -> XmlCore.Metadata
+	metadata = |current| { location: Text(current.value.event_at), declaration: Box.unbox(current.value.declaration) }
+}
+
+namespace_decoder_step : NamespaceDecoderState, List(U8), Streaming.InputEnd -> Streaming.Step(NamespaceDecoderState, XmlCore.Event, [InvalidXml(XmlCore.StreamError)])
+namespace_decoder_step = |current, bytes, end| {
+	next = chunk_step(current.value, bytes, end)
+	Streaming.map_step_error({ state: NamespaceDecoderState.{ value: next.state }, consumed: next.consumed, outcome: next.outcome }, |error| InvalidXml(error))
 }
 
 chunk_decoder_step : ChunkDecoder, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkDecoder, XmlCore.Event, XmlCore.StreamError)
-chunk_decoder_step = |current, bytes, end| match current {
-	Single(state) => {
-		next = chunk_step(state, bytes, end)
-		{ state: Single(next.state), consumed: next.consumed, outcome: next.outcome }
-	}
-	Batch(batch) => {
-		next = chunk_batch_step(batch, bytes, end)
-		{ state: Batch(next.state), consumed: next.consumed, outcome: next.outcome }
-	}
+chunk_decoder_step = |current, bytes, end| {
+	next = chunk_batch_step(current.batch, bytes, end)
+	{ state: ChunkDecoder.{ batch: next.state }, consumed: next.consumed, outcome: next.outcome }
 }
 
 ChunkEvent : { event : XmlCore.Event, location : ChunkAt }
@@ -3587,11 +3588,15 @@ chunk_batch_initial = |props| { decoder: Box.box(chunk_initial(props)), events: 
 
 chunk_batch_step : ChunkBatch, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkBatch, XmlCore.Event, XmlCore.StreamError)
 chunk_batch_step = |batch, bytes, end| {
+	decoded = Box.unbox(batch.decoder)
+	if Box.unbox(decoded.props).namespaces {
+		next = chunk_step(decoded, bytes, end)
+		return { state: { ..batch, decoder: Box.box(next.state), event_at: next.state.event_at }, consumed: next.consumed, outcome: next.outcome }
+	}
 	if batch.index < batch.events.len() {
 		entry = batch.events.get(batch.index) ?? { event: Text(""), location: batch.event_at }
 		return { state: { ..batch, index: batch.index + 1, event_at: entry.location }, consumed: 0, outcome: Item(entry.event) }
 	}
-	decoded = Box.unbox(batch.decoder)
 	var $empty = batch.events
 	while !$empty.is_empty() {
 		$empty = $empty.drop_last(1)

@@ -101,10 +101,6 @@ executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
 compiler fetched by Blueprint. Routine validation uses compilation caches and
 explicit dev builds; instrumented fuzz binaries use the default LLVM build mode.
 Cache bypasses require a concrete reason and a removal condition.
-The x86-64 Linux XML fuzz build temporarily bypasses the cache after reproducible
-`spec_constr` compiler crashes on nightly-2026-11-15-f25da45; the cause is uncertain.
-Remove this exception once a cached build and all XML properties pass on Linux
-with the validation nightly.
 Package commands use the separate `roc` on
 `PATH`. The released `release-package` utility from tools-0.10.1 builds the
 bundle, examples archive, API archive and notes, and tests archived examples
