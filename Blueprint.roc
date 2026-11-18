@@ -47,8 +47,8 @@ config = [
 	Environment(
 		"tooling",
 		[
-			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
-			RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-15-f25da45"))]),
+			RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst"]),
 		],
 	),
 	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/release-package-{system}"))]), Expect(["roc", "python3", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
@@ -67,14 +67,14 @@ config = [
 	Shell("oracle-ruby", [Use("oracle-ruby")]),
 	Shell("bench", [Use("bench")]),
 	# Everything a pull request must pass; `blueprint run check -- --list`.
-	Task("check", [Use("package"), Run(["scripts/check_all.roc", "--"])]),
+	Task("check", [Use("package"), Run(["scripts/check_all.roc"])]),
 	# Native checks and explicit local comparison tasks.
 	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
 	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
 	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
-	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc", "--"])]),
-	Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc", "--"])]),
-	Task("asciidoc", [Use("oracles"), Run(["scripts/check_asciidoc.roc", "--"])]),
+	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc"])]),
+	Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc"])]),
+	Task("asciidoc", [Use("oracles"), Run(["scripts/check_asciidoc.roc"])]),
 	Task("markup", [Use("oracles"), Run(["python3", "scripts/review_markup.py", "check"])]),
 	Task("markup-campaign", [Use("oracles"), Run(["python3", "scripts/review_markup.py", "campaign"])]),
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
@@ -87,7 +87,7 @@ config = [
 	Task("docs", [Use("docs"), Run(["roc-docs", "build", "--workspace", ".", "--api-entrypoint", "package/main.roc", "--roc-command", "roc", "--pdf-filename", "roc-parser.pdf", "--site-url", "https://lukewilliamboswell.github.io/roc-parser/"])]),
 	Task("api-docs", [Use("package"), Run(["roc", "docs", "package/main.roc", "--output=.docs-out/api"])]),
 	Task("release-package", [Use("release"), Run(["release-package"])]),
-	Task("bundle", [Use("package"), Run(["scripts/bundle.roc", "--"])]),
+	Task("bundle", [Use("package"), Run(["scripts/bundle.roc"])]),
 	Task("examples", [Use("package"), Run(["release-package", "test-examples"])]),
 	Task("test-examples-archive", [Use("package"), Run(["release-package", "test-archive"])]),
 ]

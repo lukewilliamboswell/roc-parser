@@ -16,7 +16,7 @@ compare_bytes = |left, right| match (left, right) {
 	([], []) => Same
 	([], _) => Before
 	(_, []) => After
-	([a, .. as more_a], [b, .. as more_b]) => if a < b Before else if a > b After else compare_bytes(more_a, more_b)
+	([a, .. as more_a], [b, .. as more_b]) => if (a < b) Before else if (a > b) After else compare_bytes(more_a, more_b)
 }
 
 parse_options = |args, state| match args {
@@ -24,7 +24,7 @@ parse_options = |args, state| match args {
 	["--output-dir"] => Err("--output-dir needs a directory")
 	[value, .. as rest] if value.starts_with("--output-dir=") => parse_options(rest, { ..state, output: value.drop_prefix("--output-dir=") })
 	[value, .. as rest] => parse_options(rest, { ..state, forwarded: state.forwarded.append(value) })
-	[] => if state.output == "" Err("output directory cannot be empty") else Ok(state)
+	[] => if (state.output == "") Err("output directory cannot be empty") else Ok(state)
 }
 
 expect BundlePlan.options(["--output-dir=build/release", "--some-roc-option", "value"]) == Ok({ output: "build/release", forwarded: ["--some-roc-option", "value"] })

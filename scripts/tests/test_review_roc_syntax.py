@@ -111,6 +111,21 @@ class SpanTests(unittest.TestCase):
         self.assertEqual(review.compare({'source': '', 'coverage': 'exploratory'}, actual, actual), [])
 
 class ShownCaseTests(unittest.TestCase):
+    def test_shared_executable_selects_the_requested_property(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / 'shared'
+            binary.write_text(
+                f'#!{sys.executable}\nimport sys\n'
+                'if sys.argv[1] != "--target=roc-syntax-span-model": raise SystemExit(2)\n'
+                'if sys.argv[2] != "show": raise SystemExit(2)\n'
+                'print(open(sys.argv[3]).read())\n')
+            binary.chmod(0o755)
+            corpus = Path(tmp) / 'corpus'
+            corpus.mkdir()
+            (corpus / 'unit').write_text('x = 1\n')
+            cases = review.shown_cases(binary, corpus, 'roc-syntax-span-model')
+            self.assertEqual(cases[0]['source'], 'x = 1\n')
+
     def test_source_shown_by_a_fuzz_target_keeps_its_final_newline(self):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / 'target'

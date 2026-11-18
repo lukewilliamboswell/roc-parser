@@ -20,8 +20,8 @@ class CheckTests(unittest.TestCase):
         self.assertIn('["scripts/check_doc_examples.roc"]', source)
         for expected in (
             "-m unittest discover -s scripts/tests -p test_*.py",
-            "scripts/run_fuzz.py smoke --ci all",
-            "scripts/bench.py --quick --langs roc --timeout 60 --fail-on-error",
+            "scripts/run_fuzz.py smoke --ci all --jobs 2",
+            "scripts/bench.py --quick --opt dev --langs roc --timeout 60 --fail-on-error",
         ):
             self.assertIn(expected, commands)
 
@@ -36,7 +36,7 @@ class ConformanceTests(unittest.TestCase):
         source = (ROOT / "scripts/src/HarnessPlan.roc").read_text()
         self.assertTrue(re.findall(r'name: "([^"\n]+)"', source))
         blueprint = (ROOT / "Blueprint.roc").read_text()
-        self.assertIn('Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc", "--"])])', blueprint)
+        self.assertIn('Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc"])])', blueprint)
 
     def test_every_requirements_file_exists(self) -> None:
         source = (ROOT / "scripts/src/HarnessPlan.roc").read_text()

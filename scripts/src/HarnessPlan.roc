@@ -45,7 +45,7 @@ HarnessPlan := [].{
 		probe = ".roc-parser-tmp/asciidoc/probe"
 		steps = [
 			["python3", "scripts/asciidoc/setup_oracle.py"],
-			[roc, "build", "--no-cache", "--opt=speed", "scripts/asciidoc/probe.roc", "--output=${probe}"],
+			[roc, "build", "--opt=dev", "scripts/asciidoc/probe.roc", "--output=${probe}"],
 			["python3", "scripts/review_asciidoc.py", "check", "--require-complete", "--compare-html", "--probe", probe, "--generated", generated, "--mutations", mutations, "--seed", seed, "--corpus", "docs"],
 		]
 		if performance {

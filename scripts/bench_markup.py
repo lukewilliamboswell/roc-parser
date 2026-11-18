@@ -115,7 +115,7 @@ def compile_literals(roc: str, work: Path, sizes: list[int], repetitions: int) -
             times = []
             for index in range(repetitions):
                 start = time.monotonic_ns()
-                result = subprocess.run([roc, 'build', '--no-cache', '--opt=speed', str(source), '--output=' + str(binary)], capture_output=True, text=True, check=False, timeout=300)
+                result = subprocess.run([roc, 'build', str(source), '--output=' + str(binary)], capture_output=True, text=True, check=False, timeout=300)
                 times.append(time.monotonic_ns() - start)
                 (folder / f'build-{index}.log').write_text(result.stdout + result.stderr)
                 if result.returncode:
@@ -150,14 +150,14 @@ def main(argv=None):
     args.work.mkdir(parents=True, exist_ok=True)
     source_before = source_identity()
     binary = args.work / 'markup-bench'
-    command = [args.roc, 'build', '--no-cache', '--opt=speed', str(ROOT / 'bench/roc/markup.roc'), '--output=' + str(binary)]
+    command = [args.roc, 'build', str(ROOT / 'bench/roc/markup.roc'), '--output=' + str(binary)]
     build = subprocess.run(command, capture_output=True, text=True, check=False)
     (args.work / 'build.log').write_text(build.stdout + build.stderr)
     if build.returncode:
         raise RuntimeError(f'benchmark build failed: {args.work / "build.log"}')
     alloc_binary = args.work / 'markup-alloc'
     if args.allocations:
-        build = subprocess.run([args.roc, 'build', '--no-cache', '--opt=speed', '--fuzz', str(ROOT / 'fuzz/markup-alloc.roc'), '--output=' + str(alloc_binary)], capture_output=True, text=True, check=False)
+        build = subprocess.run([args.roc, 'build', '--fuzz', str(ROOT / 'fuzz/markup-alloc.roc'), '--output=' + str(alloc_binary)], capture_output=True, text=True, check=False)
         (args.work / 'allocation-build.log').write_text(build.stdout + build.stderr)
         if build.returncode:
             raise RuntimeError(f'allocation diagnostic build failed: {args.work / "allocation-build.log"}')
@@ -179,7 +179,7 @@ def main(argv=None):
     if source_before != source_identity():
         raise RuntimeError('sources changed during measurement; discard observations and rerun')
     report = {'schema_version': 1, 'compiler': subprocess.check_output([args.roc, 'version'], text=True).strip(),
-              'build_flags': ['--no-cache', '--opt=speed'], 'compiler_build_mode': args.compiler_build_mode, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+              'build_flags': [], 'compiler_build_mode': args.compiler_build_mode, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
               'source_sha256': source_before, 'source_stable': True, 'compiler_sha256': hashlib.sha256(Path(shutil.which(args.roc) or args.roc).read_bytes()).hexdigest(), 'compile_records': compile_records, 'machine': platform.platform(),
               'records': records, 'scaling_failures': failures,
               'limits': 'Local wall-clock scaling observations are not a proof of asymptotic bounds. Allocation ceilings are checked by the markup-limits roc-fuzz target.'}

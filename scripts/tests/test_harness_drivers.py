@@ -21,7 +21,7 @@ class HarnessDriverTests(unittest.TestCase):
         cls.binaries = {}
         for name in ("check_conformance", "check_asciidoc"):
             binary = Path(cls.build.name) / name
-            subprocess.run(["roc-stable", "build", str(ROOT / "scripts" / f"{name}.roc"),
+            subprocess.run(["roc-stable", "build", "--opt=dev", str(ROOT / "scripts" / f"{name}.roc"),
                             f"--output={binary}"], cwd=ROOT, check=True, capture_output=True)
             cls.binaries[name] = binary
 
@@ -87,7 +87,7 @@ sys.exit(7 if os.environ.get("HARNESS_FAIL", "unmatched") in sys.argv else 0)
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
         self.assertEqual(calls[1]["program"], "package-roc")
-        self.assertEqual(calls[1]["args"][:3], ["build", "--no-cache", "--opt=speed"])
+        self.assertEqual(calls[1]["args"][:2], ["build", "--opt=dev"])
         review = calls[2]["args"]
         for flag, value in (("--generated", "12"), ("--mutations", "34"), ("--seed", "56")):
             self.assertEqual(review[review.index(flag) + 1], value)

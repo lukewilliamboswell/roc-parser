@@ -155,7 +155,7 @@ def main():
     ORACLE_CACHE = cache_from_arguments(args, ROOT)
     WORK.mkdir(parents=True, exist_ok=True)
     if not args.no_build:
-        subprocess.run([args.roc, "build", "--opt=speed", str(DATA / "probe.roc"), f"--output={args.binary}"], cwd=ROOT, check=True)
+        subprocess.run([args.roc, "build", "--opt=dev", str(DATA / "probe.roc"), f"--output={args.binary}"], cwd=ROOT, check=True)
     cases = json.loads((DATA / "cases.json").read_text())
     if args.command in ("replay", "corpus"):
         cases = []

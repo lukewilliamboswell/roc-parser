@@ -311,7 +311,7 @@ def main() -> int:
     ORACLE_CACHE = cache_from_arguments(args, ROOT)
     if not args.no_build:
         args.binary.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([os.environ.get('ROC', 'roc'), 'build', '--opt=speed', str(DATA/'probe.roc'), f'--output={args.binary}'], check=True, cwd=ROOT)
+        subprocess.run([os.environ.get('ROC', 'roc'), 'build', str(DATA/'probe.roc'), f'--output={args.binary}'], check=True, cwd=ROOT)
     rng = random.Random(args.seed)
     cases = [generate(rng, sgml=sgml, card=card, cp1252=cp) for sgml in (False,True) for card in (False,True) for cp in (False,True)]
     if args.command == 'replay':

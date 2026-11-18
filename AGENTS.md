@@ -52,6 +52,14 @@ summaries without checking in raw measurement reports.
 
 ## Testing
 
+Keep pull-request checks fast enough for regular development. Use cached builds
+and `--opt=dev` for routine checks, examples and smoke runs. Reserve LLVM builds
+for fuzz instrumentation and optimized builds for actual performance measurements.
+Every `--no-cache` exception needs a specific compiler bug or other concrete
+reason and a removal condition. Compile a small number of fuzz executables with
+independently selectable properties; reuse each binary while retaining each
+property's corpus, examples, resource checks and failure reports.
+
 Prefer property-based tests with small deterministic seeds and reviewable model
 generators. Check round trips, independent models, metamorphic relations and
 resource bounds across generated inputs. When a bug is found, extend the property

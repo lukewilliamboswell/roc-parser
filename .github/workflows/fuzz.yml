@@ -1,7 +1,8 @@
 name: Roc property campaigns
 
 # Native Roc coverage-guided campaigns on the latest nightly: ten minutes per
-# target. Pull requests run smoke-sized campaigns in ci.yml. Cross-language
+# property, using shared prebuilt executables. Pull requests run smoke-sized
+# campaigns in ci.yml. Cross-language
 # oracle and performance comparisons run locally. The fuzz corpus grows in the
 # Actions cache, keyed by target, nightly and fuzz sources.
 on:
@@ -33,9 +34,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
 
+  build:
+    name: Build shared fuzz executables
+    needs: nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
+      - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
+        with:
+          download-method: asset-api
+          version: nightly
+          nightly-tag: ${{ needs.nightly.outputs.tag }}
+      - run: blueprint run fuzz -- build --ci all --jobs 2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-executables
+          path: .roc-parser-tmp/fuzz/bin/
+          if-no-files-found: error
+          retention-days: 1
+
   fuzz:
     name: Fuzz ${{ matrix.target }}
-    needs: nightly
+    needs: [nightly, build]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -117,6 +143,10 @@ jobs:
           download-method: asset-api
           version: nightly
           nightly-tag: ${{ needs.nightly.outputs.tag }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: fuzz-executables
+          path: .roc-parser-tmp/fuzz/bin/
       - name: Restore and save the corpus
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -126,14 +156,14 @@ jobs:
       - name: Run a ten-minute campaign
         env:
           TARGET: ${{ matrix.target }}
-        run: blueprint run fuzz -- campaign "$TARGET" --seconds 600
+        run: blueprint run fuzz -- campaign "$TARGET" --seconds 600 --no-build
       - name: Upload the reproducer
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-failure-${{ matrix.target }}
           path: |
-            .roc-parser-tmp/fuzz/bin/${{ matrix.target }}
+            .roc-parser-tmp/fuzz/bin/
             .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}/
             .roc-parser-tmp/fuzz/runs/${{ matrix.target }}/
           if-no-files-found: warn

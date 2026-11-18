@@ -150,9 +150,9 @@ def validate_baseline(metadata, previous, allow_unverified=False):
         raise RuntimeError('baseline hardware identity is weak or unavailable; record a new baseline or explicitly allow unverified comparison')
     if current_hardware != old_hardware or metadata['compiler'] != previous['compiler']:
         raise RuntimeError('baseline CPU/core count/OS/compiler differs; record a separate baseline')
-    if not allow_unverified and (metadata.get('reused_binary') or previous.get('reused_binary') or not metadata.get('build_flags') or not previous.get('build_flags')):
+    if not allow_unverified and (metadata.get('reused_binary') or previous.get('reused_binary') or not isinstance(metadata.get('build_flags'), list) or not isinstance(previous.get('build_flags'), list)):
         raise RuntimeError('baseline build configuration is unverified; rebuild or explicitly allow unverified comparison')
-    if metadata.get('build_flags') and previous.get('build_flags') and metadata['build_flags'] != previous['build_flags']:
+    if isinstance(metadata.get('build_flags'), list) and isinstance(previous.get('build_flags'), list) and metadata['build_flags'] != previous['build_flags']:
         raise RuntimeError('baseline build flags differ; record a separate baseline')
 
 
@@ -179,7 +179,7 @@ def main(argv=None):
     binary = binary.resolve()
     if not args.binary:
         binary.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([args.roc, 'build', '--no-cache', '--opt=speed', str(ROOT/'bench/roc/roc-syntax.roc'), f'--output={binary}'], check=True)
+        subprocess.run([args.roc, 'build', str(ROOT/'bench/roc/roc-syntax.roc'), f'--output={binary}'], check=True)
     records = []
     documents = list(corpus(sorted(args.sizes)))
     for target in args.document_bytes:
@@ -196,7 +196,7 @@ def main(argv=None):
     metadata = {'machine': platform.platform(), 'hardware': machine_identity(), 'cpu': platform.machine(), 'timestamp': time.time(),
                 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
                 'compiler': subprocess.run([args.roc, 'version'], capture_output=True, text=True, check=True).stdout.strip(),
-                'build_flags': None if args.binary else ['--no-cache', '--opt=speed'],
+                'build_flags': None if args.binary else [],
                 'candidate_source_sha256': source_hash,
                 'candidate_source_relationship': 'workspace source; reused binary relationship unverified' if args.binary else 'built from workspace source in this run',
                 'candidate_commit': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip(),

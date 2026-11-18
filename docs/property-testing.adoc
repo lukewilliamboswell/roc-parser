@@ -58,9 +58,19 @@ checks; moving assertions out of the repository is not a substitute for them.
 
 == Three kinds of target
 
-Each file `fuzz/<target>.roc` is one roc-fuzz app. They come in three kinds,
-which differ in what the fuzzer's bytes mean and therefore in what the target
-can check.
+Each `fuzz/*Property.roc` module owns one property. Seven `*Properties.roc`
+applications group the scheduled properties into shared executables. Markup
+and diagnostic investigations have separate local executables. Each property
+retains its name, examples, corpus and reports; selection happens through the
+executable's `--target` option rather than a byte added to the input.
+
+CSV retention uses its own `CsvRetention` executable while
+https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box row-join bug]
+affects combined suites. It keeps the same backend, opaque measurement ownership
+fence, diagnostic assertions and allocation ceilings.
+
+Properties come in three kinds, which differ in what the fuzzer's bytes mean
+and therefore in what the property can check.
 
 Raw targets (`xml-raw`, `xml-reader`, `xml-limits`, `xmlns-raw`, `yaml-raw`,
 `yaml-source`, `json-raw`, `json-options`, `csv-raw`, `http-raw`,
@@ -180,8 +190,8 @@ described in <<asciidoc>>. Inline source agreement alone does not establish
 agreement on Asciidoctor substitutions or rendered HTML.
 
 Run every target for a short, iteration-bounded smoke test. This is what the
-`fuzz` section of `blueprint run check` runs on a pull request; it builds up to
-four targets at once (`--jobs`) before running them in turn:
+`fuzz` section of `blueprint run check` runs on a pull request; it builds shared
+executables with two compiler jobs before running each property in turn:
 
 [source,bash]
 ----
@@ -214,11 +224,15 @@ python3 scripts/run_fuzz.py campaign markdown-inline-ast --seconds 600
 ----
 
 `--max-input-size`, `--timeout` and `--memory-limit` override a target's
-registered bounds, and `--no-build` reuses the binary from the last run.
+registered bounds, and `--no-build` reuses the family's verified binary from
+the last run. A family name such as `Records` selects all its properties.
+`--platform PATH` replaces the released roc-fuzz platform with a local entry
+point for upstream development; its sources and native host enter the build
+identity.
 
 The runner keeps everything under `.roc-parser-tmp/fuzz/`:
 
-* `bin/<target>`: the built target;
+* `bin/<family>`: one shared executable and its build receipt;
 * `corpus/<target>/`: the working corpus, which grows across runs;
 * `runs/<target>/`: runner metadata, and the inputs of any failure.
 
@@ -365,9 +379,9 @@ cmark-gfm:
 Several scripts can also check a structured target's generator against the
 oracle, which is how a generator's own mistakes are caught: `review_xml.py
 corpus <target> <corpus>`, `review_json.py corpus <target> <corpus>`,
-`review_http.py --corpus DIR --fuzz-show BINARY`,
+`review_http.py --corpus DIR --fuzz-show BINARY --fuzz-target http-roundtrip`,
 `review_markdown.py generated BINARY CORPUS` and
-`review_markdown_blocks.py crosscheck BINARY CORPUS`.
+`review_markdown_blocks.py crosscheck BINARY CORPUS --fuzz-target markdown-blocks`.
 
 == Known-failures baselines
 

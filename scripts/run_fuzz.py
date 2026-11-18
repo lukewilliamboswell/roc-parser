@@ -22,10 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FUZZ_ROOT = ROOT / "fuzz"
 WORK_ROOT = ROOT / ".roc-parser-tmp" / "fuzz"
 ROC_FUZZ_RELEASE = {
-    "version": "0.6.2",
-    "commit": "b4505e2cdc19a74a2abf271f506c14478abdb7c2",
-    "bundle": "3kyiehxxzwAsjM23uCQGJ3Hx7dAAdzSGtK3k9Jq7Egtu.tar.zst",
-    "sha256": "89fc0b22cd1f30c01208a29eea55dbbdcdbac2a37d059e80b3a18c62bc2f275c",
+    "version": "0.7.0-rc1",
+    "commit": "ba275d7fa43b542ec967a570e5700fea3eb674e1",
+    "bundle": "HBigHQhVZWEF2EkLxpYK35u8P6UNsAmPYxpNFTxXK1Br.tar.zst",
+    "sha256": "94130c93aa2abb204beb21f06338ecc39c5808e1358d905f219769ecf260e5f2",
 }
 
 # How reviewed JSON seeds become corpus entries:
@@ -38,6 +38,8 @@ SeedEncoding = str | None
 @dataclass(frozen=True)
 class TargetConfig:
     source: Path
+    property_source: Path
+    family: str
     seeds: Path | None
     seed_encoding: SeedEncoding
     dictionary: Path | None
@@ -59,9 +61,14 @@ def target(
     timeout: int = 5,
     examples: bool = False,
     scheduled: bool = True,
+    *,
+    family: str,
 ) -> tuple[str, TargetConfig]:
+    module = "".join(part.title() for part in name.split("-"))
     return name, TargetConfig(
-        source=FUZZ_ROOT / f"{name}.roc",
+        source=FUZZ_ROOT / f"{family}Properties.roc",
+        property_source=FUZZ_ROOT / f"{module}Property.roc",
+        family=family,
         seeds=FUZZ_ROOT / "seeds" / f"{seeds}.json" if seeds else None,
         seed_encoding=encoding,
         dictionary=FUZZ_ROOT / "dictionaries" / f"{dictionary}.dict" if dictionary else None,
@@ -74,91 +81,95 @@ def target(
 
 TARGETS = dict(
     [
-        target("asciidoc-raw", "asciidoc", "raw", "asciidoc"),
-        target("asciidoc-structured", max_input_size=256),
-        target("markdown-document", "markdown-document", "raw", "markdown-document"),
-        target("markdown-blocks", max_input_size=1024),
-        target("markdown-refdefs", max_input_size=256),
-        target("markdown-inline", "markdown-inline", "raw", "markdown-inline"),
-        target("markdown-inline-ast", max_input_size=1024),
-        target("markdown-inline-pathological", "markdown-inline-pathological", "raw", max_input_size=64, timeout=10),
-        target("yaml", "yaml", "fuzz-str", "yaml"),
-        target("yaml-raw", "yaml", "raw", "yaml"),
-        target("yaml-source", "yaml", "raw", "yaml"),
-        target("yaml-roundtrip", max_input_size=512, timeout=10),
-        target("yaml-block", max_input_size=64),
-        target("xml", "xml", "fuzz-str", "xml"),
-        target("xml-raw", "xml", "raw", "xml", timeout=10),
-        target("xml-roundtrip", max_input_size=1024),
-        target("xml-malformed", max_input_size=1024),
-        target("xml-reader", "xml", "raw", "xml", timeout=10),
-        target("xml-stream", "xml-stream", "raw", "xml", max_input_size=2048, timeout=10),
-        target("xml-stream-ceilings", max_input_size=1, timeout=20, examples=True),
+        target("asciidoc-raw", "asciidoc", "raw", "asciidoc", family="Text"),
+        target("asciidoc-structured", max_input_size=256, family="Text"),
+        target("markdown-document", "markdown-document", "raw", "markdown-document", family="Text"),
+        target("markdown-blocks", max_input_size=1024, family="Text"),
+        target("markdown-refdefs", max_input_size=256, family="Text"),
+        target("markdown-inline", "markdown-inline", "raw", "markdown-inline", family="Text"),
+        target("markdown-inline-ast", max_input_size=1024, family="Text"),
+        target("markdown-inline-pathological", "markdown-inline-pathological", "raw", max_input_size=64, timeout=10, family="Text"),
+        target("yaml", "yaml", "fuzz-str", "yaml", family="Text"),
+        target("yaml-raw", "yaml", "raw", "yaml", family="Text"),
+        target("yaml-source", "yaml", "raw", "yaml", family="Text"),
+        target("yaml-roundtrip", max_input_size=512, timeout=10, family="Text"),
+        target("yaml-block", max_input_size=64, family="Text"),
+        target("xml", "xml", "fuzz-str", "xml", family="Xml"),
+        target("xml-raw", "xml", "raw", "xml", timeout=10, family="Xml"),
+        target("xml-roundtrip", max_input_size=1024, family="Xml"),
+        target("xml-malformed", max_input_size=1024, family="Xml"),
+        target("xml-reader", "xml", "raw", "xml", timeout=10, family="Xml"),
+        target("xml-stream", "xml-stream", "raw", "xml", max_input_size=2048, timeout=10, family="Xml"),
+        target("xml-stream-ceilings", max_input_size=1, timeout=20, examples=True, family="Xml"),
         # The first three bytes choose the limits; the rest is the document.
-        target("xml-limits", "xml-limits", "raw", "xml", max_input_size=1024),
+        target("xml-limits", "xml-limits", "raw", "xml", max_input_size=1024, family="Xml"),
         # Two bytes choose a shape and a size; its examples hold the ceilings.
-        target("xml-ceilings", "xml-ceilings", "raw", max_input_size=2, timeout=20, examples=True),
-        target("xmlns-raw", "xmlns", "raw", "xmlns", timeout=10),
-        target("xmlns-roundtrip", max_input_size=1024, timeout=10),
-        target("svg-path", max_input_size=64, timeout=10, scheduled=False),
-        target("svg-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
-        target("mathml-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
-        target("html-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
-        target("markup-source", "markup", "raw", "markup", timeout=10, scheduled=False),
-        target("dom-construction", max_input_size=12, timeout=10, examples=True, scheduled=False),
-        target("markup-structured", max_input_size=128, timeout=10, scheduled=False),
-        target("markup-limits", max_input_size=8, timeout=10, scheduled=False),
-        target("markup-segments", max_input_size=256, timeout=10, examples=True, scheduled=False),
-        target("json-raw", "json", "raw", "json", timeout=10),
+        target("xml-ceilings", "xml-ceilings", "raw", max_input_size=2, timeout=20, examples=True, family="Xml"),
+        target("xmlns-raw", "xmlns", "raw", "xmlns", timeout=10, family="Xml"),
+        target("xmlns-roundtrip", max_input_size=1024, timeout=10, family="Xml"),
+        target("svg-path", max_input_size=64, timeout=10, scheduled=False, family="Markup"),
+        target("svg-raw", "markup", "raw", "markup", timeout=10, scheduled=False, family="Markup"),
+        target("mathml-raw", "markup", "raw", "markup", timeout=10, scheduled=False, family="Markup"),
+        target("html-raw", "markup", "raw", "markup", timeout=10, scheduled=False, family="Markup"),
+        target("markup-source", "markup", "raw", "markup", timeout=10, scheduled=False, family="Markup"),
+        target("dom-construction", max_input_size=12, timeout=10, examples=True, scheduled=False, family="Markup"),
+        target("markup-structured", max_input_size=128, timeout=10, scheduled=False, family="Markup"),
+        target("markup-limits", max_input_size=8, timeout=10, scheduled=False, family="Markup"),
+        target("markup-segments", max_input_size=256, timeout=10, examples=True, scheduled=False, family="Markup"),
+        target("json-raw", "json", "raw", "json", timeout=10, family="Json"),
         # The first two bytes choose the options, so its seeds carry them.
-        target("json-options", "json-options", "raw", "json", timeout=10),
-        target("json-roundtrip", max_input_size=1024, timeout=10),
-        target("json-stream", "json", "raw", "json", max_input_size=1024, timeout=10, examples=True),
-        target("json-stream-ceilings", max_input_size=1, timeout=20, examples=True),
-        target("ofx-raw", "ofx", "raw", "ofx", max_input_size=8192, timeout=10),
-        target("ofx-stream", max_input_size=256, timeout=10),
-        target("ofx-roundtrip", max_input_size=256, timeout=10),
-        target("ofx-malformed", max_input_size=256, timeout=10),
-        target("ofx-ceilings", max_input_size=1, timeout=20, examples=True),
-        target("qif-raw", "qif", "raw", "qif", timeout=10),
-        target("qif-stream", "qif", "raw", "qif", timeout=10),
-        target("qif-roundtrip", max_input_size=256, timeout=10),
-        target("qif-malformed", max_input_size=256, timeout=10),
-        target("qif-ceilings", max_input_size=1, timeout=20, examples=True),
-        target("stream-contract", max_input_size=256),
-        target("stream-ceilings", max_input_size=1, examples=True),
-        target("csv", "csv", "fuzz-str", "csv"),
-        target("csv-raw", "csv", "raw", "csv", timeout=10),
-        target("csv-roundtrip", timeout=10),
-        target("csv-decode", timeout=10),
-        target("csv-stream-raw", "csv", "raw", "csv", timeout=10, examples=True),
-        target("csv-stream-ceilings", max_input_size=1, timeout=20, examples=True),
-        target("http-request", "http-request", "fuzz-str", "http-request", timeout=10),
-        target("http-response", "http-response", "fuzz-str", "http-response", timeout=10),
-        target("http-raw", "http-request", "raw", "http-raw", max_input_size=65536, timeout=10),
-        target("http-roundtrip", timeout=10),
-        target("http-smuggling", timeout=10),
-        target("http-stream", max_input_size=1024, timeout=10, examples=True),
-        target("http-stream-ceilings", max_input_size=1, timeout=20, examples=True),
-        target("parser-combinators", max_input_size=256),
+        target("json-options", "json-options", "raw", "json", timeout=10, family="Json"),
+        target("json-roundtrip", max_input_size=1024, timeout=10, family="Json"),
+        target("json-stream", "json", "raw", "json", max_input_size=1024, timeout=10, examples=True, family="Json"),
+        target("json-stream-ceilings", max_input_size=1, timeout=20, examples=True, family="Json"),
+        target("ofx-raw", "ofx", "raw", "ofx", max_input_size=8192, timeout=10, family="Records"),
+        target("ofx-stream", max_input_size=256, timeout=10, family="Records"),
+        target("ofx-roundtrip", max_input_size=256, timeout=10, family="Records"),
+        target("ofx-malformed", max_input_size=256, timeout=10, family="Records"),
+        target("ofx-ceilings", max_input_size=1, timeout=20, examples=True, family="Records"),
+        target("qif-raw", "qif", "raw", "qif", timeout=10, family="Records"),
+        target("qif-stream", "qif", "raw", "qif", timeout=10, family="Records"),
+        target("qif-roundtrip", max_input_size=256, timeout=10, family="Records"),
+        target("qif-malformed", max_input_size=256, timeout=10, family="Records"),
+        target("qif-ceilings", max_input_size=1, timeout=20, examples=True, family="Records"),
+        target("stream-contract", max_input_size=256, family="Records"),
+        target("stream-ceilings", max_input_size=1, examples=True, family="Records"),
+        target("csv", "csv", "fuzz-str", "csv", family="Records"),
+        target("csv-raw", "csv", "raw", "csv", timeout=10, family="Records"),
+        target("csv-roundtrip", timeout=10, family="Records"),
+        target("csv-decode", timeout=10, family="Records"),
+        target("csv-stream-raw", "csv", "raw", "csv", timeout=10, examples=True, family="Records"),
+        target("csv-stream-ceilings", max_input_size=1, timeout=20, examples=True, family="CsvRetention"),
+        target("http-request", "http-request", "fuzz-str", "http-request", timeout=10, family="Http"),
+        target("http-response", "http-response", "fuzz-str", "http-response", timeout=10, family="Http"),
+        target("http-raw", "http-request", "raw", "http-raw", max_input_size=65536, timeout=10, family="Http"),
+        target("http-roundtrip", timeout=10, family="Http"),
+        target("http-smuggling", timeout=10, family="Http"),
+        target("http-stream", max_input_size=1024, timeout=10, examples=True, family="Http"),
+        target("http-stream-ceilings", max_input_size=1, timeout=20, examples=True, family="Http"),
+        target("parser-combinators", max_input_size=256, examples=True, family="Core"),
         # The first byte chooses the format and the second an offset.
-        target("validate", "validate", "raw", max_input_size=1024, timeout=10),
-        target("diagnostic-lifetimes", max_input_size=2, timeout=20, examples=True, scheduled=False),
-        target("string-primitives", max_input_size=256, timeout=10),
-        target("byte-scan", max_input_size=256, timeout=10),
-        target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
-        target("roc-syntax-structured", max_input_size=256),
-        target("roc-syntax-spans", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
-        target("roc-syntax-span-model", max_input_size=512),
+        target("validate", "validate", "raw", max_input_size=1024, timeout=10, family="Core"),
+        target("diagnostic-lifetimes", max_input_size=2, timeout=20, examples=True, scheduled=False, family="Diagnostics"),
+        target("string-primitives", max_input_size=256, timeout=10, family="Core"),
+        target("byte-scan", max_input_size=256, timeout=10, family="Core"),
+        target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096, family="Core"),
+        target("roc-syntax-structured", max_input_size=256, family="Core"),
+        target("roc-syntax-spans", "roc-syntax", "raw", "roc-syntax", max_input_size=4096, family="Core"),
+        target("roc-syntax-span-model", max_input_size=512, family="Core"),
     ]
 )
 
+FAMILIES = {
+    family: tuple(name for name, config in TARGETS.items() if config.family == family)
+    for family in dict.fromkeys(config.family for config in TARGETS.values())
+}
 TARGET_ORDER = tuple(TARGETS)
 SCHEDULED_TARGET_ORDER = tuple(name for name, config in TARGETS.items() if config.scheduled)
 
 
 def encode_fuzz_str(value: str) -> bytes:
-    """Encode a reviewed seed for roc-fuzz 0.3.0's Fuzz.str generator.
+    """Encode a reviewed seed for roc-fuzz's Fuzz.str generator.
 
     For inputs of at most 255 bytes, Arbitrary.arbitrary_str consumes one
     trailing byte to choose the string length. Setting it to the UTF-8 byte
@@ -208,7 +219,8 @@ def resolve_targets(requested: Sequence[str]) -> list[str]:
     if "all" in requested:
         raise ValueError("`all` cannot be combined with individual target names")
 
-    unknown = sorted(set(requested) - set(TARGETS))
+    expanded = [member for requested_name in requested for member in FAMILIES.get(requested_name, (requested_name,))]
+    unknown = sorted(set(expanded) - set(TARGETS))
     if unknown:
         raise ValueError(
             f"unknown fuzz target(s): {', '.join(unknown)}; "
@@ -216,7 +228,7 @@ def resolve_targets(requested: Sequence[str]) -> list[str]:
         )
 
     seen: set[str] = set()
-    return [name for name in requested if not (name in seen or seen.add(name))]
+    return [name for name in expanded if not (name in seen or seen.add(name))]
 
 
 def command_output(command: Sequence[str], cwd: Path) -> str:
@@ -236,37 +248,40 @@ def command_output(command: Sequence[str], cwd: Path) -> str:
 
 
 def binary_path(target_name: str) -> Path:
-    return WORK_ROOT / "bin" / target_name
+    return WORK_ROOT / "bin" / TARGETS[target_name].family
 
 
 def run_directory(target_name: str) -> Path:
     return WORK_ROOT / "runs" / target_name
 
 
-def build_identity(target_name: str, roc: str) -> dict:
+def build_identity(target_name: str, roc: str, platform: Path | None = None) -> dict:
     config = TARGETS[target_name]
     digest = hashlib.sha256()
     for path in sorted({config.source, *FUZZ_ROOT.glob("*.roc"), *(ROOT / "package").glob("*.roc")}):
         digest.update(str(path.relative_to(ROOT)).encode())
         digest.update(path.read_bytes())
+    if platform is not None:
+        for path in sorted({*platform.parent.glob("*.roc"), *platform.parent.glob("targets/*/SHA256SUMS"), *platform.parent.glob("targets/*/libhost.a")}):
+            digest.update(str(path).encode())
+            digest.update(path.read_bytes())
     compiler_path = Path(shutil.which(roc) or roc)
     compiler_sha256 = hashlib.sha256(compiler_path.read_bytes()).hexdigest() if compiler_path.is_file() else None
     return {"source_sha256": digest.hexdigest(), "compiler": command_output([roc, "version"], ROOT), "compiler_sha256": compiler_sha256,
-            "flags": ["--no-cache", "--opt=speed", "--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE}
+            "flags": ["--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE, "platform_override": str(platform.resolve()) if platform else None}
 
 
 PRINT_LOCK = threading.Lock()
 
 
-def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = False) -> tuple[int, Path]:
+def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = False, platform: Path | None = None) -> tuple[int, Path]:
     """Build one target. With `capture`, the compiler's output is printed in
     one piece when it finishes, so that concurrent builds stay readable."""
     config = TARGETS[target_name]
     output = binary_path(target_name)
 
     manifest_path = output.with_suffix(".build.json")
-    syntax_target = target_name.startswith(("roc-syntax-", "markup-", "svg-", "mathml-", "html-", "dom-construction"))
-    identity = build_identity(target_name, roc) if syntax_target else None
+    identity = build_identity(target_name, roc, platform)
     if no_build:
         if not output.is_file():
             print(
@@ -274,20 +289,23 @@ def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = 
                 file=sys.stderr,
             )
             return 2, output
-        if syntax_target:
-            try:
-                saved = json.loads(manifest_path.read_text())
-            except (OSError, ValueError):
-                print("error: syntax fuzz binary has no build identity; rebuild without --no-build", file=sys.stderr)
-                return 2, output
-            actual_hash = hashlib.sha256(output.read_bytes()).hexdigest()
-            if saved.get("identity") != identity or saved.get("binary_sha256") != actual_hash:
-                print("error: syntax fuzz binary identity differs from source/compiler; rebuild without --no-build", file=sys.stderr)
-                return 2, output
+        try:
+            saved = json.loads(manifest_path.read_text())
+        except (OSError, ValueError):
+            print("error: fuzz binary has no build identity; rebuild without --no-build", file=sys.stderr)
+            return 2, output
+        actual_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+        if saved.get("identity") != identity or saved.get("binary_sha256") != actual_hash:
+            print("error: fuzz binary identity differs from source/compiler; rebuild without --no-build", file=sys.stderr)
+            return 2, output
+        output.chmod(output.stat().st_mode | 0o111)
         return 0, output
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = [roc, "build", "--no-cache", "--opt=speed", "--fuzz", str(config.source), f"--output={output}"]
+    # Coverage instrumentation requires LLVM; ordinary CI builds use dev.
+    command = [roc, "build", "--fuzz", str(config.source), f"--output={output}"]
+    if platform is not None:
+        command.extend(["--replace-dep", f"https://github.com/lukewilliamboswell/roc-fuzz/releases/download/{ROC_FUZZ_RELEASE['version']}/{ROC_FUZZ_RELEASE['bundle']}", str(platform.resolve())])
     if not capture:
         print(f"+ {shlex.join(command)}", flush=True)
     try:
@@ -302,9 +320,9 @@ def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = 
     if capture:
         with PRINT_LOCK:
             print(f"+ {shlex.join(command)}\n{completed.stdout.rstrip()}", flush=True)
-    if completed.returncode == 0 and syntax_target:
-        if identity != build_identity(target_name, roc):
-            print("error: syntax fuzz sources changed while building; rebuild", file=sys.stderr)
+    if completed.returncode == 0:
+        if identity != build_identity(target_name, roc, platform):
+            print("error: fuzz sources changed while building; rebuild", file=sys.stderr)
             return 2, output
         manifest_path.write_text(json.dumps({"identity": identity, "binary_sha256": hashlib.sha256(output.read_bytes()).hexdigest()}, indent=2) + "\n")
     return completed.returncode, output
@@ -357,14 +375,15 @@ def execute_target_command(
     roc: str,
     no_build: bool,
     arguments: Sequence[str],
+    platform: Path | None = None,
 ) -> int:
-    build_status, executable = build_target(target_name, roc, no_build)
+    build_status, executable = build_target(target_name, roc, no_build, platform=platform)
     if build_status != 0:
         return build_status
 
     cwd = run_directory(target_name)
     cwd.mkdir(parents=True, exist_ok=True)
-    command = [str(executable), *arguments]
+    command = [str(executable), f"--target={target_name}", *arguments]
     metadata_path = write_metadata(target_name, roc, command, "running", None)
     print(f"+ {shlex.join(command)}", flush=True)
     print(f"  working directory: {cwd}", flush=True)
@@ -383,12 +402,15 @@ def execute_target_command(
     return return_code
 
 
-def build_targets(target_names: Sequence[str], roc: str, jobs: int) -> dict[str, int]:
-    """Build several targets at once. Optimised fuzz builds are long and mostly
-    single-threaded, so a smoke run of every target is bounded by them."""
+def build_targets(target_names: Sequence[str], roc: str, jobs: int, platform: Path | None = None) -> dict[str, int]:
+    """Compile each family once; properties reuse its binary and build receipt."""
+    representatives = {}
+    for name in target_names:
+        representatives.setdefault(TARGETS[name].family, name)
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        statuses = pool.map(lambda name: build_target(name, roc, False, capture=True)[0], target_names)
-        return dict(zip(target_names, statuses))
+        statuses = list(pool.map(lambda name: build_target(name, roc, False, capture=True, platform=platform)[0], representatives.values()))
+    by_family = dict(zip(representatives, statuses))
+    return {name: by_family[TARGETS[name].family] for name in target_names}
 
 
 def run_fuzz_mode(args: argparse.Namespace) -> int:
@@ -400,8 +422,8 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
     overall_status = 0
 
     prebuilt: dict[str, int] = {}
-    if not args.no_build and args.jobs > 1 and len(target_names) > 1:
-        prebuilt = build_targets(target_names, args.roc, args.jobs)
+    if not args.no_build:
+        prebuilt = build_targets(target_names, args.roc, args.jobs, args.platform)
 
     for target_name in target_names:
         if prebuilt.get(target_name, 0) != 0:
@@ -429,7 +451,7 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
 
         no_build = args.no_build or target_name in prebuilt
         if config.examples:
-            status = execute_target_command(target_name, args.roc, no_build, ["check", f"--timeout={args.timeout or config.timeout}"])
+            status = execute_target_command(target_name, args.roc, no_build, ["check", f"--timeout={args.timeout or config.timeout}"], args.platform)
             if status != 0:
                 overall_status = overall_status or status
                 continue
@@ -439,6 +461,7 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
             args.roc,
             no_build,
             options,
+            args.platform,
         )
         if status != 0 and overall_status == 0:
             overall_status = status
@@ -475,6 +498,7 @@ def run_artifact_command(args: argparse.Namespace) -> int:
         args.roc,
         args.no_build,
         arguments,
+        args.platform,
     )
 
 
@@ -489,6 +513,7 @@ def positive_int(value: str) -> int:
 
 
 def add_build_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--platform", type=Path, help="local roc-fuzz platform entry point for upstream development")
     parser.add_argument(
         "--roc",
         default=os.environ.get("ROC", "roc"),
@@ -542,6 +567,12 @@ def make_argument_parser() -> argparse.ArgumentParser:
     minimize.add_argument("output")
     add_build_options(minimize)
 
+    build = subparsers.add_parser("build", help="compile shared family binaries without running properties")
+    build.add_argument("targets", nargs="*", metavar="TARGET", help="property, family, or all")
+    build.add_argument("--ci", action="store_true")
+    add_limits(build)
+    add_build_options(build)
+
     return parser
 
 
@@ -549,6 +580,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = make_argument_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "build":
+            selected = resolve_targets(args.targets)
+            if args.ci:
+                selected = [name for name in selected if TARGETS[name].scheduled]
+            statuses = build_targets(selected, args.roc, args.jobs, args.platform)
+            return next((status for status in statuses.values() if status), 0)
         if args.command in ("smoke", "campaign"):
             return run_fuzz_mode(args)
         return run_artifact_command(args)

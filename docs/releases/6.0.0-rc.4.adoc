@@ -81,3 +81,12 @@ This candidate preserves native allocation checks and includes the existing
 performance work. It does not establish that the 1.5-times-fastest reference
 target is met. Whole-document and streaming comparisons remain separate local
 workloads; final performance acceptance is still pending.
+
+== Contributor checks
+
+Routine checks and examples use cached dev builds. Tooling uses roc-fuzz
+0.7.0-rc1. Scheduled properties share
+seven fuzz executables while retaining their own inputs, examples and reports.
+CSV retention runs separately for
+https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box issue],
+with its original diagnostic and allocation assertions intact.

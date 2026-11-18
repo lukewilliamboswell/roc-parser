@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,22 +34,11 @@ def app_source(body: str) -> str:
     parser: "{(ROOT / 'package' / 'main.roc').as_posix()}",
 }}
 import cli.Stdout
-import parser.Parser
-import parser.Yaml
-import parser.Xml
-import parser.CSV
-import parser.QIF
-import parser.OFX
-import parser.Markdown
-import parser.AsciiDoc
-import parser.HTTP
-import parser.RocSyntax
-import parser.JsonValue
-import parser.Html
-import parser.Svg
-import parser.MathML
-import parser.Markup
 '''
+    roots = ('Parser', 'Yaml', 'Xml', 'CSV', 'QIF', 'OFX', 'Markdown', 'AsciiDoc', 'HTTP', 'RocSyntax', 'JsonValue', 'Html', 'Svg', 'MathML', 'Markup')
+    # Each fixture imports only the public owners it exercises. Unrelated
+    # quotation hooks and format constructors need no per-application work.
+    header += ''.join(f'import parser.{root}\n' for root in roots if re.search(rf'\b{root}\b', body))
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''
     return header + "\n" + body + "\n" + main
@@ -85,12 +75,9 @@ def check_case(roc: str, case: dict, directory: Path) -> None:
         path.write_text(content, encoding="utf-8")
     (directory / "main.roc").write_text(app_source(case["body"]), encoding="utf-8")
     executable = directory / ("app.exe" if os.name == "nt" else "app")
-    # Representative successful programs exercise optimized static values;
-    # rejection contracts also exercise the faster development backend.
-    optimization = "speed" if case["name"] in ("inline-formats", "typed-and-multiline", "imported-formats") else "dev"
     for command in (
-        [roc, "check", "--no-cache", "main.roc"],
-        [roc, "build", "--no-cache", f"--opt={optimization}", f"--output={executable}", "main.roc"],
+        [roc, "check", "main.roc"],
+        [roc, "build", "--opt=dev", f"--output={executable}", "main.roc"],
     ):
         assert_compiler_result(invoke(command, directory), errors)
     if not errors:
@@ -131,8 +118,8 @@ value = Parser.Quotation.require(Yaml.validate({ source: text, name: "settings.y
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--filter", default="", help="select fixture names (also matches cache-invalidation)")
-    parser.add_argument("--jobs", type=int, default=os.environ.get("ROC_PARSER_LITERAL_JOBS", "1"),
-                        help="maximum concurrent compiler contracts (default: ROC_PARSER_LITERAL_JOBS or 1)")
+    parser.add_argument("--jobs", type=int, default=os.environ.get("ROC_PARSER_LITERAL_JOBS", "2"),
+                        help="maximum concurrent compiler contracts (default: ROC_PARSER_LITERAL_JOBS or 2)")
     args = parser.parse_args(argv)
     if args.jobs < 1:
         parser.error("--jobs must be positive")

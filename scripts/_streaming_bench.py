@@ -71,7 +71,7 @@ def roc_implementations(api, builder, formats, chunk_bytes):
         driver = {"json": "json-stream", "xml": "xml-events", "http": "http-stream"}[fmt]
         binary = builder.out / "bin" / f"roc-{driver}"
         binary.parent.mkdir(parents=True, exist_ok=True)
-        if not builder.run(f"roc-{driver}", [builder.roc, "build", "--opt=speed", "--debug",
+        if not builder.run(f"roc-{driver}", [builder.roc, "build", *builder.roc_flags,
                 str(api.BENCH / "roc" / f"{driver}.roc"), f"--output={binary}"]):
             continue
         modes = {"json": (("array", str(chunk_bytes)), ("ndjson", str(chunk_bytes))),
@@ -80,7 +80,7 @@ def roc_implementations(api, builder, formats, chunk_bytes):
         for mode in modes:
             name = "roc-reader-consume" if mode[0] == "reader" else "roc-parser-consume"
             result.append(api.Impl("roc", name, fmt, [str(binary), *mode],
-                f"consume: {fmt} {' '.join(mode)}; preloaded source, discard completed values/events; --opt=speed --debug"))
+                f"consume: {fmt} {' '.join(mode)}; preloaded source, discard completed values/events; {builder.optimization} build --debug"))
     return result
 
 

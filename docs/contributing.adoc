@@ -145,12 +145,12 @@ stops at the first failure. Name sections to run only those, for example
 |`package` |`scripts/test_package.roc`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`; then a release dry run, which bundles the package, builds the examples archive with the bundle's release URL, and checks, builds and runs every case of its `spec.json` against that bundle served on a loopback address
 |`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/spec.json`
 |`docs` |The manual's Roc examples and the API reference audit (<<contributing-docs>>)
-|`fuzz` |Builds every fuzz target and runs 2,000 inputs from its seeds (<<property-testing>>)
-|`bench` |A smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
+|`fuzz` |Builds seven shared fuzz executables and runs each scheduled property on 2,000 inputs from its seeds (<<property-testing>>)
+|`bench` |A dev-build smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
 |===
 
 The scheduled `fuzz.yml` workflow runs ten-minute native Roc campaigns for
-each registered CI target. Cross-language correctness and performance
+each registered CI property, reusing binaries compiled once in a shared job. Cross-language correctness and performance
 comparisons run locally through the named `conformance`, `markup`, `asciidoc`,
 `roc-syntax`, `bench` and `bench-quick` Blueprint tasks. They are excluded from
 CI, nightly compatibility checks and release validation.

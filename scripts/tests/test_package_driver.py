@@ -19,7 +19,7 @@ class PackageDriverTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.build = tempfile.TemporaryDirectory()
         cls.binary = Path(cls.build.name) / "test-package"
-        subprocess.run(["roc-stable", "build", str(ROOT / "scripts/test_package.roc"),
+        subprocess.run(["roc-stable", "build", "--opt=dev", str(ROOT / "scripts/test_package.roc"),
                         f"--output={cls.binary}"], cwd=ROOT, check=True, capture_output=True)
 
     @classmethod

@@ -844,7 +844,7 @@ def corpus(args) -> int:
     counts: Counter = Counter()
     mismatches = []
     for path in sorted(item for item in args.corpus.iterdir() if item.is_file()):
-        shown = subprocess.run([str(target), "show", str(path)], capture_output=True, text=True, errors="replace", check=False)
+        shown = subprocess.run([str(target), f"--target={args.target}", "show", str(path)], capture_output=True, text=True, errors="replace", check=False)
         try:
             document = parse_show(shown.stdout + "\n" + shown.stderr)
         except ValueError as error:
@@ -1039,7 +1039,7 @@ def fuzz_run(roc: str, target: str, seconds: float, seed: int, output: Path, smo
     corpus_dir.mkdir(parents=True, exist_ok=True)
     seed_corpus(run_fuzz, target, corpus_dir)
     limit = "--runs=2000" if smoke else "--time=" + str(max(1, int(seconds)))
-    command = [str(binary), "explore", str(corpus_dir), f"--report-dir={fresh_evidence_dir(work)}", limit, "--seed=" + str(seed), f"--max-input-size={config.max_input_size}", f"--timeout={config.timeout}", "--memory-limit=2048", "--print-final-stats"]
+    command = [str(binary), f"--target={target}", "explore", str(corpus_dir), f"--report-dir={fresh_evidence_dir(work)}", limit, "--seed=" + str(seed), f"--max-input-size={config.max_input_size}", f"--timeout={config.timeout}", "--memory-limit=2048", "--print-final-stats"]
     if config.dictionary is not None:
         command.append("--dictionary=" + str(config.dictionary))
     start = time.monotonic()

@@ -174,7 +174,7 @@ Use the latest Roc nightly, plus Ruby and Python:
 ----
 python3 scripts/asciidoc/setup_oracle.py
 mkdir -p .roc-parser-tmp/asciidoc
-$ROC build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+$ROC build --opt=dev scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
 python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 200 --mutations 200 --corpus docs
 python3 scripts/run_fuzz.py smoke asciidoc-raw asciidoc-structured
 ----

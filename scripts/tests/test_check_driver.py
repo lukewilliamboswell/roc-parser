@@ -18,7 +18,7 @@ class CheckDriverTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.build = tempfile.TemporaryDirectory()
         cls.binary = Path(cls.build.name) / "check"
-        subprocess.run(["roc-stable", "build", str(ROOT / "scripts/check_all.roc"),
+        subprocess.run(["roc-stable", "build", "--opt=dev", str(ROOT / "scripts/check_all.roc"),
                         f"--output={cls.binary}"], cwd=ROOT, check=True, capture_output=True)
 
     @classmethod
@@ -60,7 +60,7 @@ sys.exit(7 if sys.argv[0].endswith("check_doc_examples.roc") else 0)
         result = self.run_driver("--keep-going", "docs", "fuzz", "fuzz")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(self.log.read_text().splitlines(), [
-            "version", "", "scripts/run_fuzz.py smoke --ci all"])
+            "version", "", "scripts/run_fuzz.py smoke --ci all --jobs 2"])
 
     def test_list_requires_no_package_compiler(self) -> None:
         result = self.run_driver("--list")

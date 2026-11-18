@@ -682,11 +682,12 @@ def generated_cases(count, seed, **budgets):
     return module.generated_cases(count, seed, **budgets)
 
 
-def shown_cases(binary, corpus):
+def shown_cases(binary, corpus, target=None):
     """Source a structured fuzz target writes for each of its corpus inputs."""
     cases = []
     for path in sorted(corpus.iterdir()):
-        shown = subprocess.run([str(binary), 'show', str(path)], capture_output=True, text=True, check=True, timeout=30)
+        selection = [f'--target={target}'] if target else []
+        shown = subprocess.run([str(binary), *selection, 'show', str(path)], capture_output=True, text=True, check=True, timeout=30)
         cases.append({'id': f'fuzz-show/{path.name}', 'mode': 'file', 'source': shown.stdout.removesuffix('\n'),
                       'rule': 'fuzz-show', 'coverage': 'supported'})
     return cases
@@ -705,6 +706,7 @@ def main(argv=None):
     parser.add_argument('--statements', type=int, default=4, help='generated block statements before the final expression')
     parser.add_argument('--replay', type=Path, help='replay a retained mismatch artifact')
     parser.add_argument('--fuzz-show', type=Path, help="structured fuzz target; review the source it shows for each --corpus input")
+    parser.add_argument('--fuzz-target', default='roc-syntax-span-model', help='property selected from the shared fuzz executable')
     parser.add_argument('--corpus', type=Path, help='corpus directory for --fuzz-show')
     parser.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp' / 'roc-syntax-review')
     parser.add_argument('--timeout', type=float, default=5)
@@ -713,7 +715,7 @@ def main(argv=None):
         parser.error('--fuzz-show and --corpus go together')
     metadata, cases = load_cases(args.fixtures)
     if args.fuzz_show:
-        cases += shown_cases(args.fuzz_show, args.corpus)
+        cases += shown_cases(args.fuzz_show, args.corpus, args.fuzz_target)
     if args.replay:
         saved = json.loads(args.replay.read_text())
         cases = [{**saved['request'], 'coverage': saved.get('coverage', 'replay'), 'rule': saved.get('rule')}]

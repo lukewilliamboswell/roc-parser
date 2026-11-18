@@ -127,7 +127,7 @@ def main(argv=None):
         a.candidate_binary,_=p.build(a,a.output)
     receipt_path=a.candidate_binary.with_suffix('.build.json');build=json.loads(receipt_path.read_text())
     require(build['source_identity']==p.source_identity(a.root) and build['binary_sha256']==sha(a.candidate_binary),'candidate receipt/source mismatch')
-    require(build['build_flags']==['--opt=speed'] and sha(build['compiler']['path'])==build['compiler']['sha256'],'candidate build flags/compiler mismatch')
+    require(build['build_flags']==[] and sha(build['compiler']['path'])==build['compiler']['sha256'],'candidate build flags/compiler mismatch')
     tracked=[Path(__file__),a.baseline,a.candidate_binary,receipt_path,Path(p.__file__),a.root/'scripts/review_roc_syntax.py',a.root/'scripts/review_asciidoc.py',Path(build['compiler']['path'])]
     if a.replay:tracked.append(a.replay)
     inputs={str(f):sha(f) for f in tracked};source=build['source_identity']

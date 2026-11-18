@@ -8,8 +8,8 @@ CheckPlan := [].{
 		{ name: "package", summary: "check, format and test the package, compile-time literals, roc docs, and a release dry run: bundle, examples archive and its spec run against a loopback bundle", commands: [["scripts/test_package.roc"]] },
 		{ name: "examples", summary: "the repository's examples against the working tree, compared with tests/spec.json", commands: [["release-package", "test-examples"]] },
 		{ name: "docs", summary: "the manual's executable Roc examples", commands: [["scripts/check_doc_examples.roc"]] },
-		{ name: "fuzz", summary: "build CI-enabled fuzz targets and run a short smoke campaign from their seeds", commands: [["python3", "scripts/run_fuzz.py", "smoke", "--ci", "all"]] },
-		{ name: "bench", summary: "benchmark smoke run of the roc-parser drivers; timings here are not measurements", commands: [["python3", "scripts/bench.py", "--quick", "--langs", "roc", "--timeout", "60", "--fail-on-error"]] },
+		{ name: "fuzz", summary: "build shared fuzz executables and run each CI property from its seeds", commands: [["python3", "scripts/run_fuzz.py", "smoke", "--ci", "all", "--jobs", "2"]] },
+		{ name: "bench", summary: "benchmark smoke run of the roc-parser drivers; timings here are not measurements", commands: [["python3", "scripts/bench.py", "--quick", "--opt", "dev", "--langs", "roc", "--timeout", "60", "--fail-on-error"]] },
 	]
 
 	## Reject the whole request before running anything, and preserve first use.

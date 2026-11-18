@@ -66,6 +66,7 @@ class SeedCorpusTests(unittest.TestCase):
     def test_all_target_inputs_exist(self) -> None:
         for name, config in run_fuzz.TARGETS.items():
             self.assertTrue(config.source.is_file(), config.source)
+            self.assertTrue(config.property_source.is_file(), config.property_source)
             if config.seeds is not None:
                 self.assertTrue(config.seeds.is_file(), config.seeds)
                 self.assertIn(config.seed_encoding, ("fuzz-str", "raw"), name)
@@ -75,8 +76,9 @@ class SeedCorpusTests(unittest.TestCase):
     def test_every_fuzz_target_is_registered(self) -> None:
         # Shared generator modules and the allocation diagnostic are not campaigns.
         not_targets = {"HttpGen", "HttpCheck", "XmlGen", "yaml-alloc", "markup-alloc", "MarkupCheck", "QifCheck", "OfxGen"}
-        sources = {path.stem for path in run_fuzz.FUZZ_ROOT.glob("*.roc")} - not_targets
-        self.assertEqual(sources, set(run_fuzz.TARGET_ORDER))
+        sources = {path for path in run_fuzz.FUZZ_ROOT.glob("*.roc") if path.stem not in not_targets}
+        registered = {config.source for config in run_fuzz.TARGETS.values()} | {config.property_source for config in run_fuzz.TARGETS.values()}
+        self.assertEqual(sources, registered)
 
     def test_workflow_matrix_lists_every_target(self) -> None:
         workflow = (run_fuzz.ROOT / ".github" / "workflows" / "fuzz.yml").read_text(encoding="utf-8")
@@ -149,6 +151,17 @@ class TargetSelectionTests(unittest.TestCase):
         args.targets = ["svg-raw"]
         with self.assertRaisesRegex(ValueError, "no CI-enabled"):
             run_fuzz.run_fuzz_mode(args)
+
+    def test_family_build_is_reused_for_each_selected_property(self):
+        selected = ["csv", "csv-raw", "qif-stream", "http-request"]
+        with patch.object(run_fuzz, "build_target", return_value=(0, Path("binary"))) as build:
+            statuses = run_fuzz.build_targets(selected, "roc", 1)
+        self.assertEqual(statuses, dict.fromkeys(selected, 0))
+        self.assertEqual(build.call_count, 2)
+        self.assertEqual({run_fuzz.TARGETS[call.args[0]].family for call in build.call_args_list}, {"Records", "Http"})
+
+    def test_family_selection_preserves_every_property(self):
+        self.assertEqual(run_fuzz.resolve_targets(["Records"]), list(run_fuzz.FAMILIES["Records"]))
 
     def test_selection_preserves_order_and_removes_duplicates(self) -> None:
         self.assertEqual(
