@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [parallel, warm, isolated, absolute]
+        case: [XmlProperty, XmlRawProperty, XmlRoundtripProperty, XmlMalformedProperty, XmlReaderProperty, XmlStreamProperty, XmlStreamCeilingsProperty, XmlLimitsProperty, XmlCeilingsProperty]
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -28,31 +28,18 @@ jobs:
           import os
           p = Path('fuzz/XmlProperties.roc')
           case = os.environ['CONTROL']
-          lines = p.read_text().splitlines(keepends=True)
-          if case in ('xml', 'namespace'):
-              def keep(line):
-                  if '.target,' in line or (line.startswith('import Xml') and 'Property' in line):
-                      return ('Xmlns' in line) == (case == 'namespace')
-                  return True
-              p.write_text(''.join(line for line in lines if keep(line)))
+          header = p.read_text().split('import fuzz.Fuzz', 1)[0]
+          p.write_text(header + f'import fuzz.Fuzz\nimport {case}\n\ntarget = Fuzz.suite([{case}.target])\n')
           SCRIPT
       - name: Build the control
         env:
           CONTROL: ${{ matrix.case }}
         run: |
+          set -euo pipefail
           mkdir -p .roc-parser-tmp/xml-controls
           roc version
           cat fuzz/XmlProperties.roc
-          if [[ "$CONTROL" == warm || "$CONTROL" == isolated ]]; then roc test --opt=dev package/main.roc; fi
-          if [[ "$CONTROL" == parallel ]]; then
-            python3 scripts/run_fuzz.py build Text Xml --jobs 2 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
-          elif [[ "$CONTROL" == isolated ]]; then
-            ROC_CACHE_DIR="$PWD/.roc-parser-tmp/xml-controls/compiler-cache" roc build --fuzz fuzz/XmlProperties.roc --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
-          elif [[ "$CONTROL" == absolute ]]; then
-            roc build --fuzz "$PWD/fuzz/XmlProperties.roc" --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
-          else
-            roc build --fuzz fuzz/XmlProperties.roc --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
-          fi
+          roc build --fuzz fuzz/XmlProperties.roc --output=.roc-parser-tmp/xml-controls/xml 2>&1 | tee .roc-parser-tmp/xml-controls/build.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
