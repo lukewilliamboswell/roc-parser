@@ -7,7 +7,6 @@ import OfxRawProperty
 import OfxStreamProperty
 import OfxRoundtripProperty
 import OfxMalformedProperty
-import OfxCeilingsProperty
 import QifRawProperty
 import QifStreamProperty
 import QifRoundtripProperty
@@ -26,7 +25,6 @@ target = Fuzz.suite([
 	OfxStreamProperty.target,
 	OfxRoundtripProperty.target,
 	OfxMalformedProperty.target,
-	OfxCeilingsProperty.target,
 	QifRawProperty.target,
 	QifStreamProperty.target,
 	QifRoundtripProperty.target,

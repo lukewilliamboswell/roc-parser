@@ -18,7 +18,7 @@ parser: "{package-url}",
 
 Namespaced XML parsing explicitly qualifies reader dispatch to avoid
 https://github.com/roc-lang/roc/issues/13204[the November 18 checker abort].
-Streaming readers explicitly retain their input cursor during state updates to
+Streaming readers and writers explicitly retain their input cursors during state updates to
 avoid https://github.com/roc-lang/roc/issues/13208[the specializing compiler's
 record-update abort]. AsciiDoc and QIF tests use explicit nominal props and
 integer types required by this nightly.
@@ -31,5 +31,9 @@ The tooling compiler is pinned separately to the November 18 nightly, and
 Blueprint records its verified download hashes.
 
 Fuzz campaigns retain shared executables, per-property corpora, named examples,
-resource checks and failure reports. Build reuse verifies source, compiler,
+resource checks and failure reports. Text, Core and Records use the Boxy compiler
+profile; OFX and CSV allocation checks retain separate specializing executables
+to preserve their existing ceilings. XML location checks box the position model
+to avoid https://github.com/roc-lang/roc/issues/13212[incorrect optimized output].
+Build reuse verifies source, compiler,
 compiler flags and executable identity.

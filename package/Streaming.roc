@@ -271,8 +271,8 @@ value_events = |events| Stream.custom(
 	},
 )
 
-# Keep chunks explicit on cursor updates for roc-lang/roc#13208.
-# Remove the extra fields when the specializing backend passes both readers.
+# Keep input cursors explicit on reader/writer updates for roc-lang/roc#13208.
+# Remove the extra fields when the specializing backend passes reader/writer suites.
 ## Lazily decode pure byte chunks. Empty chunks are data, never EOF.
 read_chunks : Iter(Streaming.Bytes), state, (state, Streaming.Bytes, Streaming.InputEnd -> Streaming.Step(state, item, [..problem])), Streaming.RecoveryProps -> Iter(Try(Streaming.ReadEvent(item, problem), Streaming.ReadError(problem)))
 read_chunks = |chunks, initial, step, props| Iter.custom(
@@ -440,7 +440,7 @@ write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 				if $cursor.index < $cursor.buffer.len() {
 					len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
 					bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
-					$cursor = { ..$cursor, index: $cursor.index + len }
+					$cursor = { ..$cursor, items: $cursor.items, index: $cursor.index + len }
 					return Ok((Ok(bytes), Reading($cursor)))
 				}
 				if $cursor.finishing {
@@ -449,7 +449,7 @@ write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 				match $cursor.items.next() {
 					Done => match finish($cursor.writer) {
 						Ok(bytes) => {
-							$cursor = { ..$cursor, buffer: bytes, index: 0, finishing: True }
+							$cursor = { ..$cursor, items: $cursor.items, buffer: bytes, index: 0, finishing: True }
 						}
 						Err(error) => return Ok((write_failure(error), Stopped))
 					}
@@ -484,7 +484,7 @@ write_source = |items, initial, write, finish, chunk_bytes| Stream.custom(
 				if $cursor.index < $cursor.buffer.len() {
 					len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
 					bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
-					$cursor = { ..$cursor, index: $cursor.index + len }
+					$cursor = { ..$cursor, items: $cursor.items, index: $cursor.index + len }
 					return Ok((Ok(bytes), Reading($cursor)))
 				}
 				if $cursor.finishing {
@@ -493,7 +493,7 @@ write_source = |items, initial, write, finish, chunk_bytes| Stream.custom(
 				match $cursor.items.next!() {
 					Done => match finish($cursor.writer) {
 						Ok(bytes) => {
-							$cursor = { ..$cursor, buffer: bytes, index: 0, finishing: True }
+							$cursor = { ..$cursor, items: $cursor.items, buffer: bytes, index: 0, finishing: True }
 						}
 						Err(error) => return Ok((write_source_failure(error), Stopped))
 					}

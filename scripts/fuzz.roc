@@ -67,14 +67,7 @@ run! = |args| {
 	# Resolve path-like compiler choices before changing the worker cwd.
 	compiler_path = Process.resolve!(roc)?
 	compiler = Path.display(compiler_path)
-	source_files = Process.run!(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "package", "fuzz"], root, [], 30_000)?
-	var $source = []
-	for file in Str.from_utf8_lossy(source_files.stdout_bytes).split_on("\u(0)").keep_if(|name| name.ends_with(".roc")) {
-		$source = $source.concat(file.to_utf8()).append(0).concat(Path.read_bytes!(Path.utf8(file))?).append(0)
-	}
-	version = Process.run!([compiler, "version"], root, [], 30_000)?
-	compiler_hash = Process.digest!(Path.read_bytes!(compiler_path)?)?
-	source_hash = Process.digest!($source.concat(version.stdout_bytes).concat(compiler_hash.to_utf8()))?
+	source_hash = source_identity!(compiler, root)?
 	var $execution_args = args
 	if jobs > 1 and !args.no_build and chosen.len() > 1 {
 		var $remaining = shared_targets(chosen)
@@ -124,6 +117,18 @@ run! = |args| {
 	}
 }
 
+## Bind each executable to the complete source and compiler identity.
+source_identity! = |compiler, root| {
+	source_files = Process.run!(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "package", "fuzz"], root, [], 30_000)?
+	var $source = []
+	for file in Str.from_utf8_lossy(source_files.stdout_bytes).split_on("\u(0)").keep_if(|name| name.ends_with(".roc")) {
+		$source = $source.concat(file.to_utf8()).append(0).concat(Path.read_bytes!(Path.join(root, file))?).append(0)
+	}
+	version = Process.run!([compiler, "version"], root, [], 30_000)?
+	compiler_hash = Process.digest!(Path.read_bytes!(Path.utf8(compiler))?)?
+	Process.digest!($source.concat(version.stdout_bytes).concat(compiler_hash.to_utf8()))
+}
+
 execute! = |target, mode, args, names, compiler, root, binary, receipt, source_hash, runs, seconds, memory| {
 	flags = ["--fuzz"].concat(FuzzPlan.build_flags(target.family))
 	signature = Json.to_str(flags)
@@ -137,6 +142,9 @@ execute! = |target, mode, args, names, compiler, root, binary, receipt, source_h
 		}
 		# Fuzz instrumentation requires LLVM; ordinary checks use dev builds.
 		_ = Process.run!([compiler, "build"].concat(flags).concat(["fuzz/${target.family}Properties.roc", "--output=${Path.display(binary)}"]), root, [], 600_000)?
+		if source_identity!(compiler, root)? != source_hash {
+			return Err(BuildInputsChanged(target.name))
+		}
 		actual = Process.digest!(Path.read_bytes!(binary)?)?
 		Path.write_utf8!(receipt, "${source_hash}\n${signature}\n${actual}\n")?
 	}
