@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [single, no-fill, boxed]
+        case: [bulk-clear, fresh-clear]
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -29,15 +29,10 @@ jobs:
           case = os.environ['CONTROL']
           p = Path('package/XmlCore.roc')
           s = p.read_text()
-          if case == 'single':
-              s = s.replace('if (props.namespaces) Single(chunk_initial(props)) else Batch(chunk_batch_initial(props))', 'Single(chunk_initial(props))')
-          elif case == 'no-fill':
-              s = s.replace('filled = chunk_fill(decoded, bytes, $empty)', 'filled = { state: decoded, consumed: 0.U64, events: $empty }')
-          elif case == 'boxed':
-              s = s.replace('Batch(chunk_batch_initial(props))', 'Batch(Box.box(chunk_batch_initial(props)))')
-              s = s.replace('Batch(ChunkBatch)', 'Batch(Box(ChunkBatch))')
-              s = s.replace('Batch(batch) => { location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) }', 'Batch(boxed) => {\n\t\tbatch = Box.unbox(boxed)\n\t\t{ location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) }\n\t}')
-              s = s.replace('Batch(batch) => {\n\t\tnext = chunk_batch_step(batch, bytes, end)\n\t\t{ state: Batch(next.state), consumed: next.consumed, outcome: next.outcome }', 'Batch(boxed) => {\n\t\tnext = chunk_batch_step(Box.unbox(boxed), bytes, end)\n\t\t{ state: Batch(Box.box(next.state)), consumed: next.consumed, outcome: next.outcome }')
+          before = 'var $empty = batch.events\n\twhile !$empty.is_empty() {\n\t\t$empty = $empty.drop_last(1)\n\t}'
+          replacement = 'empty = batch.events.drop_last(batch.events.len())' if case == 'bulk-clear' else 'empty = []'
+          assert before in s
+          s = s.replace(before, replacement).replace('chunk_fill(decoded, bytes, $empty)', 'chunk_fill(decoded, bytes, empty)')
           p.write_text(s)
           SCRIPT
       - name: Build the control
