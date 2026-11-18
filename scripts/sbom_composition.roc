@@ -1,10 +1,11 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-18-a520eed",
 }
 
 import cli.Cmd
+import cli.Duration
 import cli.Env
 import cli.OsStr
 import cli.Path
@@ -108,7 +109,7 @@ composition! = || {
 
 capture! = |command| match command {
 	[program, .. as args] => {
-		ran = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).env("NO_COLOR", "1").stdout(Capture).stderr(Capture).timeout_ms(120_000).output_limit(10_000_000).run!().map_err(|_| "${program} did not complete")?
+		ran = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).env("NO_COLOR", "1").stdout(Capture).stderr(Capture).timeout(Duration.millis(120_000)).output_limit(MaxBytes(10_000_000)).run!().map_err(|_| "${program} did not complete")?
 		if ran.status != Exited(0) {
 			return Err("${program} failed: ${Str.from_utf8_lossy(ran.stderr_bytes)}")
 		}
@@ -120,7 +121,7 @@ capture! = |command| match command {
 run! = |command| {
 	Stdout.line!("+ ${Str.join_with(command, " ")}").map_err(|_| "cannot print command")?
 	match command {
-		[program, .. as args] => Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).exec_cmd!().map_err(|_| "command failed: ${Str.join_with(command, " ")}")
+		[program, .. as args] => Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).call!().map_err(|_| "command failed: ${Str.join_with(command, " ")}")
 		[] => Err("empty command")
 	}
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-18-a520eed",
 	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 
@@ -42,7 +42,7 @@ main! = |raw| {
 			return Err(Exit(2))
 		}
 	}
-	Cmd.new("roc").args(["version"].map(OsStr.from_str)).exec_cmd!()?
+	Cmd.new("roc").args(["version"].map(OsStr.from_str)).call!()?
 	var $failures = []
 	for section in sections {
 		Stdout.line!("\n== ${section.name}: ${section.summary}")?
@@ -51,7 +51,7 @@ main! = |raw| {
 			Stdout.line!("+ ${Str.join_with(command, " ")}")?
 			match command {
 				[program, .. as rest] => {
-					match Cmd.new(OsStr.from_str(program)).args(rest.map(OsStr.from_str)).exec_cmd!() {
+					match Cmd.new(OsStr.from_str(program)).args(rest.map(OsStr.from_str)).call!() {
 						Ok({}) => {}
 						Err(_) => {
 							$passed = Bool.False

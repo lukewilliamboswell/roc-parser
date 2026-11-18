@@ -186,7 +186,7 @@ def review(probe: Path) -> int:
     return 1 if failures or crashes or stale else 0
 
 
-def generated_messages(directory: Path, fuzz_binary: Path | None) -> list[tuple[str, bytes]]:
+def generated_messages(directory: Path, fuzz_binary: Path | None, target: str = "http-roundtrip") -> list[tuple[str, bytes]]:
     """Corpus files are raw bytes with a Q/S mode byte, or, with a fuzz binary,
     generator inputs whose `show` output ends in an exact `hex: Q...` line."""
     out = []
@@ -194,7 +194,7 @@ def generated_messages(directory: Path, fuzz_binary: Path | None) -> list[tuple[
         if fuzz_binary is None:
             raw = path.read_bytes()
         else:
-            shown = subprocess.run([str(fuzz_binary), "show", str(path)], capture_output=True, text=True).stdout
+            shown = subprocess.run([str(fuzz_binary), f"--target={target}", "show", str(path)], capture_output=True, text=True).stdout
             lines = [line for line in shown.splitlines() if line.startswith("hex: ")]
             if not lines:
                 continue
@@ -204,10 +204,10 @@ def generated_messages(directory: Path, fuzz_binary: Path | None) -> list[tuple[
     return out
 
 
-def corpus(probe: Path, directory: Path, fuzz_binary: Path | None) -> int:
+def corpus(probe: Path, directory: Path, fuzz_binary: Path | None, target: str = "http-roundtrip") -> int:
     counts: dict[str, int] = {}
     examples: dict[str, bytes] = {}
-    for mode, data in generated_messages(directory, fuzz_binary):
+    for mode, data in generated_messages(directory, fuzz_binary, target):
         mine, oracle = run_probe(probe, mode, data), oracle_for(mode, data)
         key = "agree" if compare(mine, oracle) else f"{mode} roc={mine['status']} h11={oracle['status']}"
         counts[key] = counts.get(key, 0) + 1
@@ -222,10 +222,11 @@ def main() -> int:
     parser.add_argument("--roc", type=Path, default=ROC)
     parser.add_argument("--corpus", type=Path)
     parser.add_argument("--fuzz-show", type=Path, help="fuzz binary whose `show` decodes --corpus files")
+    parser.add_argument("--fuzz-target", default="http-roundtrip", help="property selected from the shared fuzz executable")
     args = parser.parse_args()
     probe = build_probe(args.roc)
     if args.corpus:
-        return corpus(probe, args.corpus, args.fuzz_show)
+        return corpus(probe, args.corpus, args.fuzz_show, args.fuzz_target)
     return review(probe)
 
 

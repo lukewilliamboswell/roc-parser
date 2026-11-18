@@ -144,8 +144,8 @@ $ python3 scripts/readme_throughput.py --cpu 3
 $ python3 scripts/readme_throughput.py --cpu 3 --refresh-references  # explicit initial reference measurement
 ----
 
-The runner builds Roc drivers serially with `--opt=speed --debug`, then pins
-the timed runs to that CPU. It parses one deterministic document for each
+The runner builds Roc drivers serially with `--debug` and the default speed
+optimization, then pins the timed runs to that CPU. It parses one deterministic document for each
 concrete README format, constructs the result and consumes a
 checksum. CSV collects string rows with `CSV.parse_string_records`; QIF and
 OFX use whole-document collection. The markup formats
@@ -300,8 +300,8 @@ lines calling the format's public entry point: `CSV.parse_str`, `Yaml.parse_str`
 `JsonValue.parse_str`, `Markdown.parse_str`, and `HTTP.Request.parse_bytes` or
 `HTTP.Response.parse_bytes`, each with explicit props. The timing loop is shared in
 `bench/roc/Bench.roc`. The harness builds each driver with
-`roc build --opt=speed`; never benchmark `roc dev` or an unoptimised build,
-which is many times slower.
+`roc build` and its default speed optimization. Measure production throughput
+with that optimized binary.
 
 When an entry point is renamed, only the call in that format's driver (and the
 matching line in `alloc.roc`) changes.
@@ -475,7 +475,7 @@ optimised binaries:
 
 [source,console]
 ----
-$ "$ROC" build --opt=speed --debug bench/roc/yaml.roc --output=.roc-parser-tmp/yaml-prof
+$ "$ROC" build --debug bench/roc/yaml.roc --output=.roc-parser-tmp/yaml-prof
 $ samply record .roc-parser-tmp/yaml-prof 1000 < .roc-parser-tmp/bench/full/corpus/yaml/generated-medium.yaml
 ----
 
@@ -517,7 +517,8 @@ namespace declarations, comments, processing instructions and doctype metadata.
 Seven warmed samples use shuffled
 implementation order. Parsing, DOM allocation, consumption and ordinary result
 destruction or collection are timed; compilation, startup, imports, input reads
-and decoding precede the timer. Roc applications use `--opt=speed --debug`.
+and decoding precede the timer. Roc applications use `--debug` and the default
+speed optimization.
 
 `results.json` records `bytes_per_second`; divide by 1,000,000 for MB/s. Higher
 throughput is better. The default gate requires the full Roc parser's median
@@ -535,8 +536,8 @@ parser with the pinned compiler parser on each identical input. Build the oracle
 with `scripts/roc_syntax/build_oracle.py --optimize ReleaseFast` first, then pass
 its executable through `--oracle-command` and the ordinary Roc syntax correctness
 worker through `--probe-command`. The comparison builds its own Roc driver using
-`--opt=speed`; `--candidate-binary` explicitly reuses an existing optimized driver
-and marks its build provenance unverified in the report.
+the default speed optimization; `--candidate-binary` explicitly reuses an
+existing optimized driver and marks its build provenance unverified in the report.
 
 [source,sh]
 ----

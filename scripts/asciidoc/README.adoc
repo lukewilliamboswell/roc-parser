@@ -12,7 +12,7 @@ build, the review and the performance smoke run in turn; by hand:
 [source,sh]
 ----
 python3 scripts/asciidoc/setup_oracle.py
-$ROC build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+$ROC build scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
 python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 1000 --mutations 1000 --seed 13 --corpus docs
 python3 -m unittest discover -s scripts/tests -p 'test_asciidoc*.py'
 scripts/fuzz.roc smoke asciidoc-raw asciidoc-structured

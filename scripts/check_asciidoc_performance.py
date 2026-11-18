@@ -993,18 +993,18 @@ def build(args, output):
                 raise ValueError('reused binary requires sibling .build.json provenance receipt; build fresh first')
             return binary, {'provenance': 'unknown-smoke-only', 'binary_sha256': digest(binary)}
         receipt = json.loads(receipt_path.read_text())
-        if receipt.get('schema_version') != 1 or not isinstance(receipt.get('compiler'), dict) or receipt.get('binary_sha256') != digest(binary) or receipt.get('source_identity') != identity or receipt.get('build_flags') != ['--opt=speed']:
+        if receipt.get('schema_version') != 1 or not isinstance(receipt.get('compiler'), dict) or receipt.get('binary_sha256') != digest(binary) or receipt.get('source_identity') != identity or receipt.get('build_flags') != []:
             raise ValueError('reused binary build receipt does not match optimized current sources')
         return binary, receipt
     compiler = compiler_identity(args.roc)
-    command = [compiler['path'], 'build', '--opt=speed', str(args.root / 'scripts/asciidoc/performance.roc'), '--output=' + str(binary)]
+    command = [compiler['path'], 'build', str(args.root / 'scripts/asciidoc/performance.roc'), '--output=' + str(binary)]
     binary.unlink(missing_ok=True)
     result = subprocess.run(command, capture_output=True, text=True, timeout=args.build_timeout)
     if result.returncode != 0 or not binary.exists():
         raise ValueError('native build failed: ' + result.stdout + result.stderr)
     if source_identity(args.root) != identity or compiler_identity(args.roc) != compiler:
         raise ValueError('build inputs changed during compilation')
-    receipt = {'schema_version': 1, 'compiler': compiler, 'build_flags': ['--opt=speed'], 'source_identity': identity,
+    receipt = {'schema_version': 1, 'compiler': compiler, 'build_flags': [], 'source_identity': identity,
                'binary_sha256': digest(binary), 'command': command}
     receipt_path.write_text(json.dumps(receipt, indent=2) + '\n')
     return binary, receipt

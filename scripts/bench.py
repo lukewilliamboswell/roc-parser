@@ -434,9 +434,11 @@ def python_comparator_path(requested: str | None) -> str:
 
 
 class Builder:
-    def __init__(self, out: Path, roc: str, python: str | None, log: Callable[[str], None]):
+    def __init__(self, out: Path, roc: str, python: str | None, log: Callable[[str], None], optimization: str = "speed"):
         self.out = out
         self.roc = roc
+        self.optimization = optimization
+        self.roc_flags = [f"--opt={optimization}", "--debug"]
         self.python = python
         self.log = log
         self.skipped: dict[str, str] = {}
@@ -462,9 +464,9 @@ class Builder:
             for driver, name, notes in drivers:
                 binary = self.out / "bin" / f"roc-{driver}"
                 binary.parent.mkdir(parents=True, exist_ok=True)
-                if self.run(f"roc-{driver}", [self.roc, "build", "--opt=speed", "--debug", str(BENCH / "roc" / f"{driver}.roc"),
+                if self.run(f"roc-{driver}", [self.roc, "build", *self.roc_flags, str(BENCH / "roc" / f"{driver}.roc"),
                                              f"--output={binary}"]):
-                    impls.append(Impl("roc", name, fmt, [str(binary)], notes + "; roc build --opt=speed --debug"))
+                    impls.append(Impl("roc", name, fmt, [str(binary)], notes + f"; roc build ({self.optimization}) --debug"))
         return impls
 
     def rust_impls(self, formats: tuple[str, ...]) -> list[Impl]:
@@ -976,6 +978,7 @@ def parse_args(argv: list[str] | None = None):
                     help="explicitly rebuild/measure Go, Rust and Python references and refresh their cache")
     ap.add_argument("--reference-cache-dir", type=Path, default=None,
                     help="shared reference measurement cache (default: output-dir/reference-cache)")
+    ap.add_argument("--opt", choices=("dev", "speed"), default="speed", help="Roc backend: dev for CI smoke checks, speed for measurements")
     ap.add_argument("--roc", default=os.environ.get("ROC", "roc"))
     ap.add_argument("--formats", default=",".join(FORMATS))
     ap.add_argument("--langs", default=None, help="comma-separated: roc,rust,go,python; streaming defaults to roc,rust")
@@ -1046,7 +1049,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     _install_wait_hook()
-    builder = Builder(out, args.roc, args.python, log)
+    builder = Builder(out, args.roc, args.python, log, args.opt)
     impls = ((streaming.roc_implementations(sys.modules[__name__], builder, args.formats, args.chunk_bytes)
               if streaming else builder.roc_impls(args.formats)) if "roc" in args.langs else [])
     references = (streaming.references(sys.modules[__name__], args.langs, args.formats)

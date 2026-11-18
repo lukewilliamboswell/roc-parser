@@ -371,7 +371,7 @@ Output:
 rejected at byte 55: both Transfer-Encoding and Content-Length
 ----
 
-The `fuzz/http-smuggling.roc` fuzz target generates messages built from these
+The `fuzz/HttpSmugglingProperty.roc` fuzz target generates messages built from these
 constructs and checks that each one is rejected; see
 {src}/fuzz/README.md[the fuzzing guide].
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-18-a520eed",
 	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
+import cli.Duration
 import cli.Cmd
 import cli.Env
 import weaver.Cli
@@ -36,8 +37,8 @@ main! = |raw| match Cli.parse_or_display_message(CommandLine.literals, raw, OsSt
 run! = |args| {
 	filter = args.filter
 	root = Path.canonicalize!(".")?
-	compiler = if args.roc == "" (Env.var_str!("ROC") ?? "roc") else args.roc
-	roc = if compiler.contains("/") Path.display(Path.canonicalize!(Path.utf8(compiler))?) else compiler
+	compiler = if (args.roc == "") (Env.var_str!("ROC") ?? "roc") else args.roc
+	roc = if (compiler.contains("/")) Path.display(Path.canonicalize!(Path.utf8(compiler))?) else compiler
 	cases = fixtures.keep_if(|case| case.name.contains(filter))
 	invalidation = "cache-invalidation".contains(filter)
 	if cases.is_empty() and !invalidation {
@@ -82,7 +83,7 @@ source = |body, root| {
 }
 
 invoke! = |roc, args, directory, errors| {
-	output = Cmd.new(OsStr.from_str(roc)).args(args.map(OsStr.from_str)).cwd(directory).stdout(Capture).stderr(Capture).timeout_ms(180_000).manage_tree(True).run!().map_err(|error| CompilerUnavailable(error))?
+	output = Cmd.new(OsStr.from_str(roc)).args(args.map(OsStr.from_str)).cwd(directory).stdout(Capture).stderr(Capture).timeout(Duration.millis(180_000)).manage_tree(True).run!().map_err(|error| CompilerUnavailable(error))?
 	text = Str.from_utf8_lossy(output.stdout_bytes.concat(output.stderr_bytes))
 	code = match output.status {
 		Exited(value) => value
@@ -107,8 +108,8 @@ check! = |case, roc, root, directory| {
 	}
 	Path.write_utf8!(Path.join(directory, "main.roc"), source(case.body, root))?
 	binary = Path.join(directory, "app")
-	optimization = if ["inline-formats", "typed-and-multiline", "imported-formats"].contains(case.name) "speed" else "dev"
-	for command in [["check", "--no-cache", "main.roc"], ["build", "--no-cache", "--opt=${optimization}", "--output=${Path.display(binary)}", "main.roc"]] {
+	optimization = "dev"
+	for command in [["check", "main.roc"], ["build", "--opt=${optimization}", "--output=${Path.display(binary)}", "main.roc"]] {
 		_ = invoke!(roc, command, directory, case.errors)?
 	}
 	if case.errors.is_empty() {

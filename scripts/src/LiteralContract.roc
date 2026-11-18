@@ -7,7 +7,7 @@ LiteralContract := [].{
 			return Err(CompilerCrash(code))
 		}
 		if expected.is_empty() {
-			return if code == 0 Ok({}) else Err(UnexpectedRejection(code))
+			return if (code == 0) Ok({}) else Err(UnexpectedRejection(code))
 		}
 		if code == 0 {
 			return Err(UnexpectedAcceptance)
@@ -20,7 +20,7 @@ LiteralContract := [].{
 		}
 	}
 	normalize : Str -> Str
-	normalize = |text| Str.join_with(Str.from_utf8_lossy(text.to_utf8().map(|byte| if byte >= 65 and byte <= 90 byte + 32 else if [9, 10, 13].contains(byte) 32 else byte)).split_on(" ").keep_if(|part| part != ""), " ")
+	normalize = |text| Str.join_with(Str.from_utf8_lossy(text.to_utf8().map(|byte| if (byte >= 65 and byte <= 90) byte + 32 else if ([9, 10, 13].contains(byte)) 32 else byte)).split_on(" ").keep_if(|part| part != ""), " ")
 }
 expect LiteralContract.check(0, "compile time crash", ["compile time crash"]) == Err(UnexpectedAcceptance)
 expect LiteralContract.check(1, "type mismatch", ["compile time crash"]).is_err()

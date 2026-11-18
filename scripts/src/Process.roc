@@ -1,5 +1,6 @@
 import cli.Env
 import cli.Path
+import cli.Duration
 import cli.Cmd
 import cli.OsStr
 import cli.Stdout
@@ -10,7 +11,7 @@ Process := [].{
 		match command {
 			[program, .. as args] => {
 				Stdout.line!("+ ${Str.join_with(command, " ")}").map_err(|_| OutputUnavailable)?
-				output = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).cwd(cwd).stdin(Bytes(input)).stdout(Capture).stderr(Capture).manage_tree(True).timeout_ms(timeout).output_limit(50_000_000).run!().map_err(|error| ProcessUnavailable({ command, error }))?
+				output = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).cwd(cwd).stdin(Bytes(input)).stdout(Capture).stderr(Capture).manage_tree(True).timeout(Duration.millis(timeout)).output_limit(MaxBytes(50_000_000)).run!().map_err(|error| ProcessUnavailable({ command, error }))?
 				if output.status != Exited(0) {
 					return Err(ProcessFailed({ command, status: output.status, stdout: Str.from_utf8_lossy(output.stdout_bytes), stderr: Str.from_utf8_lossy(output.stderr_bytes) }))
 				}

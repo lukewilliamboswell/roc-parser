@@ -182,7 +182,7 @@ def candidate_build(binary, source_hash, *, receipt_path=None):
     compiler = receipt.get('compiler')
     if (not isinstance(compiler, dict) or not compiler.get('version') or
             not isinstance(compiler.get('binary_sha256'), str) or len(compiler['binary_sha256']) != 64 or
-            not isinstance(receipt.get('build_flags'), list) or not receipt['build_flags'] or
+            not isinstance(receipt.get('build_flags'), list) or
             not all(isinstance(flag, str) for flag in receipt['build_flags'])):
         raise ValueError('candidate build receipt lacks compiler identity or build flags')
     return {**receipt, 'provenance': 'verified_receipt'}
@@ -190,7 +190,7 @@ def candidate_build(binary, source_hash, *, receipt_path=None):
 
 def build_candidate(roc, binary, source_hash):
     identity = compiler_identity(roc)
-    flags = ['--no-cache', '--opt=speed']
+    flags = []
     binary.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([roc, 'build', *flags, str(ROOT/'bench/roc/roc-syntax-compare.roc'),
                     f'--output={binary}'], check=True)

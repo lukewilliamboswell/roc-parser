@@ -796,7 +796,7 @@ expect {
 expect {
 	bytes = sample.to_utf8()
 	var $valid = True
-	for split in (0).to(bytes.len() + 1) {
+	for split in (0.U64).to(bytes.len() + 1) {
 		chunks = [bytes.take_first(split), [], bytes.drop_first(split)]
 		found = (QIF.decoder({})).collect(chunks.iter())?
 		expected = QIF.parse_str(sample, {})?

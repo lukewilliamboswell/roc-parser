@@ -106,7 +106,7 @@ def prepare(args):
     go = work / 'go-markup'
     builds.append(build_go(work, go))
     roc = work / 'roc-markup'
-    builds.append(command([args.roc, 'build', '--no-cache', '--opt=speed', '--debug', str(DRIVER), '--output=' + str(roc)], work, 'roc-build'))
+    builds.append(command([args.roc, 'build', '--debug', str(DRIVER), '--output=' + str(roc)], work, 'roc-build'))
     if before != source_identity():
         raise RuntimeError('sources changed during preparation; rerun prepare')
     binaries = {'roc': roc, 'rust': work / 'rust-target/release/markup-dom-compare', 'go': go, 'python': python}
@@ -118,7 +118,7 @@ def prepare(args):
                 'compiler_sha256': digest(shutil.which(args.roc) or args.roc), 'compiler': subprocess.check_output([args.roc, 'version'], text=True).strip(),
                 'rust_version': subprocess.check_output(['rustc', '--version'], text=True).strip(), 'go_version': subprocess.check_output(['go', 'version'], text=True).strip(),
                 'python_versions': json.loads(subprocess.check_output([str(python), '-c', 'import sys,json,importlib.metadata as m;print(json.dumps({"python":sys.version,**{n:m.version(n) for n in ["lxml","html5lib","selectolax"]}}))'], text=True)),
-                'builds': builds, 'roc_flags': ['--no-cache', '--opt=speed', '--debug'], 'compiler_build_mode': args.compiler_build_mode,
+                'builds': builds, 'roc_flags': ['--debug'], 'compiler_build_mode': args.compiler_build_mode,
                 'roc_platform_runtime': 'basic-cli 0.28: Linux musl; glibc target unsupported' if platform.system() == 'Linux' else 'basic-cli 0.28 native target',
                 'rust_flags': 'release opt-level=3 lto=thin codegen-units=1 debug=2 strip=false', 'go_flags': ['-trimpath'],
                 'locks': {str(p.relative_to(ROOT)): digest(p) for p in [RUST / 'Cargo.lock', GO / 'go.sum', REQUIREMENTS]}}

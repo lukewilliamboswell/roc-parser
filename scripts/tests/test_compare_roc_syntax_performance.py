@@ -66,7 +66,7 @@ class CandidateProvenanceTests(unittest.TestCase):
         receipt = {'schema_version': 1,
                    'binary_sha256': hashlib.sha256(self.binary.read_bytes()).hexdigest(),
                    'source_identity': self.source, 'compiler': self.compiler,
-                   'build_flags': ['--no-cache', '--opt=speed']}
+                   'build_flags': []}
         receipt.update(changes)
         self.binary.with_suffix('.json').write_text(json.dumps(receipt))
 
@@ -85,7 +85,7 @@ class CandidateProvenanceTests(unittest.TestCase):
             build = comparison.candidate_build(self.binary, self.source)
         self.assertEqual(build['compiler'], self.compiler)
         self.assertEqual(build['source_identity'], self.source)
-        self.assertEqual(build['build_flags'], ['--no-cache', '--opt=speed'])
+        self.assertEqual(build['build_flags'], [])
         self.assertEqual(build['provenance'], 'verified_receipt')
 
     def test_stale_binary_and_changed_helpers_cannot_reuse_receipt(self):
@@ -111,7 +111,7 @@ class CandidateProvenanceTests(unittest.TestCase):
              patch.object(comparison.geometric, 'source_identity', return_value=self.source):
             build = comparison.build_candidate('selected-roc', self.binary, self.source)
         self.assertEqual(build['provenance'], 'built_in_this_run')
-        self.assertEqual(run.call_args.args[0][:4], ['selected-roc', 'build', '--no-cache', '--opt=speed'])
+        self.assertEqual(run.call_args.args[0][:2], ['selected-roc', 'build'])
         self.assertEqual(comparison.candidate_build(self.binary, self.source)['compiler'], self.compiler)
         with patch.object(comparison, 'compiler_identity', return_value=self.compiler), \
              patch.object(comparison.subprocess, 'run'), \

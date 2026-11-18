@@ -117,7 +117,7 @@ avoids copies but retains the original allocation while a slice is reachable.
 [#performance-tips]
 == Tips for your own parsers
 
-* Build with `--opt=speed` before measuring production throughput.
+* Use `roc build` with its default speed optimization before measuring production throughput.
 * Prefer run scanners such as `Parser.chomp_while`, `Parser.chomp_until` and
   `Parser.Utf8.ByteClass` to one combinator call and append per byte.
 * Keep backtracking shallow. `Parser.one_of` and `Parser.alt` retry from the same

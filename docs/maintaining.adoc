@@ -46,7 +46,8 @@ compiler, and every run uses the newest one:
 
 There is no compiler pin file and no automated update controller: the
 compiler moves by itself every day, and nothing else in the repository changes
-because of it. No Roc file in the repository carries a `roc` header field.
+because of it. Package modules and maintained applications follow that compiler;
+orchestration scripts use the fixed tooling compiler described below.
 
 [WARNING]
 ====
@@ -97,7 +98,10 @@ These change only through a pull request a maintainer reviews:
 
 The check, package, bundle, documentation-example and release drivers are
 executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
-compiler fetched by Blueprint. Package commands use the separate `roc` on
+compiler fetched by Blueprint. Routine validation uses compilation caches and
+explicit dev builds; instrumented fuzz binaries use the default LLVM build mode.
+Cache bypasses require a concrete reason and a removal condition.
+Package commands use the separate `roc` on
 `PATH`. The released `release-package` utility from tools-0.10.1 builds the
 bundle, examples archive, API archive and notes, and tests archived examples
 against the exact bundle. The shared release workflow composes it with the
@@ -107,6 +111,9 @@ Independent Python, Ruby and Zig oracle harnesses compare parser behavior.
 or compiler fixture that must use the floating nightly. The policy check rejects
 unlisted files, stale exceptions, tooling pin drift and workflow pin drift.
 The shared working-tree and archive checks both use `tests/spec.json`.
+Their pinned validator retains uncached example builds as an independent
+source/bundle verification boundary. This exception ends when reviewed shared
+tooling supports cached checks with each receipt bound to that input identity.
 
 The manual builds as HTML and PDF with `roc-docs` from tools-0.10.1. Blueprint
 fetches the native binary and checks its digest against `Blueprint.lock`. Use

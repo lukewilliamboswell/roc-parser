@@ -9,7 +9,7 @@ DocExamples := [].{
 	)
 
 	check_stdout : Str, Str -> Try({}, Str)
-	check_stdout = |actual, expected| if actual == expected Ok({}) else Err("stdout differs from the adjacent .expected file\nexpected: ${Str.inspect(expected)}\nactual: ${Str.inspect(actual)}")
+	check_stdout = |actual, expected| if (actual == expected) Ok({}) else Err("stdout differs from the adjacent .expected file\nexpected: ${Str.inspect(expected)}\nactual: ${Str.inspect(actual)}")
 }
 
 expect DocExamples.needs_tests("# no expects here\n\texpect answer == 42\n")

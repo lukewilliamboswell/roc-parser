@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-18-a520eed",
 	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 
@@ -45,5 +45,5 @@ bundle! = |options| {
 	Path.create_all!(output).map_err(|error| OutputDirectoryUnavailable(error))?
 	names = Path.list!("package").map_err(|error| ModuleDirectoryUnavailable(error))?.map(|path| Path.filename(path).map_ok(Path.display) ?? "")
 	command = ["bundle"].concat(BundlePlan.module_names(names)).concat(["--output-dir", Path.display(output)]).concat(options.forwarded)
-	Cmd.new("roc").args(command.map(OsStr.from_str)).cwd("package").exec_cmd!().map_err(|error| BundleCompilerFailed(error))
+	Cmd.new("roc").args(command.map(OsStr.from_str)).cwd("package").call!().map_err(|error| BundleCompilerFailed(error))
 }

@@ -61,7 +61,7 @@ def build_drivers(builder: bench.Builder, corpus: list[bench.Doc] | None = None)
                                ("roc-syntax", ("roc-syntax",)), ("asciidoc", ("asciidoc",))):
         binary = builder.out / "bin" / f"roc-{driver}"
         binary.parent.mkdir(parents=True, exist_ok=True)
-        if not builder.run(f"roc-{driver}", [builder.roc, "build", "--opt=speed", "--debug",
+        if not builder.run(f"roc-{driver}", [builder.roc, "build", "--debug",
                                            str(ROOT / "bench/roc" / f"{driver}.roc"), f"--output={binary}"]):
             raise RuntimeError(f"driver build failed: {driver}; see {builder.out / 'logs'}")
         for operation in operations:
@@ -69,7 +69,7 @@ def build_drivers(builder: bench.Builder, corpus: list[bench.Doc] | None = None)
             implementations[operation] = bench.Impl("roc", "roc-parser", operation, command,
                                                     "collect; complete parse and observable model checksum")
     canonical = builder.out / "bin" / "roc-markup-canonical"
-    if not builder.run("roc-markup-canonical", [builder.roc, "build", "--opt=speed", "--debug",
+    if not builder.run("roc-markup-canonical", [builder.roc, "build", "--debug",
                                                str(ROOT / "bench/roc/markup-compare.roc"), f"--output={canonical}"]):
         raise RuntimeError(f"canonical markup probe build failed; see {builder.out / 'logs'}")
     if set(implementations) != {doc.format for doc in (documents() if corpus is None else corpus)}:
@@ -135,7 +135,7 @@ def main(argv=None) -> int:
     os.sched_setaffinity(0, {args.cpu})
     report = {"metadata": {"machine": bench.machine(), "git": bench.git_state(), "compiler": builder.versions["roc"],
                             "compiler_zig_build_mode": "unknown (official nightly)",
-                            "build_flags": ["--opt=speed", "--debug"], "source_sha256": identity,
+                            "build_flags": ["--debug"], "source_sha256": identity,
                             "reference_cache": {"mode": "refresh" if args.refresh_references else "reuse",
                                                 "directory": str(references.cache.folder)},
                             "reference_selection": "fastest successful collection reference; borrowed ownership and model/checksum differences labeled; no ratios implied",

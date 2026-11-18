@@ -561,7 +561,7 @@ class BoundedJsonTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         cls.binary = str(Path(cls.temp.name) / "bounded-json")
-        result = subprocess.run(["roc", "build", "--no-cache", "scripts/json/bounded.roc", "--output=" + cls.binary],
+        result = subprocess.run(["roc", "build", "--opt=dev", "scripts/json/bounded.roc", "--output=" + cls.binary],
                                 cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, timeout=180)
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)

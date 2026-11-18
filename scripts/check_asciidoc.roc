@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-18-a520eed",
 	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 
@@ -46,7 +46,7 @@ check! = |args| {
 	for command in HarnessPlan.asciidoc(roc, generated, mutations, seed, !args.skip_performance) {
 		Stdout.line!("+ ${Str.join_with(command, " ")}").map_err(|_| "cannot print command")?
 		match command {
-			[program, .. as rest] => Cmd.new(OsStr.from_str(program)).args(rest.map(OsStr.from_str)).exec_cmd!().map_err(|_| "command failed: ${program}")?
+			[program, .. as rest] => Cmd.new(OsStr.from_str(program)).args(rest.map(OsStr.from_str)).call!().map_err(|_| "command failed: ${program}")?
 			[] => return Err("empty command")
 		}
 	}

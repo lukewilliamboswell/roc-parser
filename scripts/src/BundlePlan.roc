@@ -12,5 +12,5 @@ compare_bytes = |left, right| match (left, right) {
 	([], []) => Same
 	([], _) => Before
 	(_, []) => After
-	([a, .. as more_a], [b, .. as more_b]) => if a < b Before else if a > b After else compare_bytes(more_a, more_b)
+	([a, .. as more_a], [b, .. as more_b]) => if (a < b) Before else if (a > b) After else compare_bytes(more_a, more_b)
 }

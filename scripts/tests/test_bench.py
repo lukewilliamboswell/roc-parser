@@ -163,7 +163,7 @@ class Reports(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(bench, "tool_version", return_value="test-compiler"), \
                 patch.object(bench.Builder, "run", return_value=True) as build:
             impls = bench.Builder(Path(tmp), "unused-roc", None, lambda _: None).roc_impls(formats)
-        self.assertTrue(all(Path(call.args[1][4]).is_file() for call in build.call_args_list))
+        self.assertTrue(all(Path(next(arg for arg in call.args[1] if arg.endswith(".roc"))).is_file() for call in build.call_args_list))
         results = [dict(self.result(impl.id, f"{impl.format}/a", 400 if impl.workload == "consume" else 100),
                         workload=impl.workload) for impl in impls]
         for fmt in formats:

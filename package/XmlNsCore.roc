@@ -124,15 +124,7 @@ XmlNsCore := {
 
 	## Call `.read_iter(chunks)`, `.read_stream(source)`, or `.step({ bytes, end })`.
 	decoder : XmlCore.StreamProps -> Decoder
-	decoder = |props| Streaming.decoder({ initial_state: NamespaceChunkState.{ inner: XmlCore.decoder({ ..props, namespaces: True }), scope: empty_scope, done: False }, step: namespace_chunk_step, errors: props.errors })
-
-	## Original input position of the most recently emitted event.
-	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
-	decoder_location = |current| XmlCore.decoder_location(Streaming.internal_state(current).inner)
-
-	## XML declaration parsed so far, or Err(Missing).
-	decoder_declaration : Decoder -> Try(XmlCore.Declaration, [Missing])
-	decoder_declaration = |current| XmlCore.decoder_declaration(Streaming.internal_state(current).inner)
+	decoder = |props| Streaming.decoder({ initial_state: NamespaceChunkState.{ inner: XmlCore.namespace_decoder(props), scope: empty_scope, done: False }, step: namespace_chunk_step, errors: props.errors })
 
 	## A pull reader that resolves namespaces as it reads, as [Xml.Reader]
 	## does for names as written. Keep only the latest reader and `return`
@@ -262,7 +254,8 @@ XmlNsCore := {
 	parse = |input, props| {
 		opened = XmlNsCore.reader(input, props)?
 		declaration = opened.metadata().declaration
-		match opened.next() {
+		# Explicit dispatch avoids roc-lang/roc#13204; restore receiver syntax after its fix.
+		match XmlNsCore.Reader.next(opened) {
 			Event(Start(_), after_start) =>
 				match after_start.element() {
 					Element(root, rest) =>
@@ -1930,7 +1923,7 @@ expect {
 expect problem_of("<a:·x xmlns:a='urn:a'/>") == Ok(NotAQName("a:·x"))
 
 ## Transparent private state lets ownership move through the opaque shared decoder.
-NamespaceChunkState := { inner : XmlCore.Decoder, scope : Scope, done : Bool }.{
+NamespaceChunkState := { inner : XmlCore.NamespaceDecoder, scope : Scope, done : Bool }.{
 	metadata : NamespaceChunkState -> XmlCore.Metadata
 	metadata = |state| state.inner.metadata()
 }
@@ -1946,8 +1939,7 @@ namespace_chunk_step = |state, bytes, end| {
 		Item(Start(tag)) => match resolve_start(state.scope, tag.name, tag.attributes) {
 			Ok(resolved) => { state: { ..updated, scope: resolved.scope }, consumed: next.consumed, outcome: Item(Start({ name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes })) }
 			Err(problem) => {
-				at = XmlCore.decoder_location(next.state)
-				{ state: { ..updated, done: True }, consumed: next.consumed, outcome: Failed(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: Text({ offset: at.offset, line: at.line, column: at.column }), path: [] })) }
+				{ state: { ..updated, done: True }, consumed: next.consumed, outcome: Failed(InvalidNamespace(Diagnostic.{ problem: own_problem(problem), location: next.state.metadata().location, path: [] })) }
 			}
 		}
 		Item(End(_)) => {
@@ -2037,8 +2029,7 @@ expect {
 expect {
 	decoder = XmlNsCore.decoder({})
 	next = decoder.step({ bytes: "<r xmlns='urn:r'/>".to_utf8(), end: More })
-	XmlNsCore.decoder_location(next.state) == { offset: 0, line: 1, column: 1 }
-		and XmlNsCore.decoder_declaration(next.state) == Err(Missing)
+	next.state.metadata() == { location: Text({ offset: 0, line: 1, column: 1 }), declaration: Err(Missing) }
 		and match next.outcome {
 			Item(Start(tag)) => tag.name.namespace == Uri("urn:r")
 			_ => False

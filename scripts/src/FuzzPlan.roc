@@ -24,81 +24,81 @@ FuzzPlan := [].{
 
 	## Allocation-measurement programs used by benchmarks, never campaign targets.
 	measurement_only = ["yaml-alloc", "markup-alloc"]
-	Target : { name : Str, seeds : Str, encoding : Str, dictionary : Str, size : U64, timeout : U64, examples : Bool, scheduled : Bool }
+	Target : { name : Str, family : Str, seeds : Str, encoding : Str, dictionary : Str, size : U64, timeout : U64, examples : Bool, scheduled : Bool }
 	entries : List(Target)
 	entries = [
-		{ name: "asciidoc-raw", seeds: "fuzz/seeds/asciidoc.json", encoding: "raw", dictionary: "fuzz/dictionaries/asciidoc.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "asciidoc-structured", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
-		{ name: "markdown-document", seeds: "fuzz/seeds/markdown-document.json", encoding: "raw", dictionary: "fuzz/dictionaries/markdown-document.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "markdown-blocks", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
-		{ name: "markdown-refdefs", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
-		{ name: "markdown-inline", seeds: "fuzz/seeds/markdown-inline.json", encoding: "raw", dictionary: "fuzz/dictionaries/markdown-inline.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "markdown-inline-ast", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
-		{ name: "markdown-inline-pathological", seeds: "fuzz/seeds/markdown-inline-pathological.json", encoding: "raw", dictionary: "", size: 64, timeout: 10, examples: False, scheduled: True },
-		{ name: "yaml", seeds: "fuzz/seeds/yaml.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/yaml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "yaml-raw", seeds: "fuzz/seeds/yaml.json", encoding: "raw", dictionary: "fuzz/dictionaries/yaml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "yaml-source", seeds: "fuzz/seeds/yaml.json", encoding: "raw", dictionary: "fuzz/dictionaries/yaml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "yaml-roundtrip", seeds: "", encoding: "", dictionary: "", size: 512, timeout: 10, examples: False, scheduled: True },
-		{ name: "yaml-block", seeds: "", encoding: "", dictionary: "", size: 64, timeout: 5, examples: False, scheduled: True },
-		{ name: "xml", seeds: "fuzz/seeds/xml.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/xml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "xml-raw", seeds: "fuzz/seeds/xml.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "xml-roundtrip", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
-		{ name: "xml-malformed", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
-		{ name: "xml-reader", seeds: "fuzz/seeds/xml.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "xml-stream", seeds: "fuzz/seeds/xml-stream.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 2048, timeout: 10, examples: False, scheduled: True },
-		{ name: "xml-stream-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
-		{ name: "xml-limits", seeds: "fuzz/seeds/xml-limits.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 1024, timeout: 5, examples: False, scheduled: True },
-		{ name: "xml-ceilings", seeds: "fuzz/seeds/xml-ceilings.json", encoding: "raw", dictionary: "", size: 2, timeout: 20, examples: True, scheduled: True },
-		{ name: "xmlns-raw", seeds: "fuzz/seeds/xmlns.json", encoding: "raw", dictionary: "fuzz/dictionaries/xmlns.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "xmlns-roundtrip", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
-		{ name: "svg-path", seeds: "", encoding: "", dictionary: "", size: 64, timeout: 10, examples: False, scheduled: False },
-		{ name: "svg-raw", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
-		{ name: "mathml-raw", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
-		{ name: "html-raw", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
-		{ name: "markup-source", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
-		{ name: "dom-construction", seeds: "", encoding: "", dictionary: "", size: 12, timeout: 10, examples: True, scheduled: False },
-		{ name: "markup-structured", seeds: "", encoding: "", dictionary: "", size: 128, timeout: 10, examples: False, scheduled: False },
-		{ name: "markup-limits", seeds: "", encoding: "", dictionary: "", size: 8, timeout: 10, examples: False, scheduled: False },
-		{ name: "markup-segments", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: True, scheduled: False },
-		{ name: "json-raw", seeds: "fuzz/seeds/json.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "json-options", seeds: "fuzz/seeds/json-options.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "json-roundtrip", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
-		{ name: "json-stream", seeds: "fuzz/seeds/json.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 1024, timeout: 10, examples: True, scheduled: True },
-		{ name: "json-stream-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
-		{ name: "ofx-raw", seeds: "fuzz/seeds/ofx.json", encoding: "raw", dictionary: "fuzz/dictionaries/ofx.dict", size: 8192, timeout: 10, examples: False, scheduled: True },
-		{ name: "ofx-stream", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "ofx-roundtrip", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "ofx-malformed", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "ofx-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
-		{ name: "qif-raw", seeds: "fuzz/seeds/qif.json", encoding: "raw", dictionary: "fuzz/dictionaries/qif.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "qif-stream", seeds: "fuzz/seeds/qif.json", encoding: "raw", dictionary: "fuzz/dictionaries/qif.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "qif-roundtrip", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "qif-malformed", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "qif-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
-		{ name: "stream-contract", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
-		{ name: "stream-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 5, examples: True, scheduled: True },
-		{ name: "csv", seeds: "fuzz/seeds/csv.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "csv-raw", seeds: "fuzz/seeds/csv.json", encoding: "raw", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "csv-roundtrip", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "csv-decode", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "csv-stream-raw", seeds: "fuzz/seeds/csv.json", encoding: "raw", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 10, examples: True, scheduled: True },
-		{ name: "csv-stream-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
-		{ name: "http-request", seeds: "fuzz/seeds/http-request.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/http-request.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "http-response", seeds: "fuzz/seeds/http-response.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/http-response.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "http-raw", seeds: "fuzz/seeds/http-request.json", encoding: "raw", dictionary: "fuzz/dictionaries/http-raw.dict", size: 65536, timeout: 10, examples: False, scheduled: True },
-		{ name: "http-roundtrip", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "http-smuggling", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
-		{ name: "http-stream", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: True, scheduled: True },
-		{ name: "http-stream-ceilings", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
-		{ name: "parser-combinators", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
-		{ name: "validate", seeds: "fuzz/seeds/validate.json", encoding: "raw", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
-		{ name: "diagnostic-lifetimes", seeds: "", encoding: "", dictionary: "", size: 2, timeout: 20, examples: True, scheduled: False },
-		{ name: "string-primitives", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "byte-scan", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "roc-syntax-raw", seeds: "fuzz/seeds/roc-syntax.json", encoding: "raw", dictionary: "fuzz/dictionaries/roc-syntax.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "roc-syntax-structured", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
-		{ name: "roc-syntax-spans", seeds: "fuzz/seeds/roc-syntax.json", encoding: "raw", dictionary: "fuzz/dictionaries/roc-syntax.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
-		{ name: "roc-syntax-span-model", seeds: "", encoding: "", dictionary: "", size: 512, timeout: 5, examples: False, scheduled: True },
+		{ name: "asciidoc-raw", family: "Text", seeds: "fuzz/seeds/asciidoc.json", encoding: "raw", dictionary: "fuzz/dictionaries/asciidoc.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "asciidoc-structured", family: "Text", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
+		{ name: "markdown-document", family: "Text", seeds: "fuzz/seeds/markdown-document.json", encoding: "raw", dictionary: "fuzz/dictionaries/markdown-document.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "markdown-blocks", family: "Text", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
+		{ name: "markdown-refdefs", family: "Text", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
+		{ name: "markdown-inline", family: "Text", seeds: "fuzz/seeds/markdown-inline.json", encoding: "raw", dictionary: "fuzz/dictionaries/markdown-inline.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "markdown-inline-ast", family: "Text", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
+		{ name: "markdown-inline-pathological", family: "Text", seeds: "fuzz/seeds/markdown-inline-pathological.json", encoding: "raw", dictionary: "", size: 64, timeout: 10, examples: False, scheduled: True },
+		{ name: "yaml", family: "Text", seeds: "fuzz/seeds/yaml.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/yaml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "yaml-raw", family: "Text", seeds: "fuzz/seeds/yaml.json", encoding: "raw", dictionary: "fuzz/dictionaries/yaml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "yaml-source", family: "Text", seeds: "fuzz/seeds/yaml.json", encoding: "raw", dictionary: "fuzz/dictionaries/yaml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "yaml-roundtrip", family: "Text", seeds: "", encoding: "", dictionary: "", size: 512, timeout: 10, examples: False, scheduled: True },
+		{ name: "yaml-block", family: "Text", seeds: "", encoding: "", dictionary: "", size: 64, timeout: 5, examples: False, scheduled: True },
+		{ name: "xml", family: "Xml", seeds: "fuzz/seeds/xml.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/xml.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "xml-raw", family: "Xml", seeds: "fuzz/seeds/xml.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "xml-roundtrip", family: "Xml", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
+		{ name: "xml-malformed", family: "Xml", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 5, examples: False, scheduled: True },
+		{ name: "xml-reader", family: "Xml", seeds: "fuzz/seeds/xml.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "xml-stream", family: "Xml", seeds: "fuzz/seeds/xml-stream.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 2048, timeout: 10, examples: False, scheduled: True },
+		{ name: "xml-stream-ceilings", family: "Xml", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "xml-limits", family: "Xml", seeds: "fuzz/seeds/xml-limits.json", encoding: "raw", dictionary: "fuzz/dictionaries/xml.dict", size: 1024, timeout: 5, examples: False, scheduled: True },
+		{ name: "xml-ceilings", family: "Xml", seeds: "fuzz/seeds/xml-ceilings.json", encoding: "raw", dictionary: "", size: 2, timeout: 20, examples: True, scheduled: True },
+		{ name: "xmlns-raw", family: "Xml", seeds: "fuzz/seeds/xmlns.json", encoding: "raw", dictionary: "fuzz/dictionaries/xmlns.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "xmlns-roundtrip", family: "Xml", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
+		{ name: "svg-path", family: "Markup", seeds: "", encoding: "", dictionary: "", size: 64, timeout: 10, examples: False, scheduled: False },
+		{ name: "svg-raw", family: "Markup", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
+		{ name: "mathml-raw", family: "Markup", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
+		{ name: "html-raw", family: "Markup", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
+		{ name: "markup-source", family: "Markup", seeds: "fuzz/seeds/markup.json", encoding: "raw", dictionary: "fuzz/dictionaries/markup.dict", size: 4096, timeout: 10, examples: False, scheduled: False },
+		{ name: "dom-construction", family: "Markup", seeds: "", encoding: "", dictionary: "", size: 12, timeout: 10, examples: True, scheduled: False },
+		{ name: "markup-structured", family: "Markup", seeds: "", encoding: "", dictionary: "", size: 128, timeout: 10, examples: False, scheduled: False },
+		{ name: "markup-limits", family: "Markup", seeds: "", encoding: "", dictionary: "", size: 8, timeout: 10, examples: False, scheduled: False },
+		{ name: "markup-segments", family: "Markup", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: True, scheduled: False },
+		{ name: "json-raw", family: "Json", seeds: "fuzz/seeds/json.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "json-options", family: "Json", seeds: "fuzz/seeds/json-options.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "json-roundtrip", family: "Json", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
+		{ name: "json-stream", family: "Json", seeds: "fuzz/seeds/json.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 1024, timeout: 10, examples: True, scheduled: True },
+		{ name: "json-stream-ceilings", family: "Json", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "ofx-raw", family: "Records", seeds: "fuzz/seeds/ofx.json", encoding: "raw", dictionary: "fuzz/dictionaries/ofx.dict", size: 8192, timeout: 10, examples: False, scheduled: True },
+		{ name: "ofx-stream", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "ofx-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "ofx-malformed", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "ofx-ceilings", family: "Records", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "qif-raw", family: "Records", seeds: "fuzz/seeds/qif.json", encoding: "raw", dictionary: "fuzz/dictionaries/qif.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "qif-stream", family: "Records", seeds: "fuzz/seeds/qif.json", encoding: "raw", dictionary: "fuzz/dictionaries/qif.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "qif-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "qif-malformed", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "qif-ceilings", family: "Records", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "stream-contract", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
+		{ name: "stream-ceilings", family: "Records", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 5, examples: True, scheduled: True },
+		{ name: "csv", family: "Records", seeds: "fuzz/seeds/csv.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "csv-raw", family: "Records", seeds: "fuzz/seeds/csv.json", encoding: "raw", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "csv-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "csv-decode", family: "Records", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "csv-stream-raw", family: "Records", seeds: "fuzz/seeds/csv.json", encoding: "raw", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 10, examples: True, scheduled: True },
+		{ name: "csv-stream-ceilings", family: "CsvRetention", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "http-request", family: "Http", seeds: "fuzz/seeds/http-request.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/http-request.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "http-response", family: "Http", seeds: "fuzz/seeds/http-response.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/http-response.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "http-raw", family: "Http", seeds: "fuzz/seeds/http-request.json", encoding: "raw", dictionary: "fuzz/dictionaries/http-raw.dict", size: 65536, timeout: 10, examples: False, scheduled: True },
+		{ name: "http-roundtrip", family: "Http", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "http-smuggling", family: "Http", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
+		{ name: "http-stream", family: "Http", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: True, scheduled: True },
+		{ name: "http-stream-ceilings", family: "Http", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "parser-combinators", family: "Core", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
+		{ name: "validate", family: "Core", seeds: "fuzz/seeds/validate.json", encoding: "raw", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
+		{ name: "diagnostic-lifetimes", family: "Diagnostics", seeds: "", encoding: "", dictionary: "", size: 2, timeout: 20, examples: True, scheduled: False },
+		{ name: "string-primitives", family: "Core", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "byte-scan", family: "Core", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
+		{ name: "roc-syntax-raw", family: "Core", seeds: "fuzz/seeds/roc-syntax.json", encoding: "raw", dictionary: "fuzz/dictionaries/roc-syntax.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "roc-syntax-structured", family: "Core", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 5, examples: False, scheduled: True },
+		{ name: "roc-syntax-spans", family: "Core", seeds: "fuzz/seeds/roc-syntax.json", encoding: "raw", dictionary: "fuzz/dictionaries/roc-syntax.dict", size: 4096, timeout: 5, examples: False, scheduled: True },
+		{ name: "roc-syntax-span-model", family: "Core", seeds: "", encoding: "", dictionary: "", size: 512, timeout: 5, examples: False, scheduled: True },
 	]
 
 	## Seed JSON and encoding bounds are checked while compiling the runner.
@@ -106,15 +106,20 @@ FuzzPlan := [].{
 	seed_values = |name| seed_corpora.find_first(|entry| entry.name == name).map_ok(|entry| entry.values) ?? crash "unregistered seed target: ${name}"
 	select : List(Str), Bool -> Try(List(Target), [InvalidSelection(List(Str)), UnknownTarget(Str), EmptySelection])
 	select = |names, ci| {
-		requested = if names.is_empty() or names == ["all"] entries.map(|target| target.name) else names
+		requested = if (names.is_empty() or names == ["all"]) entries.map(|target| target.name) else names
 		if requested.contains("all") {
 			return Err(InvalidSelection(requested))
 		}
 		var $chosen = []
 		for name in requested {
-			target = entries.find_first(|candidate| candidate.name == name).map_err(|_| UnknownTarget(name))?
-			if (!ci or target.scheduled) and !$chosen.any(|item| item.name == name) {
-				$chosen = $chosen.append(target)
+			members = entries.keep_if(|candidate| candidate.name == name or candidate.family == name)
+			if members.is_empty() {
+				return Err(UnknownTarget(name))
+			}
+			for target in members {
+				if (!ci or target.scheduled) and !$chosen.any(|item| item.name == target.name) {
+					$chosen = $chosen.append(target)
+				}
 			}
 		}
 		if $chosen.is_empty() {
@@ -137,6 +142,7 @@ FuzzPlan := [].{
 }
 expect FuzzPlan.select(["all", "csv"], False).is_err()
 expect FuzzPlan.select(["csv", "csv"], False).map_ok(|items| items.len()) == Ok(1)
+expect FuzzPlan.select(["Xml", "xml-stream"], False).map_ok(|items| items.map(|entry| entry.name)) == FuzzPlan.select(["Xml"], False).map_ok(|items| items.map(|entry| entry.name))
 expect {
 	var $valid = True
 	for size in List.repeat({}, 256).map_with_index(|_, index| index) {
@@ -174,7 +180,7 @@ seed_corpora : List({ name : Str, values : List(Str) })
 seed_corpora = FuzzPlan.entries.map(
 	|target| {
 		values : List(Str)
-		values = if target.seeds == "" [] else {
+		values = if (target.seeds == "") [] else {
 			source = seed_sources.find_first(|entry| entry.path == target.seeds).map_ok(|entry| entry.source) ?? crash "unregistered seed file: ${target.seeds}"
 			Json.parse(source) ?? crash "${target.seeds}: expected a JSON array of seed strings"
 		}
