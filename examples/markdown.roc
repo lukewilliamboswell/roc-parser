@@ -42,7 +42,7 @@ content =
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	markdown_input = args.get(1).map_ok(OsStr.display) ?? content
-	Stdout.line!(render_content(Markdown.parse_str(markdown_input), ""))?
+	Stdout.line!(render_content(Markdown.parse_str(markdown_input, {}), ""))?
 	Ok({})
 }
 

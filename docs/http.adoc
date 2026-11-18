@@ -14,8 +14,9 @@ This chapter shows how to parse raw HTTP/1.x bytes into Roc records: a request
 or response line, its header fields, and its body. It is a set of how-to guides
 for readers who know basic Roc and are handling bytes from a socket, a test
 fixture or a capture file. By the end you can read requests and responses,
-decode chunked bodies, split pipelined messages, embed the parsers in a larger
-grammar, and know which inputs the parser refuses and why.
+decode chunked bodies, read messages incrementally, split pipelined messages,
+embed the parsers in a larger grammar, and know which inputs the parser refuses
+and why.
 
 The `HTTP` module follows the message syntax of RFC 9112 and the field syntax
 of RFC 9110. It parses messages; it does not open connections or send
@@ -23,16 +24,16 @@ anything.
 
 [WARNING]
 ====
-The parser has no size limits. It holds the whole message in memory and will
-read a `Content-Length` of any size the input contains. Before you call it on
-network input, bound the number of bytes you read.
+The complete-input APIs hold the whole message in memory and have no size
+limits. Bound input before calling them on network data. For bounded metadata
+and body fragments, use the incremental APIs in <<http-streaming>>.
 ====
 
 == Parse a request
 
-Parse a request with `HTTP.parse_request`. It takes the raw bytes as a
-`List(U8)` (use `Str.to_utf8` for a `Str`) and returns the `request` and the
-`rest` of the bytes after it:
+Parse a request with `HTTP.Request.parse_bytes(bytes, props)`. It takes the raw bytes as a
+`List(U8)` (use `text.to_utf8()` for a `Str`) and returns a complete
+`HTTP.Request`, rejecting trailing input:
 
 [source,roc]
 ----
@@ -83,7 +84,7 @@ method: Extension("PURGE")
 
 === Read header fields
 
-Look a field up with `HTTP.header`, which compares names case-insensitively
+Look a field up with `message.header(name)`, which compares names case-insensitively
 (HTTP field names are) and returns the first match, or `Err(Missing)`:
 
 [source,roc]
@@ -104,7 +105,7 @@ once per occurrence, so walk `headers` yourself to see every value.
 
 == Parse a response
 
-Parse a response with `HTTP.parse_response`. `status_code` is a `U16` and
+Parse a response with `HTTP.Response.parse_bytes(bytes, props)`. `status_code` is a `U16` and
 `reason` is the reason phrase, which may be empty:
 
 [source,roc]
@@ -166,8 +167,8 @@ decoded body: Wikipedia
 == Read pipelined messages
 
 A client may send several requests on one connection without waiting for
-responses. `HTTP.parse_request` consumes exactly one message and returns the
-bytes that follow it as `rest`; parse `rest` again for the next message. To
+responses. `HTTP.Request.parser(props).run(bytes)` consumes one message prefix and returns
+the following bytes as `rest`; run it again on `rest` for the next message. To
 read a whole buffer of requests at once, use `HTTP.parse_requests`, which
 fails unless the buffer ends exactly at the end of a request:
 
@@ -187,11 +188,109 @@ targets: /a, /b
 A response with no framing fields reads to the end of the input, so it is
 always the last message in a buffer.
 
+[#http-streaming]
+== Read messages from byte chunks
+
+Use `HTTP.Request.decoder(props).read_stream(chunks)` to process a request pipeline from a
+file or socket without collecting its bodies. `chunks` is a
+`Stream(Try(List(U8), source_error))`; the pure equivalent is
+`HTTP.Request.decoder(props).read_iter(chunks)`. Empty chunks do not mean EOF, and
+chunk boundaries may occur inside any HTTP line, UTF-8 header value, or body.
+
+The reader emits `Value(RequestHead(head))`, followed by zero or more
+`Value(Body(bytes))` fragments, any `Value(Trailer(header))` fields, and
+`Value(MessageEnd)`. It then starts the next pipelined request. Bodies are
+binary bytes, with chunked transfer framing removed. No complete body is
+retained. A zero-length body produces no `Body` event.
+
+`MessageEnd` validates one message. The final `Finished(report)` validates the
+source through EOF; drain the reader through it to detect an incomplete next
+message or malformed suffix. Stopping after a head or body fragment leaves the
+remaining input unvalidated. A source failure is returned as
+`Err(SourceErr(original_error))` and never completes a truncated message.
+HTTP framing and limit failures are terminal `Err(InvalidHttp(error))` values,
+with byte offsets counted from the start of the source. HTTP readers never
+skip rejected messages or attempt to resume at another line.
+
+The complete program {src}/examples/http-streaming.roc[`examples/http-streaming.roc`]
+reads stdin and prints each message's body byte count. For example:
+
+[source,sh]
+----
+printf 'POST /notes HTTP/1.1\r\nHost: a\r\nContent-Length: 2\r\n\r\nhi' | roc examples/http-streaming.roc
+----
+
+Output:
+
+[source,text]
+----
+request /notes
+body bytes: 2
+finished; protocol bytes: 0
+----
+
+=== Associate responses with requests
+
+Use `HTTP.Response.decoder({ methods, reader: props }).read_stream(chunks)`
+or `.read_iter(chunks)` for responses. The decoder requires an `Iter(HTTP.Method)` containing the request methods in response
+order. A response without a matching method is an error. An informational
+response such as `100` or `103` produces its own head and `MessageEnd`, while
+retaining the method for the final response. Methods are pulled only when a
+response starts; unused methods are neither pulled nor checked at source EOF.
+
+Responses to `HEAD`, informational responses, `204`, and `304` have no body.
+A response without length or transfer framing streams its body until source
+EOF, then emits `MessageEnd` and `Finished`. These readers retain the strict
+framing checks of the complete-input API, including rejecting conflicting
+framing fields even when response context implies an empty body.
+
+A `101` response or successful `CONNECT` response ends HTTP parsing. After its
+head and `MessageEnd`, the reader emits `ProtocolSwitch`, then bounded
+`ProtocolData(bytes)` events containing the remaining bytes unchanged, through
+source EOF. The application is responsible for validating the protocol upgrade
+and interpreting those bytes. They are never parsed as another HTTP message.
+
+The example accepts `get`, `head`, or `connect` to read responses for one
+request of that method. For a response to `HEAD`:
+
+[source,sh]
+----
+printf 'HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\n' | roc examples/http-streaming.roc head
+----
+
+The reported body byte count is zero; the advertised length is metadata.
+
+=== Bound metadata and output fragments
+
+`HTTP.ReadProps` defaults to 65,536 head bytes, 8,192 bytes per line, 100 header
+fields, 65,536 trailer-section bytes, 100 trailer fields, and 65,536 bytes per
+body or protocol-data fragment. The byte limits include CRLF for complete
+heads and trailer sections; `max_line_bytes` excludes CRLF and also bounds
+chunk-size lines and their extensions. Each message starts new head and trailer
+budgets. `max_body_chunk_bytes` must be positive.
+
+The props are `max_head_bytes`, `max_line_bytes`, `max_headers`,
+`max_trailer_bytes`, `max_trailers`, and `max_body_chunk_bytes`. Limits fail
+before retaining the byte or emitting the field that exceeds the budget.
+`Host`, `Content-Length`, and `Transfer-Encoding` are rejected in trailers.
+Retained parser memory depends on these metadata bounds and the current source
+chunk. Keeping emitted values intentionally adds to application memory use.
+These limits do not bound the total body length, connection lifetime, or time
+spent waiting for input; enforce those in the application when needed.
+
+For a custom driver, `HTTP.Request.decoder(props)` or
+`HTTP.Response.decoder({ methods, reader: props })` returns a configured reader.
+`decoder.step({ bytes, end: More })` returns at most one event and the number of
+bytes consumed from that call. Supply `Final` only when the source has ended,
+and continue stepping to the terminal result. The shared
+xref:streaming.adoc#streaming[chunk reader contract] describes consumption and
+completion in detail.
+
 [#http-embedded]
 == Use the parsers inside a larger grammar
 
-`HTTP.request` and `HTTP.response` are the same parsers as a
-`Parser(Utf8.Bytes, _)`, for when a message is one part of a larger format. They
+`HTTP.Request.parser(props)` and `HTTP.Response.parser(props)` are the same parsers as a
+`Parser(Parser.Utf8.Bytes, _, HTTP.Problem)`, for when a message is one part of a larger format. They
 leave the bytes after the message for the next parser:
 
 [source,roc]
@@ -211,9 +310,9 @@ Output:
 health check: /health
 ----
 
-They fail with `ParseError({ message, offset })`. The message starts with
-`invalid HTTP request:` or `invalid HTTP response:`, and the offset is where
-the problem is, counted from the start of the whole input.
+They fail with `ParseError({ problem, location, path })`, preserving the native
+`HTTP.Problem` tag. Byte runners identify generic input positions with
+`InputOffset(offset)`; string runners provide original byte, line and column coordinates.
 
 [#http-security]
 == Rejected messages and request smuggling
@@ -254,9 +353,9 @@ The status line has rules of its own: the status code is exactly three digits
 and at least `100`, and the space before the reason phrase may be left out
 when the phrase is empty.
 
-`parse_request` and `parse_response` fail with `InvalidHttp(Error)`, where an
-`Error` is `{ offset, message }`: the message says which rule was broken and
-the offset is the byte where the problem is. A framing error points at the
+The complete-message constructors fail with `InvalidHttp(Error)`, where an
+`Error` is `{ problem, location, path }`: the tag identifies the broken rule and
+`location: ByteOffset(offset)` identifies the original byte. A framing error points at the
 start of the field line responsible; a missing `Host` field is reported at
 offset 0, the start of the message.
 
@@ -272,19 +371,21 @@ Output:
 rejected at byte 55: both Transfer-Encoding and Content-Length
 ----
 
-The `fuzz/http-smuggling.roc` fuzz target generates messages built from these
+The `fuzz/HttpSmugglingProperty.roc` fuzz target generates messages built from these
 constructs and checks that each one is rejected; see
 {src}/fuzz/README.md[the fuzzing guide].
 
 == Out of scope
 
-* Bodies of responses to `HEAD` and `CONNECT`, which need the request; see
-  <<http-framing,Understand how the body is found>>.
-* Chunk extensions and trailer fields, which are validated and dropped.
+* Request context in the complete-input response APIs; use
+  <<http-streaming>> for `HEAD` and `CONNECT` responses.
+* Preserving chunk extensions. Trailer fields are emitted by incremental
+  readers and validated then dropped by the complete-input APIs.
 * Content codings such as gzip, and any `Transfer-Encoding` other than
   `chunked`, which is rejected rather than decoded.
 * HTTP/2 and HTTP/3, which are binary protocols.
-* Size limits and timeouts, which the caller must enforce.
+* Total body-size limits and timeouts, which the caller must enforce.
+  Incremental readers provide metadata and fragment limits.
 
 The {api}[API reference] lists the `HTTP` types and parsers.
 

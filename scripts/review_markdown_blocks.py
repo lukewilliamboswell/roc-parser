@@ -514,7 +514,7 @@ def crosscheck(args) -> int:
     for path in sorted(Path(args.corpus).iterdir()):
         if not path.is_file():
             continue
-        shown = subprocess.run([str(args.binary), "show", str(path)], capture_output=True, text=True)
+        shown = subprocess.run([str(args.binary), f"--target={args.fuzz_target}", "show", str(path)], capture_output=True, text=True)
         try:
             case = json.loads(shown.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
@@ -593,6 +593,7 @@ def main(argv=None) -> int:
         if name == "crosscheck":
             operation.add_argument("binary", type=Path)
             operation.add_argument("corpus", type=Path)
+            operation.add_argument("--fuzz-target", default="markdown-blocks", help="property selected from the shared fuzz executable")
             operation.add_argument("--examples", type=int, default=10)
         if name == "differential":
             operation.add_argument("corpus", type=Path)

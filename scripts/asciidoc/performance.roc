@@ -129,12 +129,12 @@ main! = |_| {
 								# Compact timing replies do not build a redundant output AST.
 								Stdout.line!(Json.to_str({ version: 2.U64, phase: "timing", mode: item.mode, id: item.id, iterations: item.iterations, warmup: item.warmup, successes: $successes, checksum: $checksum, elapsed_ns }))?
 							} else {
-								match AsciiDoc.parse_with(item.source, options) {
+								match AsciiDoc.parse_str(item.source, options) {
 									Err(_) => Stdout.line!(Json.to_str({ error: "parse_failed", id: item.id }))?
 									Ok(document) => {
 										operation_checksum = operation(item.source, options, item.mode)
 										projection = "{\"title\":${json_string(document.title)},\"blocks\":${encode_blocks(document.blocks)}}"
-										html = AsciiDoc.render(document)
+										html = document.render_html()
 										Stdout.line!("{\"version\":2,\"phase\":\"correctness\",\"mode\":${json_string(item.mode)},\"warmup\":${item.warmup.to_str()},\"operation_checksum\":${operation_checksum.to_str()},\"id\":${json_string(item.id)},\"iterations\":${item.iterations.to_str()},\"successes\":${$successes.to_str()},\"checksum\":${$checksum.to_str()},\"elapsed_ns\":${elapsed_ns.to_str()},\"projection\":${projection},\"html\":${json_string(html)}}")?
 									}
 								}
@@ -149,8 +149,8 @@ main! = |_| {
 }
 
 operation : Str, { includes : List({ path : Str, source : Str }), attributes : List(AsciiDoc.Attribute), max_depth : U64, expand_includes : Bool }, Str -> U64
-operation = |source, options, mode| match AsciiDoc.parse_with(source, options) {
-	Ok(document) => if (mode == "render") AsciiDoc.render(document).count_utf8_bytes() + 1 else document.blocks.len() + document.title.count_utf8_bytes() + 1
+operation = |source, options, mode| match AsciiDoc.parse_str(source, options) {
+	Ok(document) => if (mode == "render") document.render_html().count_utf8_bytes() + 1 else document.blocks.len() + document.title.count_utf8_bytes() + 1
 	Err(_) => 0
 }
 

@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
             command += ["--roc-repo", str(args.roc_source.resolve())]
         oracle = Path(step("oracle-build", command).stdout.strip())
         probe = output / "probe"
-        step("probe-build", [roc, "build", "--opt=speed", "--no-cache", "scripts/roc_syntax/probe.roc", f"--output={probe}"])
+        step("probe-build", [roc, "build", "--opt=dev", "scripts/roc_syntax/probe.roc", f"--output={probe}"])
         manifest["binary_sha256"] = {name: hashlib.sha256(path.read_bytes()).hexdigest()
                                      for name, path in [("probe", probe), ("oracle", oracle)]}
         metadata = oracle.with_suffix(".json")
@@ -164,7 +164,8 @@ def main(argv: list[str] | None = None) -> int:
             # own mistakes have to be caught against the compiler.
             step("span-model-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
                                              "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/type-fixtures.json",
-                                             "--fuzz-show", ".roc-parser-tmp/fuzz/bin/roc-syntax-span-model",
+                                             "--fuzz-show", ".roc-parser-tmp/fuzz/bin/Core",
+                                             "--fuzz-target", "roc-syntax-span-model",
                                              "--corpus", ".roc-parser-tmp/fuzz/corpus/roc-syntax-span-model",
                                              "--output", str(output / "span-model")])
         mutations = [sys.executable, "scripts/mutate_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
@@ -187,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
             benchmark += ["--scaling-exempt", "comment"]
         if args.allocations:
             alloc = output / "alloc"
-            step("allocation-build", [roc, "build", "--opt=speed", "--no-cache", "--fuzz",
+            step("allocation-build", [roc, "build", "--fuzz",
                                       "bench/roc/roc-syntax-alloc.roc", f"--output={alloc}"])
             benchmark += ["--allocation-binary", str(alloc)]
         if args.baseline:

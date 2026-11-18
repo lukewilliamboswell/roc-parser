@@ -1,22 +1,21 @@
+import Diagnostic
 import Parser
-import Utf8
-import Literal as Quotation
+import Streaming
 
 ## Parse HTTP/1.x requests and responses, following the message syntax of
 ## RFC 9112 and the field syntax of RFC 9110.
 ##
-## [HTTP.parse_request] and [HTTP.parse_response] read one message from the
-## start of a byte list and return it with the bytes that follow (the next
-## pipelined message). [HTTP.parse_requests] reads a whole pipeline. They fail
-## with `InvalidHttp(Error)`, where the [HTTP.Error] gives the byte offset of
-## the problem. [HTTP.request] and [HTTP.response] are the same parsers for
-## use inside a larger [Parser].
+## [HTTP.Request.parse_bytes] and [HTTP.Response.parse_bytes] read one complete
+## message from a byte list and reject trailing input. Their `.parser({}).run(bytes)`
+## forms read a message prefix and return the unconsumed `rest`. [HTTP.parse_requests]
+## reads a complete pipeline. Native failures use `InvalidHttp(Error)`; parser
+## runners use the shared `ParseError` diagnostic envelope.
 ##
 ## ```roc
 ## expect {
 ##     bytes = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n".to_utf8()
-##     match HTTP.parse_request(bytes) {
-##         Ok({ request, rest }) => request.method == Get and request.target == "/hello" and rest == []
+##     match HTTP.Request.parse_bytes(bytes, {}) {
+##         Ok(request) => request.method == Get and request.target == "/hello"
 ##         Err(InvalidHttp(_)) => False
 ##     }
 ## }
@@ -52,37 +51,12 @@ HTTP :: [].{
 	## A complete source message and its quotation validation options.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", lints : Lints ?? {} }
 
-	## A complete checked request; HTTP source retains mandatory CRLF endings.
-	RequestLiteral := { value : Request }.{
-
-		## Parse and validate a complete request during literal conversion.
-		from_quote : Str -> Try(RequestLiteral, [BadQuotedBytes(Str)])
-		from_quote = |source| HTTP.validate_request({ source: source }).map_ok(|value| { value: value })
-	}
-
-	## A complete checked response, available through `.value`.
-	ResponseLiteral := { value : Response }.{
-
-		## Parse and validate a complete response during literal conversion.
-		from_quote : Str -> Try(ResponseLiteral, [BadQuotedBytes(Str)])
-		from_quote = |source| HTTP.validate_response({ source: source }).map_ok(|value| { value: value })
-	}
-
 	## Parse exactly one request, then check enabled lint rules.
-	validate_request : ValidationProps -> Try(Request, [BadQuotedBytes(Str)])
-	validate_request = |props| {
-		parsed = read_request_metadata(props.source.to_utf8()).map_err(|error| quotation_error(props, error))?
-		validate_message(props, parsed.rest, parsed.fields)?
-		Ok(parsed.value)
-	}
 
 	## Parse exactly one response, then check enabled lint rules.
-	validate_response : ValidationProps -> Try(Response, [BadQuotedBytes(Str)])
-	validate_response = |props| {
-		parsed = read_response_metadata(props.source.to_utf8()).map_err(|error| quotation_error(props, error))?
-		validate_message(props, parsed.rest, parsed.fields)?
-		Ok(parsed.value)
-	}
+
+	## Complete-message parser configuration.
+	ParseProps := {}
 
 	## A request method (RFC 9110 section 9).
 	##
@@ -100,7 +74,7 @@ HTTP :: [].{
 	## with surrounding whitespace removed.
 	##
 	## Fields keep their order in the message, and repeated fields are kept.
-	## Use [HTTP.header] to look one up by name.
+	## Use `message.header(name)` to look one up by name.
 	Header : { name : Str, value : Str }
 
 	## A parsed HTTP request message.
@@ -108,159 +82,479 @@ HTTP :: [].{
 	## `target` is the request-target exactly as written (it is not decoded or
 	## normalized). `body` is the message body after any chunked transfer
 	## coding has been removed.
-	Request : {
+	Request := {
 		method : Method,
 		target : Str,
 		version : Version,
 		headers : List(Header),
 		body : List(U8),
+	}.{
+		is_eq : _
+		to_hash : _
+
+		## Parse exactly one complete HTTP message, rejecting trailing bytes.
+		parse_bytes : List(U8), HTTP.ParseProps -> Try(Request, [InvalidHttp(HTTP.Error)])
+		parse_bytes = |bytes, _props| {
+			parsed = read_request(bytes).map_err(|failure| InvalidHttp(http_error(failure)))?
+			if !parsed.rest.is_empty() {
+				return Err(InvalidHttp(http_error({ offset: bytes.len() - parsed.rest.len(), problem: TrailingContent })))
+			}
+			Ok(parsed.value)
+		}
+
+		## Read one message prefix through the generic parser runner.
+		parser : HTTP.ParseProps -> Parser(Parser.Utf8.Bytes, Request, HTTP.Problem)
+		parser = |_props| Parser.custom(|input| read_request(input).map_err(|{ offset, problem }| ParseError(Diagnostic.{ problem, location: InputOffset(offset), path: [] })))
+
+		## Look up a header case-insensitively on this message.
+		header : Request, Str -> Try(Str, [Missing])
+		header = |message, name| header_named(message.headers, name)
+
+		## Check a named message using the selected lint profile.
+		validate : HTTP.ValidationProps -> Try(Request, [InvalidHttp(HTTP.Error)])
+		validate = |props| validate_request_source(props)
+
+		## Checked source literals construct the actual message type.
+		from_quote : Str -> Try(Request, [BadQuotedBytes(Str)])
+		from_quote = |source| validate(
+			{ source: source },
+		).map_err(|InvalidHttp(error)| quote_http_error(source, error))
+
+		## Read bounded request events using the common descriptor methods.
+		decoder : HTTP.ReadProps -> Streaming.Decoder(IncrementalState, HTTP.Event, [InvalidHttp(HTTP.Error)])
+		decoder = |props| Streaming.decoder({ initial_state: incremental_initial(props, Requests, [].iter()), step: |state, bytes, end| Streaming.map_step_error(incremental_step(state, bytes, end), |error| InvalidHttp(http_error(error))), errors: props.errors })
+
 	}
 
 	## A parsed HTTP response message.
 	##
 	## `status_code` is the three-digit status code and `reason` the reason
 	## phrase, which may be empty. `body` is decoded like a request body.
-	Response : {
+	Response := {
 		version : Version,
 		status_code : U16,
 		reason : Str,
 		headers : List(Header),
 		body : List(U8),
+	}.{
+		is_eq : _
+		to_hash : _
+
+		## Parse exactly one complete HTTP message, rejecting trailing bytes.
+		parse_bytes : List(U8), HTTP.ParseProps -> Try(Response, [InvalidHttp(HTTP.Error)])
+		parse_bytes = |bytes, _props| {
+			parsed = read_response(bytes).map_err(|failure| InvalidHttp(http_error(failure)))?
+			if !parsed.rest.is_empty() {
+				return Err(InvalidHttp(http_error({ offset: bytes.len() - parsed.rest.len(), problem: TrailingContent })))
+			}
+			Ok(parsed.value)
+		}
+
+		## Read one message prefix through the generic parser runner.
+		parser : HTTP.ParseProps -> Parser(Parser.Utf8.Bytes, Response, HTTP.Problem)
+		parser = |_props| Parser.custom(|input| read_response(input).map_err(|{ offset, problem }| ParseError(Diagnostic.{ problem, location: InputOffset(offset), path: [] })))
+
+		## Look up a header case-insensitively on this message.
+		header : Response, Str -> Try(Str, [Missing])
+		header = |message, name| header_named(message.headers, name)
+
+		## Check a named message using the selected lint profile.
+		validate : HTTP.ValidationProps -> Try(Response, [InvalidHttp(HTTP.Error)])
+		validate = |props| validate_response_source(props)
+
+		## Checked source literals construct the actual message type.
+		from_quote : Str -> Try(Response, [BadQuotedBytes(Str)])
+		from_quote = |source| validate(
+			{ source: source },
+		).map_err(|InvalidHttp(error)| quote_http_error(source, error))
+
+		## Associate responses with methods; informational responses retain one.
+		DecoderProps := { methods : Iter(HTTP.Method), reader : HTTP.ReadLimits ?? {}, errors : Streaming.RecoveryProps ?? {} }
+		decoder : DecoderProps -> Streaming.Decoder(IncrementalState, HTTP.Event, [InvalidHttp(HTTP.Error)])
+		decoder = |props| {
+			reader = HTTP.ReadProps.{ max_head_bytes: props.reader.max_head_bytes, max_line_bytes: props.reader.max_line_bytes, max_headers: props.reader.max_headers, max_trailer_bytes: props.reader.max_trailer_bytes, max_trailers: props.reader.max_trailers, max_body_chunk_bytes: props.reader.max_body_chunk_bytes, errors: props.errors }
+			Streaming.decoder({ initial_state: incremental_initial(reader, Responses, props.methods), step: |state, bytes, end| Streaming.map_step_error(incremental_step(state, bytes, end), |error| InvalidHttp(http_error(error))), errors: props.errors })
+		}
+
 	}
 
-	## Why a message was rejected: `message` names the broken rule and
-	## `offset` is the byte offset in the input where the problem is.
+	## Why a message was rejected: `problem` identifies the broken rule and
+	## `location: ByteOffset(offset)` identifies its original byte position.
 	##
 	## Problems with the message as a whole, such as a missing `Host` field,
 	## are at offset 0, the start of the message.
-	Error : { offset : U64, message : Str }
+	Resource : [HeadBytes, TrailerBytes, LineBytes, Headers, Trailers]
+	Problem : [LimitExceeded({ resource : Resource, max : U64, observed : Diagnostic.Observed }), DuplicateHost, MissingHost, CrWithoutLf, LfWithoutCr, MissingCrlf, MissingTarget, InvalidTarget, InvalidMethod, MissingMethod, InvalidVersion, InvalidStatusWidth, InvalidStatus, InvalidReasonCharacter, InvalidReasonEncoding, MissingStatus, InvalidFieldEncoding, ObsoleteFolding, WhitespaceBeforeColon, InvalidFieldCharacter, InvalidFieldName, TransferEncodingHttp10, ContentLengthOverflow, ConflictingFraming, UnsupportedTransferCoding, ConflictingContentLength, InvalidContentLength, IncompleteBody, IncompleteChunk, MissingChunkCrlf, InvalidChunkSize, ChunkSizeOverflow, WhitespaceAfterChunkSize, MissingExtensionName, InvalidExtension, MissingExtensionValue, InvalidQuotedPair, InvalidQuotedCharacter, UnclosedQuote, TrailingContent, RepeatedContentLength, RepeatedContentLengthValues, InvalidBodyChunkSize, SourceClosed, IncompleteSection, MissingRequestMethod, ForbiddenTrailer]
+	Error : Diagnostic(Problem)
 
-	## The value of the first header with this name, compared
-	## case-insensitively, or `Err(Missing)`.
-	##
-	## ```roc
-	## expect {
-	##     headers = [{ name: "Content-Type", value: "text/plain" }]
-	##     HTTP.header(headers, "content-type") == Ok("text/plain") and HTTP.header(headers, "Host") == Err(Missing)
-	## }
-	## ```
-	header : List(Header), Str -> Try(Str, [Missing])
-	header = |headers, name| {
-		wanted = name.with_ascii_lowercased()
-		var $found = Err(Missing)
-		for field in headers {
-			if $found == Err(Missing) and field.name.with_ascii_lowercased() == wanted {
-				$found = Ok(field.value)
-			}
-		}
-		$found
-	}
+	## Bounds for incremental readers. Body fragments never exceed
+	## `max_body_chunk_bytes`; heads and trailer sections have independent bounds.
+	## Limits shared by request and response event readers.
+	ReadLimits := { max_head_bytes : U64 ?? default_max_head_bytes, max_line_bytes : U64 ?? default_max_line_bytes, max_headers : U64 ?? default_max_headers, max_trailer_bytes : U64 ?? default_max_trailer_bytes, max_trailers : U64 ?? default_max_trailers, max_body_chunk_bytes : U64 ?? default_max_body_chunk_bytes }
 
-	## Parse one HTTP request from the start of `bytes`: request line, header
-	## fields, and the body its framing describes.
-	##
-	## Returns the `request` and the `rest` of the bytes after it, which is the
-	## next pipelined message, if any.
-	##
-	## ```roc
-	## expect {
-	##     bytes = "POST /notes HTTP/1.1\r\nHost: a\r\nContent-Length: 2\r\n\r\nhiGET".to_utf8()
-	##     match HTTP.parse_request(bytes) {
-	##         Ok({ request, rest }) => request.body == "hi".to_utf8() and rest == "GET".to_utf8()
-	##         Err(InvalidHttp(_)) => False
-	##     }
-	## }
-	## ```
-	parse_request : List(U8) -> Try({ request : Request, rest : List(U8) }, [InvalidHttp(Error)])
-	parse_request = |bytes| {
-		match read_request(bytes) {
-			Ok({ value, rest }) => Ok({ request: value, rest })
-			Err(error) => Err(InvalidHttp(error))
-		}
-	}
+	ReadProps := { max_head_bytes : U64 ?? default_max_head_bytes, max_line_bytes : U64 ?? default_max_line_bytes, max_headers : U64 ?? default_max_headers, max_trailer_bytes : U64 ?? default_max_trailer_bytes, max_trailers : U64 ?? default_max_trailers, max_body_chunk_bytes : U64 ?? default_max_body_chunk_bytes, errors : Streaming.RecoveryProps ?? {} }
 
-	## Parse one HTTP response from the start of `bytes`: status line, header
-	## fields, and the body its framing describes.
-	##
-	## A response with no `Content-Length` or `Transfer-Encoding` takes the
-	## rest of the input as its body, so its `rest` is empty.
-	##
-	## ```roc
-	## expect {
-	##     bytes = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_utf8()
-	##     match HTTP.parse_response(bytes) {
-	##         Ok({ response, rest: _ }) => response.status_code == 404 and response.reason == "Not Found"
-	##         Err(InvalidHttp(_)) => False
-	##     }
-	## }
-	## ```
-	parse_response : List(U8) -> Try({ response : Response, rest : List(U8) }, [InvalidHttp(Error)])
-	parse_response = |bytes| {
-		match read_response(bytes) {
-			Ok({ value, rest }) => Ok({ response: value, rest })
-			Err(error) => Err(InvalidHttp(error))
-		}
-	}
+	## A request head, emitted before any body bytes.
+	RequestHead : { method : Method, target : Str, version : Version, headers : List(Header) }
 
-	## Parse every request in `bytes`, a pipeline of zero or more requests
-	## that must end exactly at the end of the last one.
-	##
-	## A failure's `offset` counts from the start of `bytes`.
-	##
-	## ```roc
-	## expect {
-	##     bytes = "GET /a HTTP/1.1\r\nHost: a\r\n\r\nGET /b HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
-	##     HTTP.parse_requests(bytes).map_ok(|requests| requests.map(|r| r.target)) == Ok(["/a", "/b"])
-	## }
-	## ```
-	parse_requests : List(U8) -> Try(List(Request), [InvalidHttp(Error)])
-	parse_requests = |bytes| read_requests(bytes, bytes.len(), [])
+	## A response head, emitted before any body bytes.
+	ResponseHead : { version : Version, status_code : U16, reason : Str, headers : List(Header) }
 
-	## A [Parser] for one HTTP request, like [HTTP.parse_request], for use
-	## inside a larger parser.
-	##
-	## It leaves the bytes after the message unconsumed. A failure is a
-	## `ParseError` whose message starts with `invalid HTTP request:` and whose
-	## offset is where the problem is.
-	##
-	## ```roc
-	## expect {
-	##     text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	##     match Utf8.parse_str(HTTP.request, text) {
-	##         Ok(req) => req.method == Get and HTTP.header(req.headers, "host") == Ok("example.com")
-	##         Err(_) => False
-	##     }
-	## }
-	## ```
-	request : Parser(Utf8.Bytes, Request)
-	request =
-		Parser.custom(
-			|input| {
-				read_request(input).map_err(|{ offset, message }| ParseError({ message: "invalid HTTP request: ${message}", offset }))
-			},
-		)
+	## `MessageEnd` completes one HTTP message, including informational responses.
+	## `Finished` from the shared reader completes the source. After a 101 response or a
+	## successful CONNECT, `ProtocolSwitch` precedes uninterpreted `ProtocolData`.
+	Event : [RequestHead(RequestHead), ResponseHead(ResponseHead), Body(List(U8)), Trailer(Header), MessageEnd, ProtocolSwitch, ProtocolData(List(U8))]
 
-	## A [Parser] for one HTTP response, like [HTTP.parse_response], for use
-	## inside a larger parser.
-	##
-	## A failure is a `ParseError` whose message starts with
-	## `invalid HTTP response:` and whose offset is where the problem is.
-	response : Parser(Utf8.Bytes, Response)
-	response =
-		Parser.custom(
-			|input| {
-				read_response(input).map_err(|{ offset, message }| ParseError({ message: "invalid HTTP response: ${message}", offset }))
-			},
-		)
+	## Parse every request in a complete byte source without collecting events.
+	parse_requests : List(U8), ParseProps -> Try(List(Request), [InvalidHttp(Error)])
+	parse_requests = |bytes, _props| read_requests(bytes, bytes.len(), [])
+
+	## Compose a complete request pipeline with generic parsers.
+	requests_parser : ParseProps -> Parser(Parser.Utf8.Bytes, List(Request), Problem)
+	requests_parser = |props| Parser.custom(
+		|bytes| {
+			parse_requests(bytes, props)
+				.map_ok(|requests| { value: requests, rest: [] })
+				.map_err(|InvalidHttp(error)| ParseError({ ..error, location: InputOffset(Diagnostic.byte_offset(error.location) ?? 0) }))
+		},
+	)
+
 }
 
 Bytes : List(U8)
 
 Framing : [Length(U64), Chunked, Unframed]
 
+IncrementalMode : [Requests, Responses]
+
+IncrementalPhase : [Head, Fixed(U64), CloseBody, ChunkSize, ChunkData(U64), ChunkCR, ChunkLF, Trailers, Complete, Switch, Protocol, Closed]
+
+IncrementalContinuation : [NextMessage, SwitchProtocol, EndSource]
+
+IncrementalState : {
+	props : HTTP.ReadProps,
+	mode : IncrementalMode,
+	methods : Iter(HTTP.Method),
+	method : Try(HTTP.Method, [Missing]),
+	phase : IncrementalPhase,
+	continuation : IncrementalContinuation,
+	informational : Bool,
+	offset : U64,
+	section_start : U64,
+	buffer : Bytes,
+	line_bytes : U64,
+	saw_cr : Bool,
+	section_bytes : U64,
+	lines : U64,
+}
+
+incremental_initial : HTTP.ReadProps, IncrementalMode, Iter(HTTP.Method) -> IncrementalState
+incremental_initial = |props, mode, methods| {
+	{ props, mode, methods, method: Err(Missing), phase: Head, continuation: NextMessage, informational: False, offset: 0, section_start: 0, buffer: [], line_bytes: 0, saw_cr: False, section_bytes: 0, lines: 0 }
+}
+
+incremental_failed : IncrementalState, U64, U64, HTTP.Problem -> Streaming.Step(IncrementalState, HTTP.Event, Failure)
+incremental_failed = |state, consumed, offset, problem| { state: { ..state, phase: Closed, buffer: [], methods: [].iter() }, consumed, outcome: Failed({ offset, problem }) }
+
+incremental_failure : IncrementalState, U64, Failure -> Streaming.Step(IncrementalState, HTTP.Event, Failure)
+incremental_failure = |state, consumed, error| incremental_failed(state, consumed, error.offset, error.problem)
+
+# Each wire byte is scanned once. Complete bounded heads/lines are then parsed
+# once by the same grammar and framing functions as the complete-input API.
+incremental_step : IncrementalState, Bytes, Streaming.InputEnd -> Streaming.Step(IncrementalState, HTTP.Event, Failure)
+incremental_step = |initial, bytes, end| {
+	var $state = initial
+	var $used = 0
+	if initial.props.max_body_chunk_bytes == 0 {
+		return incremental_failed($state, 0, $state.offset, InvalidBodyChunkSize)
+	}
+	while True {
+		match $state.phase {
+			Complete => {
+				phase = match $state.continuation {
+					NextMessage => Head
+					SwitchProtocol => Switch
+					EndSource => Closed
+				}
+				$state = { ..$state, phase, method: if ($state.informational) $state.method else Err(Missing), buffer: [], line_bytes: 0, saw_cr: False, section_bytes: 0, lines: 0, section_start: $state.offset }
+				return { state: $state, consumed: $used, outcome: Item(MessageEnd) }
+			}
+			Switch => {
+				$state = { ..$state, phase: Protocol, methods: [].iter() }
+				return { state: $state, consumed: $used, outcome: Item(ProtocolSwitch) }
+			}
+			Closed => {
+				if $used < bytes.len() {
+					return incremental_failed($state, $used, $state.offset, SourceClosed)
+				}
+				return { state: $state, consumed: $used, outcome: if (end == Final) Done else NeedInput }
+			}
+			Fixed(0) => {
+				$state = { ..$state, phase: Complete }
+			}
+			ChunkData(0) => {
+				$state = { ..$state, phase: ChunkCR }
+			}
+			Fixed(remaining) | ChunkData(remaining) => {
+				if $used == bytes.len() {
+					if end == Final {
+						return incremental_failed($state, $used, $state.offset, IncompleteBody)
+					}
+					return { state: $state, consumed: $used, outcome: NeedInput }
+				}
+				available = bytes.len() - $used
+				count = U64.min(U64.min(remaining, available), $state.props.max_body_chunk_bytes)
+				part = bytes.sublist({ start: $used, len: count })
+				phase = match $state.phase {
+					Fixed(_) => Fixed(remaining - count)
+					_ => ChunkData(remaining - count)
+				}
+				$state = { ..$state, phase, offset: $state.offset + count }
+				$used = $used + count
+				return { state: $state, consumed: $used, outcome: Item(Body(part)) }
+			}
+			CloseBody | Protocol => {
+				if $used == bytes.len() {
+					if end == More {
+						return { state: $state, consumed: $used, outcome: NeedInput }
+					}
+					if $state.phase == Protocol {
+						return { state: { ..$state, phase: Closed }, consumed: $used, outcome: Done }
+					}
+					$state = { ..$state, phase: Complete, continuation: EndSource }
+				} else {
+					count = U64.min(bytes.len() - $used, $state.props.max_body_chunk_bytes)
+					part = bytes.sublist({ start: $used, len: count })
+					event = if ($state.phase == Protocol) ProtocolData(part) else Body(part)
+					$state = { ..$state, offset: $state.offset + count }
+					$used = $used + count
+					return { state: $state, consumed: $used, outcome: Item(event) }
+				}
+			}
+			ChunkCR | ChunkLF => {
+				if $used == bytes.len() {
+					if end == Final {
+						return incremental_failed($state, $used, $state.offset, MissingChunkCrlf)
+					}
+					return { state: $state, consumed: $used, outcome: NeedInput }
+				}
+				expected = if ($state.phase == ChunkCR) '\r' else '\n'
+				if bytes.get($used) != Ok(expected) {
+					return incremental_failed($state, $used, $state.offset, MissingChunkCrlf)
+				}
+				phase = if ($state.phase == ChunkCR) ChunkLF else ChunkSize
+				$state = { ..$state, phase, offset: $state.offset + 1, section_start: $state.offset + 1 }
+				$used = $used + 1
+			}
+			Head | ChunkSize | Trailers => {
+				if $used == bytes.len() {
+					if end == More {
+						return { state: $state, consumed: $used, outcome: NeedInput }
+					}
+					if $state.phase == Head and $state.buffer.is_empty() and $state.method.is_err() {
+						return { state: { ..$state, phase: Closed, methods: [].iter() }, consumed: $used, outcome: Done }
+					}
+					return incremental_failed($state, $used, $state.offset, IncompleteSection)
+				}
+				if $state.phase == Head and $state.mode == Responses and $state.method.is_err() {
+					var $found = False
+					while !$found {
+						match $state.methods.next() {
+							Done => return incremental_failed($state, $used, $state.offset, MissingRequestMethod)
+							Skip({ rest }) => {
+								$state = { ..$state, methods: rest }
+							}
+							One({ item, rest }) => {
+								$state = { ..$state, methods: rest, method: Ok(item) }
+								$found = True
+							}
+						}
+					}
+				}
+				# A complete head already present in the caller's chunk needs no
+				# intermediate buffer or per-line decoder updates. The probe accepts
+				# only CRLF heads within every metadata budget; other input follows
+				# the general path so its exact framing diagnostics are preserved.
+				if $state.phase == Head and $state.buffer.is_empty() and !$state.saw_cr {
+					remaining = bytes.drop_first($used)
+					match complete_head_end(remaining, $state.props) {
+						Ok(length) => {
+							$state = { ..$state, buffer: remaining.take_first(length), offset: $state.offset + length }
+							$used = $used + length
+							match incremental_head($state) {
+								Ok({ state, event }) => return { state, consumed: $used, outcome: Item(event) }
+								Err(error) => return incremental_failure($state, $used, error)
+							}
+						}
+						Err(_) => {}
+					}
+				}
+				# Ordinary metadata bytes can be framed a whole span at a time.
+				# CRLF and every boundary/limit still pass through the same state
+				# transitions below; field validation occurs before head emission.
+				var $bulk = False
+				if !$state.saw_cr {
+					run_end = Parser.Utf8.find_line_end(bytes, $used)
+					count = run_end - $used
+					if count > 0 {
+						section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
+						line_room = $state.props.max_line_bytes - U64.min($state.line_bytes, $state.props.max_line_bytes)
+						section_room = section_limit - U64.min($state.section_bytes, section_limit)
+						accepted = U64.min(count, U64.min(line_room, section_room))
+						if accepted > 0 {
+							$state = { ..$state, offset: $state.offset + accepted, section_bytes: $state.section_bytes + accepted, line_bytes: $state.line_bytes + accepted, buffer: $state.buffer.concat(bytes.sublist({ start: $used, len: accepted })) }
+							$used = $used + accepted
+						}
+						if accepted < count {
+							problem = if ($state.section_bytes >= section_limit) LimitExceeded({ resource: if ($state.phase == Trailers) TrailerBytes else HeadBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }) else LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) })
+							return incremental_failed($state, $used, $state.offset, problem)
+						}
+						$bulk = True
+					}
+				}
+				if !$bulk {
+					byte = bytes.get($used) ?? 0
+					if $state.saw_cr and byte != '\n' {
+						return incremental_failed($state, $used, $state.offset - 1, CrWithoutLf)
+					}
+					if byte == '\n' and !$state.saw_cr {
+						return incremental_failed($state, $used, $state.offset, LfWithoutCr)
+					}
+					section_limit = if ($state.phase == Head) $state.props.max_head_bytes else if ($state.phase == Trailers) $state.props.max_trailer_bytes else U64.highest
+					if $state.section_bytes >= section_limit {
+						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: if ($state.phase == Trailers) TrailerBytes else HeadBytes, max: section_limit, observed: AtLeast((section_limit) + 1) }))
+					}
+					if byte != '\r' and byte != '\n' and $state.line_bytes >= $state.props.max_line_bytes {
+						return incremental_failed($state, $used, $state.offset, LimitExceeded({ resource: LineBytes, max: $state.props.max_line_bytes, observed: AtLeast(($state.props.max_line_bytes) + 1) }))
+					}
+					$state = { ..$state, offset: $state.offset + 1, section_bytes: $state.section_bytes + 1, buffer: $state.buffer.append(byte) }
+					$used = $used + 1
+					if byte == '\r' {
+						$state = { ..$state, saw_cr: True }
+					} else if byte != '\n' {
+						$state = { ..$state, line_bytes: $state.line_bytes + 1 }
+					} else {
+						line_length = $state.line_bytes
+						$state = { ..$state, saw_cr: False, line_bytes: 0 }
+						match $state.phase {
+							Head => {
+								if line_length == 0 {
+									match incremental_head($state) {
+										Err(error) => return incremental_failure($state, $used, error)
+										Ok({ state, event }) => return { state, consumed: $used, outcome: Item(event) }
+									}
+								} else {
+									$state = { ..$state, lines: $state.lines + 1 }
+									if $state.lines - 1 > $state.props.max_headers {
+										return incremental_failed($state, $used, $state.offset - line_length - 2, LimitExceeded({ resource: Headers, max: $state.props.max_headers, observed: AtLeast(($state.props.max_headers) + 1) }))
+									}
+								}
+							}
+							ChunkSize => {
+								match shift(parse_chunk_header($state.buffer.drop_last(2)), $state.section_start) {
+									Err(error) => return incremental_failure($state, $used, error)
+									Ok(size) => {
+										$state = { ..$state, phase: if (size == 0) Trailers else ChunkData(size), buffer: [], section_start: $state.offset, section_bytes: 0, lines: 0 }
+									}
+								}
+							}
+							Trailers => {
+								if line_length == 0 {
+									$state = { ..$state, phase: Complete, buffer: [] }
+								} else {
+									if $state.lines >= $state.props.max_trailers {
+										return incremental_failed($state, $used, $state.section_start, LimitExceeded({ resource: Trailers, max: $state.props.max_trailers, observed: AtLeast(($state.props.max_trailers) + 1) }))
+									}
+									match shift(parse_field_line($state.buffer.drop_last(2)), $state.section_start) {
+										Err(error) => return incremental_failure($state, $used, error)
+										Ok(parsed) => {
+											if parsed.kind.is_ok() {
+												return incremental_failed($state, $used, $state.section_start, ForbiddenTrailer)
+											}
+											$state = { ..$state, buffer: [], section_start: $state.offset, lines: $state.lines + 1 }
+											return { state: $state, consumed: $used, outcome: Item(Trailer(parsed.header)) }
+										}
+									}
+								}
+							}
+							_ => {}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# Probe only a complete bounded CRLF head; incomplete or exceptional input
+# retains the incremental byte driver's error positions and precedence.
+complete_head_end : Bytes, HTTP.ReadProps -> Try(U64, [Unavailable])
+complete_head_end = |bytes, props| {
+	bounded = bytes.take_first(props.max_head_bytes)
+	var $pos = 0.U64
+	var $lines = 0.U64
+	while $pos < bounded.len() {
+		remaining = bounded.drop_first($pos)
+		ordinary = U64.min(remaining.len(), props.max_line_bytes)
+		window = remaining.take_first(ordinary + U64.min(2, remaining.len() - ordinary))
+		end = Parser.Utf8.find_line_end(window, 0)
+		if end > props.max_line_bytes or end >= window.len() {
+			return Err(Unavailable)
+		}
+		if window.get(end) != Ok('\r') or window.get(end + 1) != Ok('\n') {
+			return Err(Unavailable)
+		}
+		line_end = $pos + end
+		next = line_end + 2
+		if next > props.max_head_bytes {
+			return Err(Unavailable)
+		}
+		if line_end == $pos {
+			return Ok(next)
+		}
+		$lines = $lines + 1
+		if $lines - 1 > props.max_headers {
+			return Err(Unavailable)
+		}
+		$pos = next
+	}
+	Err(Unavailable)
+}
+
+incremental_head : IncrementalState -> Try({ state : IncrementalState, event : HTTP.Event }, Failure)
+incremental_head = |state| {
+	{ line, rest } = shift(take_line(state.buffer), state.section_start)?
+	head = shift(parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] }), state.section_start)?
+	if state.mode == Requests {
+		start = shift(parse_request_line(line), state.section_start)?
+		_ = shift(check_host(head.fields, start.version), state.section_start)?
+		body_framing = shift(framing(head.fields, start.version), state.section_start)?
+		phase = match body_framing {
+			Length(n) => Fixed(n)
+			Chunked => ChunkSize
+			Unframed => Complete
+		}
+		Ok({ state: { ..state, phase, buffer: [], section_start: state.offset, section_bytes: 0, lines: 0, informational: False, continuation: NextMessage }, event: RequestHead({ method: start.method, target: start.target, version: start.version, headers: head.headers }) })
+	} else {
+		start = shift(parse_status_line(line), state.section_start)?
+		body_framing = shift(framing(head.fields, start.version), state.section_start)?
+		code = start.status_code
+		method = state.method ?? Get
+		switched = code == 101 or (method == Connect and code >= 200 and code < 300)
+		informational = code < 200 and code != 101
+		no_body = method == Head or code < 200 or code == 204 or code == 304 or switched
+		phase = if (no_body) Complete else match body_framing {
+			Length(n) => Fixed(n)
+			Chunked => ChunkSize
+			Unframed => CloseBody
+		}
+		Ok({ state: { ..state, phase, buffer: [], section_start: state.offset, section_bytes: 0, lines: 0, informational, continuation: if (switched) SwitchProtocol else NextMessage }, event: ResponseHead({ version: start.version, status_code: code, reason: start.reason, headers: head.headers }) })
+	}
+}
+
 # A failure, with `offset` relative to the start of the bytes the function
 # that produced it was given.
-Failure : HTTP.Error
+Failure : { offset : U64, problem : HTTP.Problem }
 
 # The value of a field that decides the framing or the Host check, with the
 # byte offset of its line so that errors can point at it. Only these fields
@@ -273,12 +567,12 @@ FieldKind : [Host, TransferEncoding, ContentLength]
 # framing, and the bytes after the empty line.
 Head : { headers : List(HTTP.Header), fields : List(Field), rest : Bytes }
 
-fail : U64, Str -> Try(a, Failure)
-fail = |offset, message| Err({ offset, message })
+fail : U64, HTTP.Problem -> Try(a, Failure)
+fail = |offset, problem| Err({ offset, problem })
 
 # Move a failure's offset from a slice starting at `base` to the outer input.
 shift : Try(a, Failure), U64 -> Try(a, Failure)
-shift = |result, base| result.map_err(|{ offset, message }| { offset: base + offset, message })
+shift = |result, base| result.map_err(|{ offset, problem }| { offset: base + offset, problem })
 
 # The requests in `bytes`, the end of an input `total` bytes long.
 read_requests : Bytes, U64, List(HTTP.Request) -> Try(List(HTTP.Request), [InvalidHttp(HTTP.Error)])
@@ -288,7 +582,7 @@ read_requests = |bytes, total, requests| {
 	} else {
 		match shift(read_request(bytes), total - bytes.len()) {
 			Ok({ value, rest }) => read_requests(rest, total, requests.append(value))
-			Err(error) => Err(InvalidHttp(error))
+			Err(error) => Err(InvalidHttp(http_error(error)))
 		}
 	}
 }
@@ -301,14 +595,10 @@ read_request_metadata : Bytes -> Try({ value : HTTP.Request, rest : Bytes, field
 read_request_metadata = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_request_line(line)?
-	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
+	head = parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] })?
 	version = start.version
-	hosts = values_named(head.fields, Host)
-	if hosts.len() > 1 {
-		fail((hosts.get(1) ?? { value: [], offset: 0 }).offset, "more than one Host field")
-	} else if hosts.is_empty() and at_least_1_1(version) {
-		fail(0, "an HTTP/1.1 request needs a Host field")
-	} else {
+	check_host(head.fields, version)?
+	{
 		body_start = input.len() - head.rest.len()
 		framed =
 			match framing(head.fields, version)? {
@@ -326,7 +616,7 @@ read_response_metadata : Bytes -> Try({ value : HTTP.Response, rest : Bytes, fie
 read_response_metadata = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_status_line(line)?
-	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
+	head = parse_fields(rest, line.len() + 2, { headers: List.with_capacity(16), fields: [], rest: [] })?
 	version = start.version
 	body_framing = framing(head.fields, version)?
 	code = start.status_code
@@ -340,28 +630,36 @@ read_response_metadata = |input| {
 	Ok({ value: { version, status_code: code, reason: start.reason, headers: head.headers, body: framed.body }, rest: framed.rest, fields: head.fields })
 }
 
-quotation_error : HTTP.ValidationProps, Failure -> [BadQuotedBytes(Str)]
-quotation_error = |props, error| {
-	position = Quotation.position(props.source, error.offset)
-	Quotation.error({ name: props.name, format: "HTTP", message: error.message, line: position.line, column: position.column })
-}
-
-validate_message : HTTP.ValidationProps, Bytes, List(Field) -> Try({}, [BadQuotedBytes(Str)])
+validate_message : HTTP.ValidationProps, Bytes, List(Field) -> Try({}, [InvalidHttp(HTTP.Error)])
 validate_message = |props, rest, fields| {
 	if !rest.is_empty() {
-		return Err(quotation_error(props, { offset: props.source.to_utf8().len() - rest.len(), message: "unexpected content after the HTTP message" }))
+		return Err(InvalidHttp(named_http_error(props.name, { offset: props.source.to_utf8().len() - rest.len(), problem: TrailingContent })))
 	}
 	if props.lints.repeated_content_length {
 		lengths = values_named(fields, ContentLength)
 		if lengths.len() > 1 {
-			return Err(quotation_error(props, { offset: (lengths.get(1) ?? { value: [], offset: 0 }).offset, message: "repeated_content_length: repeated Content-Length field" }))
+			return Err(InvalidHttp(named_http_error(props.name, { offset: (lengths.get(1) ?? { value: [], offset: 0 }).offset, problem: RepeatedContentLength })))
 		}
 		match lengths.first() {
-			Ok(field) if elements(field.value).len() > 1 => return Err(quotation_error(props, { offset: field.offset, message: "repeated_content_length: Content-Length contains repeated values" }))
+			Ok(field) if elements(field.value).len() > 1 => return Err(InvalidHttp(named_http_error(props.name, { offset: field.offset, problem: RepeatedContentLengthValues })))
 			_ => {}
 		}
 	}
 	Ok({})
+}
+
+check_host : List(Field), HTTP.Version -> Try({}, Failure)
+check_host = |fields, version| {
+	var $found = False
+	for field in fields {
+		if field.kind == Host {
+			if $found {
+				return fail(field.offset, DuplicateHost)
+			}
+			$found = True
+		}
+	}
+	if (!$found and at_least_1_1(version)) fail(0, MissingHost) else Ok({})
 }
 
 at_least_1_1 : HTTP.Version -> Bool
@@ -374,7 +672,7 @@ take_line : Bytes -> Try({ line : Bytes, rest : Bytes }, Failure)
 take_line = |bytes| {
 	# Build the error only when there is one: a `Try` holding an error
 	# message costs an allocation even on the success path.
-	var $index = Utf8.find_line_end(bytes, 0)
+	var $index = Parser.Utf8.find_line_end(bytes, 0)
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		if byte == '\r' {
@@ -382,27 +680,27 @@ take_line = |bytes| {
 				if bytes.get($index + 1) == Ok('\n') {
 					Ok({ line: bytes.sublist({ start: 0, len: $index }), rest: bytes.drop_first($index + 2) })
 				} else {
-					fail($index, "CR not followed by LF")
+					fail($index, CrWithoutLf)
 				}
 		} else if byte == '\n' {
-			return fail($index, "LF not preceded by CR")
+			return fail($index, LfWithoutCr)
 		}
 		$index = $index + 1
 	}
-	fail(bytes.len(), "message ended before CRLF")
+	fail(bytes.len(), MissingCrlf)
 }
 
 # request-line = method SP request-target SP HTTP-version
 parse_request_line : Bytes -> Try({ method : HTTP.Method, target : Str, version : HTTP.Version }, Failure)
 parse_request_line = |line| {
-	method_len = Utf8.skip_class(line, 0, tchar_class)
+	method_len = skip_tchar(line)
 	method = to_method(line.sublist({ start: 0, len: method_len }))?
 	match line.drop_first(method_len) {
 		[' ', .. as target_onwards] => {
 			target_start = method_len + 1
 			target_len = prefix_len(target_onwards, is_vchar)
 			if target_len == 0 {
-				fail(target_start, "expected a request target after the method")
+				fail(target_start, MissingTarget)
 			} else {
 				match target_onwards.drop_first(target_len) {
 					[' ', .. as version_bytes] => {
@@ -410,11 +708,11 @@ parse_request_line = |line| {
 						target = Str.from_utf8(target_onwards.sublist({ start: 0, len: target_len })) ?? ""
 						Ok({ method, target, version })
 					}
-					_ => fail(target_start + target_len, "request target must be visible ASCII followed by a single SP")
+					_ => fail(target_start + target_len, InvalidTarget)
 				}
 			}
 		}
-		_ => fail(method_len, "method must be a token followed by a single SP")
+		_ => fail(method_len, InvalidMethod)
 	}
 }
 
@@ -430,7 +728,7 @@ to_method = |bytes| {
 		['T', 'R', 'A', 'C', 'E'] => Ok(Trace)
 		['C', 'O', 'N', 'N', 'E', 'C', 'T'] => Ok(Connect)
 		['P', 'A', 'T', 'C', 'H'] => Ok(Patch)
-		[] => fail(0, "expected a method token")
+		[] => fail(0, MissingMethod)
 		# A token is ASCII, so the fallback is never used.
 		_ => Ok(Extension(Str.from_utf8(bytes) ?? ""))
 	}
@@ -442,7 +740,7 @@ parse_version = |bytes| {
 	match bytes {
 		['H', 'T', 'T', 'P', '/', major, '.', minor] if is_digit(major) and is_digit(minor) =>
 			Ok({ major: major - '0', minor: minor - '0' })
-		_ => fail(0, "expected an HTTP version like HTTP/1.1")
+		_ => fail(0, InvalidVersion)
 	}
 }
 
@@ -459,28 +757,69 @@ parse_status_line = |line| {
 				match after_code {
 					[] => Ok([])
 					[' ', .. as text] => Ok(text)
-					_ => fail(12, "status code must be exactly three digits")
+					_ => fail(12, InvalidStatusWidth)
 				}?
-			valid_len = prefix_len(phrase, |byte| byte == '\t' or byte == ' ' or is_vchar(byte) or byte >= 0x80)
+			valid_len = skip_field_bytes(phrase)
 			if status_code < 100 {
-				fail(9, "status code must be at least 100")
+				fail(9, InvalidStatus)
 			} else if valid_len < phrase.len() {
-				fail(13 + valid_len, "control character in reason phrase")
+				fail(13 + valid_len, InvalidReasonCharacter)
 			} else {
 				match Str.from_utf8(phrase) {
 					Ok(reason) => Ok({ version, status_code, reason })
-					Err(_) => fail(13, "reason phrase is not valid UTF-8")
+					Err(_) => fail(13, InvalidReasonEncoding)
 				}
 			}
 		}
-		_ => fail(8, "expected SP and a three-digit status code after the version")
+		_ => fail(8, MissingStatus)
 	}
 }
 
 # Field lines up to and including the empty line that ends them. `base` is
 # the offset of `bytes` in the message, recorded with each field.
 parse_fields : Bytes, U64, Head -> Try(Head, Failure)
-parse_fields = |bytes, base, head| {
+parse_fields = |bytes, base, initial| {
+	var $pos = 0.U64
+	var $headers = initial.headers
+	var $fields = initial.fields
+	while True {
+		if bytes.get($pos) == Ok('\r') and bytes.get($pos + 1) == Ok('\n') {
+			return Ok({ headers: $headers, fields: $fields, rest: bytes.drop_first($pos + 2) })
+		}
+		name_end = skip_tchar_at(bytes, $pos)
+		if name_end == $pos or bytes.get(name_end) != Ok(':') {
+			return parse_fields_slow(bytes.drop_first($pos), base + $pos, { headers: $headers, fields: $fields, rest: [] })
+		}
+		var $start = name_end + 1
+		while $start < bytes.len() and is_ows(bytes.get($start) ?? 0) {
+			$start = $start + 1
+		}
+		value_end = skip_field_bytes_at(bytes, $start)
+		if bytes.get(value_end) != Ok('\r') or bytes.get(value_end + 1) != Ok('\n') {
+			return parse_fields_slow(bytes.drop_first($pos), base + $pos, { headers: $headers, fields: $fields, rest: [] })
+		}
+		var $trimmed_end = value_end
+		while $trimmed_end > $start and is_ows(bytes.get($trimmed_end - 1) ?? 0) {
+			$trimmed_end = $trimmed_end - 1
+		}
+		name_bytes = bytes.sublist({ start: $pos, len: name_end - $pos })
+		value = bytes.sublist({ start: $start, len: $trimmed_end - $start })
+		text = Str.from_utf8(value).map_err(|_| { offset: base + $start, problem: InvalidFieldEncoding })?
+		name = Str.from_utf8(name_bytes) ?? ""
+		$headers = $headers.append({ name, value: text })
+		match field_kind(name_bytes) {
+			Ok(kind) => {
+				$fields = $fields.append({ kind, value, offset: base + $pos })
+			}
+			Err(_) => {}
+		}
+		$pos = value_end + 2
+	}
+}
+
+# Exceptional lines keep the complete parser's diagnostics and error ordering.
+parse_fields_slow : Bytes, U64, Head -> Try(Head, Failure)
+parse_fields_slow = |bytes, base, head| {
 	{ line, rest } = shift(take_line(bytes), base)?
 	if line.is_empty() {
 		Ok({ headers: head.headers, fields: head.fields, rest })
@@ -531,25 +870,25 @@ ascii_eq_lower = |bytes, wanted| {
 # field-line = field-name ":" OWS field-value OWS
 parse_field_line : Bytes -> Try({ header : HTTP.Header, kind : Try(FieldKind, [Other]), value : Bytes }, Failure)
 parse_field_line = |line| {
-	name_len = Utf8.skip_class(line, 0, tchar_class)
+	name_len = skip_tchar(line)
 	match line.drop_first(name_len) {
-		[' ', ..] | ['\t', ..] if name_len == 0 => fail(0, "obsolete line folding is not allowed")
-		[' ', ..] | ['\t', ..] => fail(name_len, "whitespace between a field name and its colon")
+		[' ', ..] | ['\t', ..] if name_len == 0 => fail(0, ObsoleteFolding)
+		[' ', ..] | ['\t', ..] => fail(name_len, WhitespaceBeforeColon)
 		[':', .. as after_colon] if name_len > 0 => {
 			value_start = name_len + 1 + prefix_len(after_colon, is_ows)
 			value = trim_ows(after_colon)
-			valid_len = Utf8.skip_class(value, 0, field_byte_class)
+			valid_len = skip_field_bytes(value)
 			if valid_len == value.len() {
 				name = Str.from_utf8(line.sublist({ start: 0, len: name_len })) ?? ""
 				match Str.from_utf8(value) {
 					Ok(text) => Ok({ header: { name, value: text }, kind: field_kind(line.sublist({ start: 0, len: name_len })), value })
-					Err(_) => fail(value_start, "field value is not valid UTF-8")
+					Err(_) => fail(value_start, InvalidFieldEncoding)
 				}
 			} else {
-				fail(value_start + valid_len, "control character in field value")
+				fail(value_start + valid_len, InvalidFieldCharacter)
 			}
 		}
-		_ => fail(name_len, "field name must be a token followed by a colon")
+		_ => fail(name_len, InvalidFieldName)
 	}
 }
 
@@ -573,25 +912,54 @@ values_named = |fields, wanted| {
 elements : Bytes -> List(Bytes)
 elements = |bytes| {
 	var $parts = []
-	var $current = []
-	var $index = 0
+	var $start = 0.U64
+	var $index = 0.U64
 	while $index < bytes.len() {
-		byte = bytes.get($index) ?? 0
-		if byte == ',' {
-			$parts = $parts.append(trim_ows($current))
-			$current = []
-		} else {
-			$current = $current.append(byte)
+		if bytes.get($index) == Ok(',') {
+			$parts = $parts.append(trim_ows(bytes.sublist({ start: $start, len: $index - $start })))
+			$start = $index + 1
 		}
 		$index = $index + 1
 	}
-	$parts.append(trim_ows($current))
+	$parts.append(trim_ows(bytes.drop_first($start)))
 }
 
 # How the body is delimited (RFC 9112 section 6.3), rejecting ambiguity.
 # Failures point at the field line responsible.
 framing : List(Field), HTTP.Version -> Try(Framing, Failure)
-framing = |fields, version| {
+framing = |fields, version| match fields {
+	[] => Ok(Unframed)
+	[field] => framing_single(field, version)
+	[first, second] if first.kind == Host => framing_single(second, version)
+	[first, second] if second.kind == Host => framing_single(first, version)
+	_ => framing_general(fields, version)
+}
+
+# A single framing field needs no filtered lists or comma-element allocations.
+framing_single : Field, HTTP.Version -> Try(Framing, Failure)
+framing_single = |field, version| match field.kind {
+	Host => Ok(Unframed)
+	TransferEncoding => {
+		if !at_least_1_1(version) {
+			return fail(field.offset, TransferEncodingHttp10)
+		}
+		if (ascii_eq_lower(field.value, "chunked")) Ok(Chunked) else framing_general([field], version)
+	}
+	ContentLength => {
+		if field.value.is_empty() or !field.value.all(is_digit) {
+			return framing_general([field], version)
+		}
+		significant = field.value.drop_first(prefix_len(field.value, |byte| byte == '0'))
+		if significant.len() > 19 {
+			return fail(field.offset, ContentLengthOverflow)
+		}
+		Ok(Length(significant.fold(0, |sum, digit| sum * 10 + (digit - '0').to_u64())))
+	}
+}
+
+# Repeated fields and comma lists retain the exact spelling and conflict checks.
+framing_general : List(Field), HTTP.Version -> Try(Framing, Failure)
+framing_general = |fields, version| {
 	transfer_encodings = values_named(fields, TransferEncoding)
 	content_lengths = values_named(fields, ContentLength)
 	match (transfer_encodings.first(), content_lengths.first()) {
@@ -599,20 +967,24 @@ framing = |fields, version| {
 		# RFC 9112 6.1 allows a recipient to process Transfer-Encoding over
 		# Content-Length, but a message with both "ought to be handled as an
 		# error"; llhttp rejects it by default, as does this parser.
-			fail(if (te.offset > cl.offset) te.offset else cl.offset, "both Transfer-Encoding and Content-Length")
+			fail(if (te.offset > cl.offset) te.offset else cl.offset, ConflictingFraming)
 		(Ok(te), Err(_)) => {
+			if !at_least_1_1(version) {
+				return fail(te.offset, TransferEncodingHttp10)
+			}
+			if transfer_encodings.len() == 1 and ascii_eq_lower(te.value, "chunked") {
+				return Ok(Chunked)
+			}
 			codings =
 				transfer_encodings
 					.fold([], |all, field| all.concat(elements(field.value)))
 					.map(|coding| coding.map(to_lower))
-			if !at_least_1_1(version) {
-				fail(te.offset, "Transfer-Encoding in an HTTP/1.0 message")
-			} else if codings == [['c', 'h', 'u', 'n', 'k', 'e', 'd']] {
+			if codings == [['c', 'h', 'u', 'n', 'k', 'e', 'd']] {
 				# Exactly one element: empty list elements (", chunked") are
 				# rejected like h11 does, since intermediaries disagree on them.
 				Ok(Chunked)
 			} else {
-				fail(te.offset, "unsupported transfer coding (only a single chunked is supported)")
+				fail(te.offset, UnsupportedTransferCoding)
 			}
 		}
 		(Err(_), Ok(cl)) => parse_content_length(content_lengths, cl)
@@ -624,16 +996,23 @@ framing = |fields, version| {
 # (RFC 9110 section 8.6), as h11 accepts.
 parse_content_length : List({ value : Bytes, offset : U64 }), { value : Bytes, offset : U64 } -> Try(Framing, Failure)
 parse_content_length = |fields, first| {
+	if fields.len() == 1 and !first.value.is_empty() and first.value.all(is_digit) {
+		significant = first.value.drop_first(prefix_len(first.value, |byte| byte == '0'))
+		if significant.len() > 19 {
+			return fail(first.offset, ContentLengthOverflow)
+		}
+		return Ok(Length(significant.fold(0, |sum, digit| sum * 10 + (digit - '0').to_u64())))
+	}
 	wanted = elements(first.value).first() ?? []
 	match fields.find_first(|field| elements(field.value).any(|value| value != wanted)) {
-		Ok(field) => fail(field.offset, "conflicting Content-Length values")
+		Ok(field) => fail(field.offset, ConflictingContentLength)
 		Err(_) =>
 			if wanted.is_empty() or !wanted.all(is_digit) {
-				fail(first.offset, "Content-Length must be decimal digits")
+				fail(first.offset, InvalidContentLength)
 			} else {
 				significant = wanted.drop_first(prefix_len(wanted, |byte| byte == '0'))
 				if significant.len() > 19 {
-					fail(first.offset, "Content-Length is too large")
+					fail(first.offset, ContentLengthOverflow)
 				} else {
 					Ok(Length(significant.fold(0, |sum, digit| sum * 10 + (digit - '0').to_u64())))
 				}
@@ -647,7 +1026,7 @@ take_body = |body_framing, bytes, base| {
 	match body_framing {
 		Length(length) =>
 			if length > bytes.len() {
-				fail(base + bytes.len(), "body is shorter than Content-Length")
+				fail(base + bytes.len(), IncompleteBody)
 			} else {
 				Ok({ body: bytes.sublist({ start: 0, len: length }), rest: bytes.drop_first(length) })
 			}
@@ -664,14 +1043,14 @@ decode_chunked = |bytes, base, body| {
 	size = shift(parse_chunk_header(line), base)?
 	data_start = base + line.len() + 2
 	if size == 0 {
-		trailers = parse_fields(rest, data_start, { headers: [], fields: [], rest: [] })?
+		trailers = parse_fields(rest, data_start, { headers: List.with_capacity(16), fields: [], rest: [] })?
 		Ok({ body, rest: trailers.rest })
 	} else if size > rest.len() {
-		fail(data_start + rest.len(), "chunk is longer than the remaining input")
+		fail(data_start + rest.len(), IncompleteChunk)
 	} else {
 		match rest.drop_first(size) {
 			['\r', '\n', .. as next] => decode_chunked(next, data_start + size + 2, body.concat(rest.sublist({ start: 0, len: size })))
-			_ => fail(data_start + size, "chunk data must be followed by CRLF")
+			_ => fail(data_start + size, MissingChunkCrlf)
 		}
 	}
 }
@@ -683,9 +1062,9 @@ parse_chunk_header = |line| {
 	digits = line.sublist({ start: 0, len: digits_len })
 	significant = digits.drop_first(prefix_len(digits, |byte| byte == '0'))
 	if digits_len == 0 {
-		fail(0, "expected a hexadecimal chunk size")
+		fail(0, InvalidChunkSize)
 	} else if significant.len() > 15 {
-		fail(0, "chunk size is too large")
+		fail(0, ChunkSizeOverflow)
 	} else {
 		check_chunk_extensions(line.drop_first(digits_len), line.len())?
 		Ok(significant.fold(0, |sum, digit| sum * 16 + hex_value(digit)))
@@ -699,12 +1078,12 @@ parse_chunk_header = |line| {
 check_chunk_extensions : Bytes, U64 -> Try({}, Failure)
 check_chunk_extensions = |bytes, line_len| {
 	match trim_start_ows(bytes) {
-		[] => if (bytes.is_empty()) Ok({}) else fail(line_len - bytes.len(), "whitespace after chunk size")
+		[] => if (bytes.is_empty()) Ok({}) else fail(line_len - bytes.len(), WhitespaceAfterChunkSize)
 		[';', .. as after_semicolon] => {
 			name_onwards = trim_start_ows(after_semicolon)
-			name_len = Utf8.skip_class(name_onwards, 0, tchar_class)
+			name_len = skip_tchar(name_onwards)
 			if name_len == 0 {
-				fail(line_len - name_onwards.len(), "chunk extension needs a name")
+				fail(line_len - name_onwards.len(), MissingExtensionName)
 			} else {
 				after_name = name_onwards.drop_first(name_len)
 				match trim_start_ows(after_name) {
@@ -717,7 +1096,7 @@ check_chunk_extensions = |bytes, line_len| {
 				}
 			}
 		}
-		other => fail(line_len - other.len(), "invalid chunk extension")
+		other => fail(line_len - other.len(), InvalidExtension)
 	}
 }
 
@@ -727,8 +1106,8 @@ chunk_ext_value_len = |bytes| {
 	match bytes {
 		['"', ..] => quoted_string_len(bytes)
 		_ => {
-			token_len = Utf8.skip_class(bytes, 0, tchar_class)
-			if (token_len == 0) fail(0, "chunk extension needs a value after =") else Ok(token_len)
+			token_len = skip_tchar(bytes)
+			if (token_len == 0) fail(0, MissingExtensionValue) else Ok(token_len)
 		}
 	}
 }
@@ -747,15 +1126,15 @@ quoted_string_len = |bytes| {
 			if $index + 1 < bytes.len() and (escaped == '\t' or escaped == ' ' or is_vchar(escaped) or escaped >= 0x80) {
 				$index = $index + 2
 			} else {
-				return fail($index, "invalid quoted-pair in quoted string")
+				return fail($index, InvalidQuotedPair)
 			}
 		} else if byte == '\t' or byte == ' ' or is_vchar(byte) or byte >= 0x80 {
 			$index = $index + 1
 		} else {
-			return fail($index, "control character in quoted string")
+			return fail($index, InvalidQuotedCharacter)
 		}
 	}
-	fail(bytes.len(), "unterminated quoted string")
+	fail(bytes.len(), UnclosedQuote)
 }
 
 prefix_len : Bytes, (U8 -> Bool) -> U64
@@ -813,11 +1192,53 @@ is_field_byte = |byte| is_vchar(byte) or byte >= 0x80 or byte == ' ' or byte == 
 
 # tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
 #         "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
-tchar_class : Utf8.ByteClass
-tchar_class = Utf8.ByteClass.from_predicate(is_tchar)
+# Fixed HTTP classes avoid passing the generic scanner's membership table.
+# The nibble masks encode RFC 9110 tchar exactly; the scalar tail uses the
+# same predicate, checked exhaustively below.
+skip_tchar : Bytes -> U64
+skip_tchar = |bytes| skip_tchar_at(bytes, 0)
 
-field_byte_class : Utf8.ByteClass
-field_byte_class = Utf8.ByteClass.from_predicate(is_field_byte)
+skip_tchar_at : Bytes, U64 -> U64
+skip_tchar_at = |bytes, start| {
+	lo_table = U8x16.from_u128_bits(0x1C3D1534153D3E3E3F3F3F3F3F3E3F3A)
+	hi_table = U8x16.from_u128_bits(0x2010080402010000)
+	var $index = start
+	while $index + 16 <= bytes.len() {
+		v = U8x16.load(bytes, $index) ?? U8x16.splat(0)
+		lo = U8x16.table_lookup(lo_table, v.bitwise_and(U8x16.splat(15)))
+		hi = U8x16.table_lookup(hi_table, v.shr_zf_wrap(4))
+		outside = U8x16.eq_lanes(lo.bitwise_and(hi), U8x16.splat(0)).to_bitmask()
+		if outside != 0 {
+			return $index + outside.count_trailing_zero_bits().to_u64()
+		}
+		$index = $index + 16
+	}
+	while $index < bytes.len() and is_tchar(bytes.get($index) ?? 0) {
+		$index = $index + 1
+	}
+	$index
+}
+
+skip_field_bytes : Bytes -> U64
+skip_field_bytes = |bytes| skip_field_bytes_at(bytes, 0)
+
+skip_field_bytes_at : Bytes, U64 -> U64
+skip_field_bytes_at = |bytes, start| {
+	var $index = start
+	while $index + 16 <= bytes.len() {
+		v = U8x16.load(bytes, $index) ?? U8x16.splat(0)
+		control = U8x16.bitwise_or(U8x16.bitwise_and(U8x16.gt_lanes(U8x16.splat(32), v), U8x16.eq_lanes(v, U8x16.splat(9)).bitwise_not()), U8x16.eq_lanes(v, U8x16.splat(127)))
+		outside = control.to_bitmask()
+		if outside != 0 {
+			return $index + outside.count_trailing_zero_bits().to_u64()
+		}
+		$index = $index + 16
+	}
+	while $index < bytes.len() and is_field_byte(bytes.get($index) ?? 0) {
+		$index = $index + 1
+	}
+	$index
+}
 
 is_tchar : U8 -> Bool
 is_tchar = |byte| {
@@ -827,15 +1248,18 @@ is_tchar = |byte| {
 		or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
 
-parse : Parser(Utf8.Bytes, a), Str -> Try(a, [ParseError({ message : Str, offset : U64 })])
-parse = |parser, text| Utf8.parse_str(parser, text)
+parse : Parser(Parser.Utf8.Bytes, a, HTTP.Problem), Str -> Try(a, [ParseError(Diagnostic(Parser.Problem(HTTP.Problem)))])
+parse = |parser, text| (parser).parse_str(text)
 
 # The error a request is rejected with.
-request_error : Str -> Try(HTTP.Error, [Accepted])
+request_error : Str -> Try(Failure, [Accepted])
 request_error = |text| {
-	match HTTP.parse_request(text.to_utf8()) {
+	match parse_request_prefix(text.to_utf8()) {
 		Ok(_) => Err(Accepted)
-		Err(InvalidHttp(error)) => Ok(error)
+		Err(InvalidHttp(error)) => match error.location {
+			ByteOffset(offset) => Ok({ offset, problem: error.problem })
+			_ => crash "HTTP request error must identify original bytes"
+		}
 	}
 }
 
@@ -843,7 +1267,7 @@ request_error = |text| {
 expect parse_version("HTTP/1.1".to_utf8()) == Ok({ major: 1, minor: 1 })
 
 # Oversized HTTP version numbers are rejected.
-expect parse(HTTP.request, "GET / HTTP/1.044444444444444444444\r\nHost: a\r\n\r\n").is_err()
+expect parse(HTTP.Request.parser({}), "GET / HTTP/1.044444444444444444444\r\nHost: a\r\n\r\n").is_err()
 
 # Request parsing captures method, target, version, fields and a sized body.
 expect {
@@ -854,7 +1278,7 @@ expect {
 		\\Content-Length: 13\r
 		\\\r
 		\\Hello, world!
-	actual = parse(HTTP.request, request_text)?
+	actual = parse(HTTP.Request.parser({}), request_text)?
 	expected : HTTP.Request
 	expected = {
 		method: Post,
@@ -880,7 +1304,7 @@ expect {
 		\\Origin: https://foo.example\r
 		\\Access-Control-Request-Headers: X-PINGOTHER, Content-Type\r
 		\\\r\n
-	actual = parse(HTTP.request, request_text)?
+	actual = parse(HTTP.Request.parser({}), request_text)?
 	expected = {
 		method: Options,
 		target: "/resources/post-here/",
@@ -901,7 +1325,7 @@ expect {
 expect {
 	body = "<!DOCTYPE html>\r\n<p>Hello, world!</p>\r\n"
 	response_text = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nETag: \"2e77ad1d\"\r\n\r\n${body}"
-	actual = parse(HTTP.response, response_text)?
+	actual = parse(HTTP.Response.parser({}), response_text)?
 	expected = {
 		version: { major: 1, minor: 1 },
 		status_code: 200,
@@ -914,31 +1338,31 @@ expect {
 
 # Field values lose surrounding whitespace and may be empty (RFC 9112 5).
 expect {
-	actual = parse(HTTP.request, "GET / HTTP/1.1\r\nHost:a\r\nX: \t b  c \t\r\nY:\r\n\r\n")?
+	actual = parse(HTTP.Request.parser({}), "GET / HTTP/1.1\r\nHost:a\r\nX: \t b  c \t\r\nY:\r\n\r\n")?
 	actual.headers == [{ name: "Host", value: "a" }, { name: "X", value: "b  c" }, { name: "Y", value: "" }]
 }
 
 # A request without framing fields has no body; what follows is the next message.
 expect {
-	actual = Utf8.parse_bytes_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
+	actual = (HTTP.Request.parser({})).run("GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
 	actual.value.body == [] and actual.rest == "GET /2".to_utf8()
 }
 
 # Chunked bodies are decoded; extensions and trailers are validated and dropped.
 expect {
 	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b ; c=\"q\\\"\"\r\nhello\r\n6\r\n world\r\n0\r\nX-Trailer: t\r\n\r\n"
-	actual = parse(HTTP.request, text)?
+	actual = parse(HTTP.Request.parser({}), text)?
 	actual.body == "hello world".to_utf8()
 }
 
 # Status codes are exactly three digits and never wrap (65736 used to read as 200).
-expect parse(HTTP.response, "HTTP/1.1 65736 OK\r\n\r\n").is_err()
+expect parse(HTTP.Response.parser({}), "HTTP/1.1 65736 OK\r\n\r\n").is_err()
 
 # A missing reason phrase is allowed, with or without the SP before it.
-expect parse(HTTP.response, "HTTP/1.1 204\r\n\r\n").map_ok(|r| r.reason) == Ok("")
+expect parse(HTTP.Response.parser({}), "HTTP/1.1 204\r\n\r\n").map_ok(|r| r.reason) == Ok("")
 
 # Non-UTF-8 field values are rejected instead of crashing.
-expect Utf8.parse_bytes(HTTP.request, ['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
+expect (HTTP.Request.parser({})).parse(['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
 
 # Request-smuggling constructs are rejected.
 expect {
@@ -956,50 +1380,50 @@ expect {
 		"GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n",
 		"GET / HTTP/1.1\r\n\r\n",
 	]
-	smuggling.all(|text| parse(HTTP.request, text).is_err())
+	smuggling.all(|text| parse(HTTP.Request.parser({}), text).is_err())
 }
 
 # Methods outside the standard set are extension methods; names are case-sensitive.
-expect parse(HTTP.request, "PURGE / HTTP/1.1\r\nHost: a\r\n\r\n").map_ok(|r| r.method) == Ok(Extension("PURGE"))
-expect parse(HTTP.request, "get / HTTP/1.1\r\nHost: a\r\n\r\n").map_ok(|r| r.method) == Ok(Extension("get"))
+expect parse(HTTP.Request.parser({}), "PURGE / HTTP/1.1\r\nHost: a\r\n\r\n").map_ok(|r| r.method) == Ok(Extension("PURGE"))
+expect parse(HTTP.Request.parser({}), "get / HTTP/1.1\r\nHost: a\r\n\r\n").map_ok(|r| r.method) == Ok(Extension("get"))
 
 # A method must be a token.
-expect request_error("G(T / HTTP/1.1\r\nHost: a\r\n\r\n") == Ok({ offset: 1, message: "method must be a token followed by a single SP" })
-expect request_error(" / HTTP/1.1\r\nHost: a\r\n\r\n") == Ok({ offset: 0, message: "expected a method token" })
+expect request_error("G(T / HTTP/1.1\r\nHost: a\r\n\r\n") == Ok({ offset: 1, problem: InvalidMethod })
+expect request_error(" / HTTP/1.1\r\nHost: a\r\n\r\n") == Ok({ offset: 0, problem: MissingMethod })
 
 # Errors point at the offending byte or field line.
-expect request_error("GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n") == Ok({ offset: 44, message: "both Transfer-Encoding and Content-Length" })
-expect request_error("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n") == Ok({ offset: 25, message: "more than one Host field" })
-expect request_error("GET / HTTP/1.1\r\nHost: a\nX: y\r\n\r\n") == Ok({ offset: 23, message: "LF not preceded by CR" })
-expect request_error("GET / HTTP/1.1\r\nHost: a\r\nX : y\r\n\r\n") == Ok({ offset: 26, message: "whitespace between a field name and its colon" })
-expect request_error("GET / HTTP/1.1\r\nHost: a\r\nX: a\u(7)b\r\n\r\n") == Ok({ offset: 29, message: "control character in field value" })
-expect request_error("GET / HTTP/1.2x\r\nHost: a\r\n\r\n") == Ok({ offset: 6, message: "expected an HTTP version like HTTP/1.1" })
-expect request_error("POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nab") == Ok({ offset: 49, message: "body is shorter than Content-Length" })
-expect request_error("POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n2;=\r\nab\r\n0\r\n\r\n") == Ok({ offset: 58, message: "chunk extension needs a name" })
-expect request_error("GET / HTTP/1.1\r\n\r\n") == Ok({ offset: 0, message: "an HTTP/1.1 request needs a Host field" })
+expect request_error("GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n") == Ok({ offset: 44, problem: ConflictingFraming })
+expect request_error("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n") == Ok({ offset: 25, problem: DuplicateHost })
+expect request_error("GET / HTTP/1.1\r\nHost: a\nX: y\r\n\r\n") == Ok({ offset: 23, problem: LfWithoutCr })
+expect request_error("GET / HTTP/1.1\r\nHost: a\r\nX : y\r\n\r\n") == Ok({ offset: 26, problem: WhitespaceBeforeColon })
+expect request_error("GET / HTTP/1.1\r\nHost: a\r\nX: a\u(7)b\r\n\r\n") == Ok({ offset: 29, problem: InvalidFieldCharacter })
+expect request_error("GET / HTTP/1.2x\r\nHost: a\r\n\r\n") == Ok({ offset: 6, problem: InvalidVersion })
+expect request_error("POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nab") == Ok({ offset: 49, problem: IncompleteBody })
+expect request_error("POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n2;=\r\nab\r\n0\r\n\r\n") == Ok({ offset: 58, problem: MissingExtensionName })
+expect request_error("GET / HTTP/1.1\r\n\r\n") == Ok({ offset: 0, problem: MissingHost })
 
-# The embeddable parser reports the same offset, with a prefixed message.
-expect parse(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n") == Err(ParseError({ offset: 25, message: "invalid HTTP request: more than one Host field" }))
+# The embeddable parser preserves the native problem and offset.
+expect parse(HTTP.Request.parser({}), "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n") == Err(ParseError(Diagnostic.{ problem: DuplicateHost, location: Text({ offset: 25, line: 3, column: 1 }), path: [] }))
 
 # A response's status line errors point into the status line.
-expect HTTP.parse_response("HTTP/1.1 099 Low\r\n\r\n".to_utf8()) == Err(InvalidHttp({ offset: 9, message: "status code must be at least 100" }))
+expect parse_response_prefix("HTTP/1.1 099 Low\r\n\r\n".to_utf8()) == Err(InvalidHttp(Diagnostic.{ location: ByteOffset(9), path: [], problem: InvalidStatus }))
 
 # A pipeline that ends inside a message reports the offset from the start of the input.
 expect {
 	bytes = "GET /a HTTP/1.1\r\nHost: a\r\n\r\nGET /b HTTP/1.1\r\n".to_utf8()
-	HTTP.parse_requests(bytes) == Err(InvalidHttp({ offset: 45, message: "message ended before CRLF" }))
+	HTTP.parse_requests(bytes, {}) == Err(InvalidHttp(Diagnostic.{ location: ByteOffset(45), path: [], problem: MissingCrlf }))
 }
 
 # An empty pipeline has no requests.
-expect HTTP.parse_requests([]) == Ok([])
+expect HTTP.parse_requests([], {}) == Ok([])
 
 # Header lookup returns the first match.
-expect HTTP.header([{ name: "X", value: "1" }, { name: "x", value: "2" }], "x") == Ok("1")
+expect header_named([{ name: "X", value: "1" }, { name: "x", value: "2" }], "x") == Ok("1")
 
 # The module example parses a GET request with nothing left over.
 expect {
 	bytes = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n".to_utf8()
-	match HTTP.parse_request(bytes) {
+	match parse_request_prefix(bytes) {
 		Ok({ request, rest }) => request.method == Get and request.target == "/hello" and rest == []
 		Err(InvalidHttp(_)) => False
 	}
@@ -1008,13 +1432,13 @@ expect {
 # The header example finds a field by any case and reports a missing one.
 expect {
 	headers = [{ name: "Content-Type", value: "text/plain" }]
-	HTTP.header(headers, "content-type") == Ok("text/plain") and HTTP.header(headers, "Host") == Err(Missing)
+	header_named(headers, "content-type") == Ok("text/plain") and header_named(headers, "Host") == Err(Missing)
 }
 
 # The parse_request example leaves the next message's bytes in rest.
 expect {
 	bytes = "POST /notes HTTP/1.1\r\nHost: a\r\nContent-Length: 2\r\n\r\nhiGET".to_utf8()
-	match HTTP.parse_request(bytes) {
+	match parse_request_prefix(bytes) {
 		Ok({ request, rest }) => request.body == "hi".to_utf8() and rest == "GET".to_utf8()
 		Err(InvalidHttp(_)) => False
 	}
@@ -1023,7 +1447,7 @@ expect {
 # The parse_response example reads the status code and reason phrase.
 expect {
 	bytes = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_utf8()
-	match HTTP.parse_response(bytes) {
+	match parse_response_prefix(bytes) {
 		Ok({ response, rest: _ }) => response.status_code == 404 and response.reason == "Not Found"
 		Err(InvalidHttp(_)) => False
 	}
@@ -1032,44 +1456,390 @@ expect {
 # The parse_requests example reads both pipelined requests.
 expect {
 	bytes = "GET /a HTTP/1.1\r\nHost: a\r\n\r\nGET /b HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
-	HTTP.parse_requests(bytes).map_ok(|requests| requests.map(|r| r.target)) == Ok(["/a", "/b"])
+	HTTP.parse_requests(bytes, {}).map_ok(|requests| requests.map(|r| r.target)) == Ok(["/a", "/b"])
 }
 
 # The request example parses a simple GET request.
 expect {
 	text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	match Utf8.parse_str(HTTP.request, text) {
-		Ok(req) => req.method == Get and HTTP.header(req.headers, "host") == Ok("example.com")
+	match (HTTP.Request.parser({})).parse_str(text) {
+		Ok(req) => req.method == Get and header_named(req.headers, "host") == Ok("example.com")
 		Err(_) => False
 	}
 }
 
 # Complete quotation adapters preserve ordinary HTTP framing behavior.
 expect {
-	request : HTTP.RequestLiteral
+	request : HTTP.Request
 	request = "GET /quoted HTTP/1.1\r\nHost: a\r\n\r\n"
-	response : HTTP.ResponseLiteral
+	response : HTTP.Response
 	response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
-	request.value.target == "/quoted" and response.value.body == "hi".to_utf8()
+	request.target == "/quoted" and response.body == "hi".to_utf8()
 }
-expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n", name: "request.http" }) {
-	Err(BadQuotedBytes(message)) => message.contains("request.http:4:1: HTTP: repeated_content_length")
+expect match HTTP.Request.validate({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n", name: "request.http" }) {
+	Err(InvalidHttp(error)) => error.problem == RepeatedContentLength
 	Ok(_) => False
 }
-expect HTTP.validate_response({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n", lints: { repeated_content_length: False } }).is_ok()
-expect match HTTP.validate_response({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n" }) {
-	Err(BadQuotedBytes(message)) => message.contains("repeated_content_length")
+expect HTTP.Response.validate({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n", lints: { repeated_content_length: False } }).is_ok()
+expect match HTTP.Response.validate({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n" }) {
+	Err(InvalidHttp(error)) => error.problem == RepeatedContentLengthValues
 	Ok(_) => False
 }
-expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0, 1\r\n\r\n", lints: { repeated_content_length: False } }) {
-	Err(BadQuotedBytes(message)) => message.contains("conflicting Content-Length")
+expect match HTTP.Request.validate({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0, 1\r\n\r\n", lints: { repeated_content_length: False } }) {
+	Err(InvalidHttp(error)) => error.problem == ConflictingContentLength
 	Ok(_) => False
 }
-expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /next HTTP/1.1\r\nHost: a\r\n\r\n" }) {
-	Err(BadQuotedBytes(message)) => message.contains("unexpected content after the HTTP message")
+expect match HTTP.Request.validate({ source: "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /next HTTP/1.1\r\nHost: a\r\n\r\n" }) {
+	Err(InvalidHttp(error)) => error.problem == TrailingContent
 	Ok(_) => False
 }
-expect match HTTP.validate_request({ source: "GET / HTTP/1.1\nHost: a\n\n" }) {
-	Err(BadQuotedBytes(message)) => message.contains("LF not preceded by CR")
+expect match HTTP.Request.validate({ source: "GET / HTTP/1.1\nHost: a\n\n" }) {
+	Err(InvalidHttp(error)) => error.problem == LfWithoutCr
 	Ok(_) => False
 }
+
+# Normalize only transport-dependent body fragmentation; heads, trailers,
+# completion markers and errors must remain in exactly the same order.
+HttpTestResult : [Event(HTTP.Event), Finished, Failed(Streaming.ReadError([InvalidHttp(HTTP.Error)]))]
+
+normalize_http_test : Iter(Try(Streaming.ReadEvent(HTTP.Event, [InvalidHttp(HTTP.Error)]), Streaming.ReadError([InvalidHttp(HTTP.Error)]))) -> List(HttpTestResult)
+normalize_http_test = |input| {
+	var $out = []
+	for result in input {
+		match result {
+			Ok(Value(Body(part))) => {
+				match $out.last() {
+					Ok(Event(Body(before))) => {
+						$out = $out.drop_last(1).append(Event(Body(before.concat(part))))
+					}
+					_ => {
+						$out = $out.append(Event(Body(part)))
+					}
+				}
+			}
+			Ok(Value(ProtocolData(part))) => {
+				match $out.last() {
+					Ok(Event(ProtocolData(before))) => {
+						$out = $out.drop_last(1).append(Event(ProtocolData(before.concat(part))))
+					}
+					_ => {
+						$out = $out.append(Event(ProtocolData(part)))
+					}
+				}
+			}
+			Ok(Value(event)) => {
+				$out = $out.append(Event(event))
+			}
+			Ok(Finished(_)) => {
+				$out = $out.append(Finished)
+			}
+			Err(error) => {
+				$out = $out.append(Failed(error))
+			}
+			Ok(Rejected(InvalidHttp(error))) => {
+				$out = $out.append(Failed(InvalidHttp(error)))
+			}
+		}
+	}
+	$out
+}
+
+http_split_requests : Str -> Bool
+http_split_requests = |text| {
+	bytes = text.to_utf8()
+	want = normalize_http_test((HTTP.Request.decoder({})).read_iter([bytes].iter()))
+	var $same = normalize_http_test((HTTP.Request.decoder({})).read_iter(bytes.map(|byte| [byte]).iter())) == want
+	for split in (0.U64).to(bytes.len() + 1) {
+		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
+		if normalize_http_test((HTTP.Request.decoder({})).read_iter(parts.iter())) != want {
+			$same = False
+		}
+	}
+	$same
+}
+
+http_split_responses : Str, List(HTTP.Method) -> Bool
+http_split_responses = |text, methods| {
+	bytes = text.to_utf8()
+	want = normalize_http_test((HTTP.Response.decoder({ methods: methods.iter(), reader: {} })).read_iter([bytes].iter()))
+	var $same = normalize_http_test((HTTP.Response.decoder({ methods: methods.iter(), reader: {} })).read_iter(bytes.map(|byte| [byte]).iter())) == want
+	for split in (0.U64).to(bytes.len() + 1) {
+		parts = [[], bytes.take_first(split), [], bytes.drop_first(split), []]
+		if normalize_http_test((HTTP.Response.decoder({ methods: methods.iter(), reader: {} })).read_iter(parts.iter())) != want {
+			$same = False
+		}
+	}
+	$same
+}
+
+expect {
+	text = "POST /one HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhelloGET /two HTTP/1.1\r\nHost: a\r\n\r\n"
+	events = (HTTP.Request.decoder({})).collect([text.to_utf8()].iter())?
+	events == [RequestHead({ method: Post, target: "/one", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }, { name: "Content-Length", value: "5" }] }), Body("hello".to_utf8()), MessageEnd, RequestHead({ method: Get, target: "/two", version: { major: 1, minor: 1 }, headers: [{ name: "Host", value: "a" }] }), MessageEnd]
+		and http_split_requests(text)
+}
+
+expect {
+	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b;c=\"q\\\"\"\r\nhello\r\n6\r\n world\r\n0\r\nX-Trailer: t\r\n\r\n"
+	events = (HTTP.Request.decoder({})).collect([text.to_utf8()].iter())?
+	events.drop_first(1) == [Body("hello".to_utf8()), Body(" world".to_utf8()), Trailer({ name: "X-Trailer", value: "t" }), MessageEnd]
+		and http_split_requests(text)
+}
+
+# All incomplete self-delimiting messages fail rather than finalizing at EOF.
+expect [
+	"GET / HTTP/1.1\r\nHost: a\r\n\r",
+	"POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 3\r\n\r\nab",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nab",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n",
+].all(|text| (HTTP.Request.decoder({})).collect([text.to_utf8()].iter()).is_err() and http_split_requests(text))
+
+expect [
+	"GET / HTTP/1.1\r\nHost: a\r\n\r\ninvalid suffix",
+	"GET / HTTP/1.1\nHost: a\r\n\r\n",
+	"GET / HTTP/1.1\rX",
+	"GET / HTTP/1.1\r\n\r\n",
+	"GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n",
+	"GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n",
+	"GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 1, 2\r\n\r\n",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;=bad\r\na\r\n0\r\n\r\n",
+	"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nContent-Length: 2\r\n\r\n",
+].all(|text| (HTTP.Request.decoder({})).collect([text.to_utf8()].iter()).is_err() and http_split_requests(text))
+
+expect {
+	text = "HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\nHTTP/1.1 204 Empty\r\n\r\nHTTP/1.1 304 Cached\r\n\r\n"
+	events = (HTTP.Response.decoder({ methods: [Head, Get, Get].iter(), reader: {} })).collect([text.to_utf8()].iter())?
+	events.len() == 6 and events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and http_split_responses(text, [Head, Get, Get])
+}
+
+expect {
+	text = "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
+	events = (HTTP.Response.decoder({ methods: [Post].iter(), reader: {} })).collect([text.to_utf8()].iter())?
+	events.fold(0.U64, |count, event| count + if (event == MessageEnd) 1 else 0) == 3 and events.drop_first(5) == [Body("hi".to_utf8()), MessageEnd] and http_split_responses(text, [Post])
+}
+
+expect {
+	text = "HTTP/1.1 200 OK\r\n\r\nbody\r\nHTTP/1.1 is body text"
+	events = (HTTP.Response.decoder({ methods: [Get].iter(), reader: {} })).collect([text.to_utf8()].iter())?
+	events.drop_first(1) == [Body("body\r\nHTTP/1.1 is body text".to_utf8()), MessageEnd] and http_split_responses(text, [Get])
+}
+
+expect {
+	text = "HTTP/1.1 200 Connected\r\n\r\ntunnel\r\nnot HTTP"
+	events = (HTTP.Response.decoder({ methods: [Connect].iter(), reader: {} })).collect([text.to_utf8()].iter())?
+	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("tunnel\r\nnot HTTP".to_utf8())] and http_split_responses(text, [Connect])
+}
+
+expect {
+	text = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\nraw"
+	events = (HTTP.Response.decoder({ methods: [Get].iter(), reader: {} })).collect([text.to_utf8()].iter())?
+	events.drop_first(1) == [MessageEnd, ProtocolSwitch, ProtocolData("raw".to_utf8())] and http_split_responses(text, [Get])
+}
+
+expect {
+	text = "HTTP/1.1 403 Forbidden\r\nContent-Length: 2\r\n\r\nnoHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+	(HTTP.Response.decoder({ methods: [Connect, Get].iter(), reader: {} })).collect([text.to_utf8()].iter()).is_ok() and http_split_responses(text, [Connect, Get])
+}
+
+expect {
+	text = "HTTP/1.1 100 Continue\r\n\r\n"
+	(HTTP.Response.decoder({ methods: [Post].iter(), reader: {} })).collect([text.to_utf8()].iter()).is_err() and http_split_responses(text, [Post])
+}
+
+expect {
+	bytes = "HTTP/1.1 204 Empty\r\n\r\n".to_utf8()
+	(HTTP.Response.decoder({ methods: [].iter(), reader: {} })).collect([bytes].iter()).is_err()
+		and (HTTP.Response.decoder({ methods: [Get].iter(), reader: {} })).collect([bytes.concat(bytes)].iter()).is_err()
+}
+
+expect {
+	bytes = "GET / HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
+	(HTTP.Request.decoder({ max_head_bytes: bytes.len() })).collect([bytes].iter()).is_ok()
+		and (HTTP.Request.decoder({ max_head_bytes: bytes.len() - 1 })).collect([bytes].iter()).is_err()
+		and (HTTP.Request.decoder({ max_line_bytes: 14, max_headers: 1 })).collect([bytes].iter()).is_ok()
+		and (HTTP.Request.decoder({ max_line_bytes: 13 })).collect([bytes].iter()).is_err()
+		and (HTTP.Request.decoder({ max_headers: 0 })).collect([bytes].iter()).is_err()
+		and (HTTP.Request.decoder({ max_headers: U64.highest, max_line_bytes: U64.highest })).collect([bytes].iter()).is_ok()
+}
+
+expect {
+	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n\r\n"
+	bytes = text.to_utf8()
+	(HTTP.Request.decoder({ max_trailer_bytes: 8, max_trailers: 1 })).collect([bytes].iter()).is_ok()
+		and (HTTP.Request.decoder({ max_trailer_bytes: 7 })).collect([bytes].iter()).is_err()
+		and (HTTP.Request.decoder({ max_trailers: 0 })).collect([bytes].iter()).is_err()
+}
+
+expect {
+	text = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n0123456789"
+	events = (HTTP.Response.decoder({ methods: [Get].iter(), reader: { max_body_chunk_bytes: 3 } })).collect([text.to_utf8()].iter())?
+	events.drop_first(1) == [Body("012".to_utf8()), Body("345".to_utf8()), Body("678".to_utf8()), Body("9".to_utf8()), MessageEnd]
+		and (HTTP.Request.decoder({ max_body_chunk_bytes: 0 })).collect([[]].iter()).is_err()
+}
+
+expect {
+	# A consumer can stop immediately after the head without pulling any body
+	# source chunks or the next request context.
+	chunks = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled body source before demand" else Ok(("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\n".to_utf8(), True)))
+	methods = Iter.custom(False, Err(Unknown), |started| if (started) crash "pulled next method before demand" else Ok((Get, True)))
+	match (HTTP.Response.decoder({ methods: methods, reader: {} })).read_iter(chunks).next() {
+		One({ item: Ok(Value(ResponseHead(head))), .. }) => head.status_code == 200
+		_ => False
+	}
+}
+
+expect {
+	# Completion validates only consumed responses; surplus context is lazy.
+	methods = Iter.custom({}, Err(Unknown), |_| crash "pulled unused context at EOF")
+	(HTTP.Response.decoder({ methods: methods, reader: {} })).collect([[], []].iter()) == Ok([])
+}
+
+expect {
+	chunks = Iter.custom({}, Err(Unknown), |_| crash "read source with invalid fragment limit")
+	match (HTTP.Request.decoder({ max_body_chunk_bytes: 0 })).read_iter(chunks).next() {
+		One({ item: Err(InvalidHttp(_)), .. }) => True
+		_ => False
+	}
+}
+
+expect {
+	text = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n1;abcdefghijklmnop=abcdefghijklmnop\r\nx\r\n0\r\n\r\n"
+	(HTTP.Request.decoder({ max_line_bytes: 35 })).collect([text.to_utf8()].iter()).is_ok()
+		and (HTTP.Request.decoder({ max_line_bytes: 34 })).collect([text.to_utf8()].iter()).is_err()
+}
+
+# Fixed SIMD masks must recognize the complete HTTP byte classes, including
+# invalid bytes placed after a full vector and in a final partial vector.
+expect {
+	var $valid = True
+	for value in (0.U64).to(255) {
+		byte = value.to_u8_wrap()
+		for prefix in [0.U64, 1, 15, 16, 31, 32] {
+			bytes = List.repeat('a', prefix).append(byte).concat(List.repeat('a', 32))
+			if skip_tchar(bytes) != (if (is_tchar(byte)) bytes.len() else prefix) {
+				$valid = False
+			}
+			if skip_field_bytes(bytes) != (if (is_field_byte(byte)) bytes.len() else prefix) {
+				$valid = False
+			}
+		}
+	}
+	$valid
+}
+
+expect {
+	prefix = "GET / HTTP/1.1\r\nHost: a\r\nX: ".to_utf8()
+	bad_values = [[0.U8], [1], [7], [11], [12], [31], [127], [0xFF], [0xC0, 0x80], [0xE0, 0x80, 0x80], [0xED, 0xA0, 0x80]]
+	bad_values.all(
+		|value| {
+			bytes = prefix.concat(List.repeat('a', 32)).concat(value).concat("\r\n\r\n".to_utf8())
+			parse_request_prefix(bytes).is_err()
+				and (HTTP.Request.decoder({})).collect([bytes].iter()).is_err()
+				and (HTTP.Request.decoder({})).collect(bytes.map(|byte| [byte]).iter()).is_err()
+		},
+	)
+}
+
+expect {
+	text = "GET / HTTP/1.1\r\nHost: a\r\nX: ${Str.repeat("a", 15)}é${Str.repeat("b", 17)}😀\t \r\n\r\n"
+	request = parse_request_prefix(text.to_utf8())?.request
+	header_named(request.headers, "x") == Ok("${Str.repeat("a", 15)}é${Str.repeat("b", 17)}😀") and http_split_requests(text)
+}
+
+http_error : Failure -> HTTP.Error
+http_error = |error| Diagnostic.{ problem: error.problem, location: ByteOffset(error.offset), path: [] }
+
+named_http_error : Str, Failure -> HTTP.Error
+named_http_error = |name, failure| { ..http_error(failure), path: [Source(name)] }
+
+quote_http_error : Str, HTTP.Error -> [BadQuotedBytes(Str)]
+quote_http_error = |source, error| {
+	offset = Diagnostic.byte_offset(error.location) ?? 0
+	position = Parser.Quotation.position(source, offset)
+	Parser.Quotation.error({ name: "<literal>", format: "HTTP", message: Str.inspect(error.problem), line: position.line, column: position.column })
+}
+
+validate_request_source : ValidationProps -> Try(Request, [InvalidHttp(Error)])
+validate_request_source = |props| {
+	parsed = read_request_metadata(props.source.to_utf8()).map_err(|error| InvalidHttp(named_http_error(props.name, error)))?
+	validate_message(props, parsed.rest, parsed.fields)?
+	Ok(parsed.value)
+}
+
+validate_response_source : ValidationProps -> Try(Response, [InvalidHttp(Error)])
+validate_response_source = |props| {
+	parsed = read_response_metadata(props.source.to_utf8()).map_err(|error| InvalidHttp(named_http_error(props.name, error)))?
+	validate_message(props, parsed.rest, parsed.fields)?
+	Ok(parsed.value)
+}
+
+parse_request_prefix : List(U8) -> Try({ request : Request, rest : List(U8) }, [InvalidHttp(Error)])
+parse_request_prefix = |bytes| {
+	match read_request(bytes) {
+		Ok({ value, rest }) => Ok({ request: value, rest })
+		Err(error) => Err(InvalidHttp(http_error(error)))
+	}
+}
+
+parse_response_prefix : List(U8) -> Try({ response : Response, rest : List(U8) }, [InvalidHttp(Error)])
+parse_response_prefix = |bytes| {
+	match read_response(bytes) {
+		Ok({ value, rest }) => Ok({ response: value, rest })
+		Err(error) => Err(InvalidHttp(http_error(error)))
+	}
+}
+
+header_named : List(Header), Str -> Try(Str, [Missing])
+header_named = |headers, name| {
+	wanted = name.with_ascii_lowercased()
+	var $found = Err(Missing)
+	for field in headers {
+		if $found == Err(Missing) and field.name.with_ascii_lowercased() == wanted {
+			$found = Ok(field.value)
+		}
+	}
+	$found
+}
+
+## Value-owned complete parsing rejects a valid message's unread suffix.
+expect {
+	one = "GET / HTTP/1.1\r\nHost: a\r\n\r\n".to_utf8()
+	message = HTTP.Request.parse_bytes(one, {})?
+	prefix = HTTP.Request.parser({}).run(one.concat("tail".to_utf8()))?
+	message.header("HOST") == Ok("a") and prefix.value == message and prefix.rest == "tail".to_utf8()
+		and HTTP.Request.parse_bytes(one.concat("tail".to_utf8()), {}).is_err()
+}
+
+## Pipeline parsing and its generic parser construct the same request values.
+expect {
+	source = "GET /a HTTP/1.1\r\nHost: a\r\n\r\nGET /b HTTP/1.1\r\nHost: b\r\n\r\n".to_utf8()
+	native = HTTP.parse_requests(source, {})?
+	generic = HTTP.requests_parser({}).parse(source)?
+	native == generic
+}
+
+## Literal conversion constructs the public response, without a value wrapper.
+expect {
+	response : HTTP.Response
+	response = "HTTP/1.1 204 No Content\r\nX-Trace: yes\r\n\r\n"
+	response.header("x-trace") == Ok("yes") and response.body.is_empty()
+}
+
+default_max_head_bytes : U64
+default_max_head_bytes = 65_536
+
+default_max_line_bytes : U64
+default_max_line_bytes = 8192
+
+default_max_headers : U64
+default_max_headers = 100
+
+default_max_trailer_bytes : U64
+default_max_trailer_bytes = 65_536
+
+default_max_trailers : U64
+default_max_trailers = 100
+
+default_max_body_chunk_bytes : U64
+default_max_body_chunk_bytes = 65_536

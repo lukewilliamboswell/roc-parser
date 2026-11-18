@@ -1,4 +1,5 @@
-import Literal as Quotation
+import Parser
+import Diagnostic as FailureDiagnostic
 
 ## Lossless parsing of Roc source into tokens, syntax trees and diagnostics.
 ## Byte spans are half-open. Comments and whitespace are tokens.
@@ -40,7 +41,7 @@ RocSyntax := { source : List(U8), tokens : List(RocSyntax.Token), nodes : List(R
 	DiagnosticCode : [InvalidByte, InvalidUtf8, BidiControlInSource, Utf8ByteOrderMark, UnclosedString, UnclosedDelimiter, UnexpectedToken, InvalidNumber, InvalidEscape, InvalidCharacter, UnsupportedSyntax, ResourceLimit]
 
 	## An issue code and its precise source byte interval.
-	Diagnostic : { code : DiagnosticCode, start : U64, end : U64 }
+	Diagnostic : FailureDiagnostic({ code : DiagnosticCode, span : { start : U64, end : U64 } })
 
 	## `Complete` means the implemented grammar consumed the input without issues.
 	## It does not establish type correctness or complete language conformance.
@@ -58,24 +59,27 @@ RocSyntax := { source : List(U8), tokens : List(RocSyntax.Token), nodes : List(R
 	## Check quoted file source using the default validation options.
 	## The source, tokens, nodes and diagnostics are available as record fields.
 	from_quote : Str -> Try(RocSyntax, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({
+	from_quote = |source| roc_syntax_quote_validate({
 		source,
 	}).map_ok(|value| RocSyntax.(value))
 
 	## Parse one complete Roc source file and return its existing syntax tree.
 	## Recovery, unsupported syntax, resource limits, and unread input fail.
 	## Disable only the placeholder lint with `lints: { placeholders: False }`.
-	validate : ValidateProps -> Try(Parsed, [BadQuotedBytes(Str)])
+	ValidationProblem : [Syntax({ code : DiagnosticCode, span : { start : U64, end : U64 } }), PlaceholderExpression, Incomplete(Status), UnconsumedInput]
+	Error : FailureDiagnostic(ValidationProblem)
+
+	validate : ValidateProps -> Try(Parsed, [InvalidRocSyntax(Error)])
 	validate = |props| {
-		parsed = parse_str(props.source)
+		parsed = parse_str(props.source, {})
 		if parsed.status != Complete or !parsed.consumed or !parsed.diagnostics.is_empty() {
-			return Err(quotation_parse_error(props, parsed))
+			return Err(roc_syntax_validation_error(props, parsed))
 		}
 		if props.lints.placeholders {
 			match quotation_placeholder_offset(parsed.nodes) {
 				Ok(offset) => {
-					position = Quotation.position(props.source, offset)
-					return Err(Quotation.error({ name: props.name, format: "RocSyntax", message: "placeholder expression (...) is not allowed; set lints.placeholders to False to allow it", line: position.line, column: position.column }))
+					position = Parser.Quotation.position(props.source, offset)
+					return Err(InvalidRocSyntax({ problem: PlaceholderExpression, location: Text({ offset, line: position.line, column: position.column }), path: [Source(props.name)] }))
 				}
 				Err(Missing) => {}
 			}
@@ -116,41 +120,34 @@ RocSyntax := { source : List(U8), tokens : List(RocSyntax.Token), nodes : List(R
 		_ => Symbol
 	}
 
-	## Parse source text; offsets refer to UTF-8 bytes, not Unicode characters.
-	parse_str : Str -> Parsed
-	parse_str = |source| parse_bytes(source.to_utf8())
+	## Select a complete file or a smaller grammar using the same parse operations.
+	Mode : [File, Expression, Statement, Header]
+	Props := { mode : Mode ?? File }
 
-	## Parse arbitrary source bytes, retaining invalid bytes and incomplete syntax.
-	parse_bytes : List(U8) -> Parsed
-	parse_bytes = |source| parse_source(source, FileMode)
+	## Parse text without discarding malformed or unsupported source.
+	parse_str : Str, Props -> Parsed
+	parse_str = |source, props| parse_bytes(source.to_utf8(), props)
 
-	## Parse one expression. Extra significant tokens produce a diagnostic.
-	parse_expression : Str -> Parsed
-	parse_expression = |source| parse_source(source.to_utf8(), ExpressionMode)
+	## Parse arbitrary bytes while retaining source and typed diagnostics.
+	parse_bytes : List(U8), Props -> Parsed
+	parse_bytes = |source, props| parse_source(
+		source,
+		match props.mode {
+			File => FileMode
+			Expression => ExpressionMode
+			Statement => StatementMode
+			Header => HeaderMode
+		},
+	)
 
-	## Parse one expression from UTF-8 text.
-	parse_expr_str : Str -> Parsed
-	parse_expr_str = |source| parse_source(source.to_utf8(), ExpressionMode)
-
-	## Parse one expression from arbitrary bytes, preserving malformed input.
-	parse_expr_bytes : List(U8) -> Parsed
-	parse_expr_bytes = |source| parse_source(source, ExpressionMode)
-
-	## Parse one statement in a body, including expression statements and locals.
-	parse_statement_str : Str -> Parsed
-	parse_statement_str = |source| parse_source(source.to_utf8(), StatementMode)
-
-	## Parse one file header and require complete input consumption.
-	parse_header_str : Str -> Parsed
-	parse_header_str = |source| parse_source(source.to_utf8(), HeaderMode)
 }
 
 quotation_parse_error : RocSyntax.ValidateProps, RocSyntax.Parsed -> [BadQuotedBytes(Str)]
 quotation_parse_error = |props, parsed| {
 	match quotation_earliest_diagnostic(parsed.diagnostics) {
 		Ok(diagnostic) => {
-			position = Quotation.position(props.source, diagnostic.start)
-			Quotation.error({ name: props.name, format: "RocSyntax", message: quotation_diagnostic_message(diagnostic.code), line: position.line, column: position.column })
+			position = Parser.Quotation.position(props.source, diagnostic.problem.span.start)
+			Parser.Quotation.error({ name: props.name, format: "RocSyntax", message: quotation_diagnostic_message(diagnostic.problem.code), line: position.line, column: position.column })
 		}
 		Err(Missing) => {
 			message = match parsed.status {
@@ -159,7 +156,7 @@ quotation_parse_error = |props, parsed| {
 				Limited => "Roc syntax resource limit exceeded"
 				Complete => "the parser did not consume the complete Roc source file"
 			}
-			Quotation.error({ name: props.name, format: "RocSyntax", message })
+			Parser.Quotation.error({ name: props.name, format: "RocSyntax", message })
 		}
 	}
 }
@@ -168,7 +165,7 @@ quotation_earliest_diagnostic : List(RocSyntax.Diagnostic) -> Try(RocSyntax.Diag
 quotation_earliest_diagnostic = |diagnostics| diagnostics.fold(
 	Err(Missing),
 	|earliest, diagnostic| match earliest {
-		Ok(previous) if previous.start <= diagnostic.start => Ok(previous)
+		Ok(previous) if previous.problem.span.start <= diagnostic.problem.span.start => Ok(previous)
 		_ => Ok(diagnostic)
 	},
 )
@@ -185,20 +182,7 @@ quotation_placeholder_offset = |nodes| nodes.fold(
 )
 
 quotation_diagnostic_message : RocSyntax.DiagnosticCode -> Str
-quotation_diagnostic_message = |code| match code {
-	InvalidByte => "InvalidByte: invalid source byte"
-	InvalidUtf8 => "InvalidUtf8: invalid UTF-8 source text"
-	BidiControlInSource => "BidiControlInSource: bidirectional control character in source"
-	Utf8ByteOrderMark => "Utf8ByteOrderMark: unexpected UTF-8 byte order mark"
-	UnclosedString => "UnclosedString: unterminated string literal"
-	UnclosedDelimiter => "UnclosedDelimiter: unclosed or mismatched delimiter"
-	UnexpectedToken => "UnexpectedToken: unexpected token in Roc source"
-	InvalidNumber => "InvalidNumber: invalid numeric literal"
-	InvalidEscape => "InvalidEscape: invalid escape sequence"
-	InvalidCharacter => "InvalidCharacter: invalid character literal"
-	UnsupportedSyntax => "UnsupportedSyntax: unsupported Roc syntax"
-	ResourceLimit => "ResourceLimit: Roc syntax resource limit exceeded"
-}
+quotation_diagnostic_message = Str.inspect
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
 
@@ -308,7 +292,7 @@ keyword_bytes = |source, start, end| {
 push_diagnostic : List(RocSyntax.Diagnostic), RocSyntax.DiagnosticCode, U64, U64 -> List(RocSyntax.Diagnostic)
 push_diagnostic = |diagnostics, code, start, end| {
 	# Bounded diagnostic output; parsing still records error status once full.
-	if (diagnostics.len() < 256) diagnostics.append({ code, start, end }) else diagnostics
+	if (diagnostics.len() < 256) diagnostics.append({ problem: { code, span: { start, end } }, location: ByteOffset(start), path: [] }) else diagnostics
 }
 
 Starts : { starts : List(U64), count : U64 }
@@ -833,7 +817,7 @@ lex = |source| {
 	# bytes is repeated knowing them. Keeping these apart from the lexer's own
 	# diagnostics stops bytes in a comment from crowding those out.
 	scanned = utf8_diagnostics_inline(source, [])
-	encoding = if (scanned.any(|d| d.code == InvalidUtf8)) utf8_diagnostics_inline(source, $tokens.keep_if(|t| t.kind == Comment)) else scanned
+	encoding = if (scanned.any(|d| d.problem.code == InvalidUtf8)) utf8_diagnostics_inline(source, $tokens.keep_if(|t| t.kind == Comment)) else scanned
 	diagnostics = if (encoding.is_empty()) $diagnostics else encoding.concat($diagnostics).take_first(256)
 	{ tokens: $tokens.append({ kind: EndOfFile, start: len, end: len }), diagnostics, unsupported: False }
 }
@@ -868,47 +852,47 @@ ParseMode : [FileMode, ExpressionMode, StatementMode, HeaderMode]
 expect {
 	props = RocSyntax.ValidateProps.{ source: "answer = 42\n" }
 	lints = RocSyntax.LintProps.{}
-	props.name == "<literal>" and props.lints.placeholders and lints.placeholders and RocSyntax.validate(props) == Ok(RocSyntax.parse_str(props.source))
+	props.name == "<literal>" and props.lints.placeholders and lints.placeholders and roc_syntax_quote_validate(props) == Ok(RocSyntax.parse_str(props.source, {}))
 }
 
 expect {
 	source = "module [answer]\nanswer : Str\nanswer = 42\n"
 	# Validation checks complete syntax, without resolving names or types.
-	RocSyntax.validate({
+	roc_syntax_quote_validate({
 		source,
-	}) == Ok(RocSyntax.parse_str(source))
+	}) == Ok(RocSyntax.parse_str(source, {}))
 }
 
 expect {
 	["", "# comments only ...\n", "import Foo\nanswer = unknown_name\n"].all(
-		|source| RocSyntax.validate({
+		|source| roc_syntax_quote_validate({
 			source,
-		}) == Ok(RocSyntax.parse_str(source)),
+		}) == Ok(RocSyntax.parse_str(source, {})),
 	)
 }
 
 expect {
 	quoted : RocSyntax
 	quoted = "answer = 42\n"
-	parsed = RocSyntax.parse_str("answer = 42\n")
+	parsed = RocSyntax.parse_str("answer = 42\n", {})
 	quoted.source == parsed.source and quoted.tokens == parsed.tokens and quoted.nodes == parsed.nodes and quoted.children == parsed.children and quoted.diagnostics == parsed.diagnostics and quoted.status == parsed.status and quoted.root == parsed.root and quoted.consumed == parsed.consumed and RocSyntax.from_quote("answer = 42\n").map_ok(|value| value.nodes) == Ok(parsed.nodes)
 }
 
 expect {
 	source = "answer = ...\n"
-	RocSyntax.parse_str(source).status == Complete and RocSyntax.validate({
+	RocSyntax.parse_str(source, {}).status == Complete and roc_syntax_quote_validate({
 		source,
 	}) == Err(BadQuotedBytes("<literal>:1:10: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it")) and RocSyntax.from_quote(source).is_err()
 }
 
 expect {
 	source = "# ... is allowed in a comment\r\nanswer = [1, ...]\n"
-	RocSyntax.validate({ source, name: "snippet.roc" }) == Err(BadQuotedBytes("snippet.roc:2:14: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"))
+	roc_syntax_quote_validate({ source, name: "snippet.roc" }) == Err(BadQuotedBytes("snippet.roc:2:14: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"))
 }
 
 expect {
 	["answer = ...\n", "answer = [1, ...]\n", "answer = || { ... }\n", "answer = \"value: \${...}\"\n"].all(
-		|source| RocSyntax.validate({ source, lints: { placeholders: False } }) == Ok(RocSyntax.parse_str(source)) and RocSyntax.validate({
+		|source| roc_syntax_quote_validate({ source, lints: { placeholders: False } }) == Ok(RocSyntax.parse_str(source, {})) and roc_syntax_quote_validate({
 			source,
 		}).is_err(),
 	)
@@ -916,38 +900,38 @@ expect {
 
 expect {
 	["answer = \"...\"\n", "# ...\nanswer = 1 # ...\n", "answer = \\\\...\n\\\\still ...\n", "answer = \"before ... \${name} after ...\"\n", "answer = [1, 2] # ...\n"].all(
-		|source| RocSyntax.validate({
+		|source| roc_syntax_quote_validate({
 			source,
-		}) == Ok(RocSyntax.parse_str(source)),
+		}) == Ok(RocSyntax.parse_str(source, {})),
 	)
 }
 
 expect {
 	source = "first = || { ... }\nsecond = ...\n"
-	RocSyntax.validate({ source, name: "two.roc" }) == Err(BadQuotedBytes("two.roc:1:14: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"))
+	roc_syntax_quote_validate({ source, name: "two.roc" }) == Err(BadQuotedBytes("two.roc:1:14: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"))
 }
 
 expect {
 	["answer = [1, 2\n", "answer = \"unfinished\n", "answer = 01\n", "answer = \"\\q\"\n", "1 + 2\n"].all(
-		|source| RocSyntax.validate({
+		|source| roc_syntax_quote_validate({
 			source,
-		}).is_err() and RocSyntax.validate({ source, lints: { placeholders: False } }).is_err() and RocSyntax.from_quote(source).is_err(),
+		}).is_err() and roc_syntax_quote_validate({ source, lints: { placeholders: False } }).is_err() and RocSyntax.from_quote(source).is_err(),
 	)
 }
 
 expect {
 	source = "ok = 1\r\nbad = 01\r\n"
-	RocSyntax.validate({ source, name: "numbers.roc" }) == Err(BadQuotedBytes("numbers.roc:2:7: RocSyntax: InvalidNumber: invalid numeric literal"))
+	roc_syntax_quote_validate({ source, name: "numbers.roc" }) == Err(BadQuotedBytes("numbers.roc:2:7: RocSyntax: InvalidNumber"))
 }
 
 expect {
 	# Lexer diagnostics can precede earlier parser diagnostics in the list.
 	source = "bad = [1\nnext = \"\\q\"\n"
-	parsed = RocSyntax.parse_str(source)
+	parsed = RocSyntax.parse_str(source, {})
 	match quotation_earliest_diagnostic(parsed.diagnostics) {
 		Ok(diagnostic) => {
-			position = Quotation.position(source, diagnostic.start)
-			RocSyntax.validate({ source, name: "ordered.roc" }) == Err(Quotation.error({ name: "ordered.roc", format: "RocSyntax", message: quotation_diagnostic_message(diagnostic.code), line: position.line, column: position.column })) and parsed.diagnostics.all(|other| diagnostic.start <= other.start)
+			position = Parser.Quotation.position(source, diagnostic.problem.span.start)
+			roc_syntax_quote_validate({ source, name: "ordered.roc" }) == Err(Parser.Quotation.error({ name: "ordered.roc", format: "RocSyntax", message: quotation_diagnostic_message(diagnostic.problem.code), line: position.line, column: position.column })) and parsed.diagnostics.all(|other| diagnostic.problem.span.start <= other.problem.span.start)
 		}
 		Err(Missing) => False
 	}
@@ -955,55 +939,55 @@ expect {
 
 expect {
 	source = "answer = &\n"
-	parsed = RocSyntax.parse_str(source)
-	parsed.status == Unsupported and RocSyntax.validate({
+	parsed = RocSyntax.parse_str(source, {})
+	parsed.status == Unsupported and roc_syntax_quote_validate({
 		source,
-	}).is_err() and RocSyntax.validate({ source, lints: { placeholders: False } }).is_err()
+	}).is_err() and roc_syntax_quote_validate({ source, lints: { placeholders: False } }).is_err()
 }
 
 expect {
 	source = "answer = ${Str.join_with(List.repeat("[", 140), "")}1${Str.join_with(List.repeat("]", 140), "")}\n"
-	parsed = RocSyntax.parse_str(source)
-	parsed.status == Limited and parsed.diagnostics.any(|diagnostic| diagnostic.code == ResourceLimit) and RocSyntax.validate({
+	parsed = RocSyntax.parse_str(source, {})
+	parsed.status == Limited and parsed.diagnostics.any(|diagnostic| diagnostic.problem.code == ResourceLimit) and roc_syntax_quote_validate({
 		source,
-	}).is_err() and RocSyntax.validate({ source, lints: { placeholders: False } }).is_err()
+	}).is_err() and roc_syntax_quote_validate({ source, lints: { placeholders: False } }).is_err()
 }
 
 expect {
 	# A missing diagnostic must not manufacture a location for a failed status.
 	source = "answer = 1\n"
 	props = RocSyntax.ValidateProps.{ source, name: "status.roc" }
-	parsed = RocSyntax.parse_str(source)
+	parsed = RocSyntax.parse_str(source, {})
 	quotation_parse_error(props, { ..parsed, status: Unsupported, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: unsupported Roc syntax") and quotation_parse_error(props, { ..parsed, status: Limited, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: Roc syntax resource limit exceeded") and quotation_parse_error(props, { ..parsed, status: Recovered, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: recovered syntax is not a complete Roc source file") and quotation_parse_error(props, { ..parsed, consumed: False, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: the parser did not consume the complete Roc source file")
 }
 
 expect {
-	p = RocSyntax.parse_str("answer = 1 + 2 * 3\n")
+	p = RocSyntax.parse_str("answer = 1 + 2 * 3\n", {})
 	p.status == Complete and p.nodes.len() == 8 and (p.nodes.get(p.root) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == File
 }
 
 expect {
-	p = RocSyntax.parse_expression("f(1, [2, 3]).field")
+	p = RocSyntax.parse_str("f(1, [2, 3]).field", { mode: Expression })
 	p.status == Complete and p.nodes.any(|n| n.kind == Call) and p.nodes.any(|n| n.kind == FieldAccess) and p.nodes.any(|n| n.kind == ListLiteral)
 }
 
 expect {
-	p = RocSyntax.parse_str("# hello\nx = \"é\"\n")
+	p = RocSyntax.parse_str("# hello\nx = \"é\"\n", {})
 	p.tokens.fold(0, |at, token| if (token.start == at) token.end else 999999) == p.source.len() and p.tokens.any(|t| t.kind == Comment) and p.status == Complete
 }
 
 expect {
-	p = RocSyntax.parse_str("bad = [1, 2\n")
-	p.status == Recovered and p.diagnostics.any(|d| d.code == UnclosedDelimiter)
+	p = RocSyntax.parse_str("bad = [1, 2\n", {})
+	p.status == Recovered and p.diagnostics.any(|d| d.problem.code == UnclosedDelimiter)
 }
 
 expect {
-	p = RocSyntax.parse_bytes([0xFF, 0x00, 'x'])
-	p.status == Recovered and p.diagnostics.any(|d| d.code == InvalidUtf8) and p.tokens.len() == 4
+	p = RocSyntax.parse_bytes([0xFF, 0x00, 'x'], {})
+	p.status == Recovered and p.diagnostics.any(|d| d.problem.code == InvalidUtf8) and p.tokens.len() == 4
 }
 
 expect {
-	p = RocSyntax.parse_str("import Foo\nx = 1\n")
+	p = RocSyntax.parse_str("import Foo\nx = 1\n", {})
 	p.status == Complete and p.nodes.any(|n| n.kind == Declaration)
 }
 
@@ -1122,40 +1106,40 @@ line_break = |source, start, end| {
 TypeMode : [FullType, TypeItem, TypeArgument]
 
 expect {
-	p = RocSyntax.parse_str("module [inc]\ninc : U64 -> U64\ninc = |x| x + 1\n")
+	p = RocSyntax.parse_str("module [inc]\ninc : U64 -> U64\ninc = |x| x + 1\n", {})
 	p.status == Complete and p.nodes.any(|n| n.kind == Header) and p.nodes.any(|n| n.kind == TypeAnnotation) and p.nodes.any(|n| n.kind == Lambda)
 }
 
 expect {
-	p = RocSyntax.parse_expression("if x > 0 { x } else { 0 - x }")
+	p = RocSyntax.parse_str("if x > 0 { x } else { 0 - x }", { mode: Expression })
 	p.status == Complete and p.nodes.any(|n| n.kind == If) and p.nodes.any(|n| n.kind == Block)
 }
 
 expect {
-	p = RocSyntax.parse_expression("{ name: \"Roc\", count: 42, flag }")
+	p = RocSyntax.parse_str("{ name: \"Roc\", count: 42, flag }", { mode: Expression })
 	p.status == Complete and p.nodes.any(|n| n.kind == Record) and p.nodes.keep_if(|n| n.kind == RecordField).len() == 3
 }
 
 expect {
-	p = RocSyntax.parse_expression("match item { Some(x) => x, None => 0 }")
+	p = RocSyntax.parse_str("match item { Some(x) => x, None => 0 }", { mode: Expression })
 	p.status == Complete and p.nodes.keep_if(|n| n.kind == MatchBranch).len() == 2
 }
 
 expect {
-	p = RocSyntax.parse_expression("{ x = 1\n y = x + 2\n y }")
+	p = RocSyntax.parse_str("{ x = 1\n y = x + 2\n y }", { mode: Expression })
 	p.status == Complete and p.nodes.keep_if(|n| n.kind == Declaration).len() == 2
 }
 
 expect {
-	RocSyntax.parse_expression("12cats").status == Recovered and RocSyntax.parse_expression("0x").status == Recovered and RocSyntax.parse_expression("01").status == Recovered and RocSyntax.parse_expression("1.2e-3").status == Complete and RocSyntax.parse_expression("0xFF").status == Complete
+	RocSyntax.parse_str("12cats", { mode: Expression }).status == Recovered and RocSyntax.parse_str("0x", { mode: Expression }).status == Recovered and RocSyntax.parse_str("01", { mode: Expression }).status == Recovered and RocSyntax.parse_str("1.2e-3", { mode: Expression }).status == Complete and RocSyntax.parse_str("0xFF", { mode: Expression }).status == Complete
 }
 
 expect {
-	RocSyntax.parse_expression("\"\\q\"").status == Recovered and RocSyntax.parse_expression("'ab'").status == Recovered and RocSyntax.parse_expression("'é'").status == Complete and RocSyntax.parse_expression("\"\\u(1F600)\"").status == Complete
+	RocSyntax.parse_str("\"\\q\"", { mode: Expression }).status == Recovered and RocSyntax.parse_str("'ab'", { mode: Expression }).status == Recovered and RocSyntax.parse_str("'é'", { mode: Expression }).status == Complete and RocSyntax.parse_str("\"\\u(1F600)\"", { mode: Expression }).status == Complete
 }
 
 expect {
-	p = RocSyntax.parse_expression("1 + 2 * 3")
+	p = RocSyntax.parse_str("1 + 2 * 3", { mode: Expression })
 	# Nodes are postorder: the multiply covers 2 * 3, and is the right child
 	# of the addition, independently of the flattened tree storage order.
 	binaries = p.nodes.keep_if(|n| n.kind == Binary)
@@ -1164,12 +1148,12 @@ expect {
 
 expect {
 	# The pinned compiler makes equality right-associative.
-	p = RocSyntax.parse_expression("1 == 2 == 3")
+	p = RocSyntax.parse_str("1 == 2 == 3", { mode: Expression })
 	p.nodes.keep_if(|n| n.kind == Binary).map(|n| (n.start, n.end)) == [(5, 11), (0, 11)]
 }
 
 expect {
-	RocSyntax.parse_str("a b").status == Recovered and RocSyntax.parse_expression("1 2").status == Recovered
+	RocSyntax.parse_str("a b", {}).status == Recovered and RocSyntax.parse_str("1 2", { mode: Expression }).status == Recovered
 }
 
 can_end_expression : RocSyntax.TokenKind -> Bool
@@ -1181,22 +1165,22 @@ can_end_token : List(U8), RocSyntax.Token -> Bool
 can_end_token = |source, token| can_end_expression(token.kind) or spelled3(source, token, '.', '.', '.')
 
 expect {
-	p = RocSyntax.parse_expr_str("-1")
+	p = RocSyntax.parse_str("-1", { mode: Expression })
 	p.status == Complete and p.tokens.first().map_ok(|t| (t.kind, t.start, t.end)) == Ok((Number, 0, 2)) and p.nodes.any(|n| n.kind == NumberLiteral)
 }
 
 expect {
-	p = RocSyntax.parse_expr_str("x-1")
+	p = RocSyntax.parse_str("x-1", { mode: Expression })
 	p.status == Complete and p.nodes.any(|n| n.kind == Binary) and p.tokens.keep_if(|t| t.kind == Number).map(|t| (t.start, t.end)) == [(2, 3)]
 }
 
 expect {
-	p = RocSyntax.parse_expr_str("1.0e3")
+	p = RocSyntax.parse_str("1.0e3", { mode: Expression })
 	p.status == Complete and p.tokens.first().map_ok(|t| t.end) == Ok(5) and p.consumed
 }
 
 expect {
-	RocSyntax.parse_expr_str("(1 +").consumed and !RocSyntax.parse_expr_str("1 2").consumed
+	RocSyntax.parse_str("(1 +", { mode: Expression }).consumed and !RocSyntax.parse_str("1 2", { mode: Expression }).consumed
 }
 
 nonprintable : List(U8), U64 -> Bool
@@ -1206,12 +1190,12 @@ nonprintable = |source, at| {
 }
 
 expect {
-	p = RocSyntax.parse_expr_str("if s.is_empty() \"empty\" else \"not empty\"")
+	p = RocSyntax.parse_str("if s.is_empty() \"empty\" else \"not empty\"", { mode: Expression })
 	p.status == Complete and p.nodes.any(|n| n.kind == If)
 }
 
 expect {
-	p = RocSyntax.parse_str("x = \"unfinished\ny = 42\n")
+	p = RocSyntax.parse_str("x = \"unfinished\ny = 42\n", {})
 	p.status == Recovered and p.nodes.keep_if(|n| n.kind == Declaration).len() == 2
 }
 
@@ -1226,32 +1210,32 @@ operator_width = |source, at| {
 }
 
 expect {
-	p = RocSyntax.parse_expr_str("result?")
+	p = RocSyntax.parse_str("result?", { mode: Expression })
 	p.status == Complete and p.nodes.any(|n| n.kind == Suffix)
 }
 
 expect {
-	RocSyntax.parse_expr_str("- value").status == Recovered and RocSyntax.parse_str("x : 42").status == Recovered
+	RocSyntax.parse_str("- value", { mode: Expression }).status == Recovered and RocSyntax.parse_str("x : 42", {}).status == Recovered
 }
 
 expect {
-	["x.1e3", "x.0xff", "x.Foo", "x._", "x. field", "@Foo", "@a", "__", "__a"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+	["x.1e3", "x.0xff", "x.Foo", "x._", "x. field", "@Foo", "@a", "__", "__a"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete)
 }
 
 expect {
-	["x .field", "x\n.field", "x.01", "x.a!", "_a"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["x .field", "x\n.field", "x.01", "x.a!", "_a"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	["Foo.Bar", "Foo.Bar.Baz", "Foo .Bar", "Foo.Bar.baz"].all(|source| RocSyntax.parse_expr_str(source).status == Complete) and ["Foo.bar.Bar", "Foo.0.Bar", "Foo().Bar", "(Foo).Bar"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+	["Foo.Bar", "Foo.Bar.Baz", "Foo .Bar", "Foo.Bar.baz"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete) and ["Foo.bar.Bar", "Foo.0.Bar", "Foo().Bar", "(Foo).Bar"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete)
 }
 
 expect {
-	["x : 1 -> U64", "x : \"hi\" -> U64", "x : [1] -> U64", "x : U64 -> 1 -> U64"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_str("x : U64 -> U64").status == Complete
+	["x : 1 -> U64", "x : \"hi\" -> U64", "x : [1] -> U64", "x : U64 -> 1 -> U64"].all(|source| RocSyntax.parse_str(source, {}).status != Complete) and RocSyntax.parse_str("x : U64 -> U64", {}).status == Complete
 }
 
 expect {
-	["-!h", "-'i'", "match 42 {}", "person.@"].all(|source| RocSyntax.parse_expr_str(source).status != Complete) and ["F\n", "modu\n", "S\n0\n", "x = _\n\ny = { a: _ + 1 }"].all(|source| RocSyntax.parse_str(source).status != Complete)
+	["-!h", "-'i'", "match 42 {}", "person.@"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete) and ["F\n", "modu\n", "S\n0\n", "x = _\n\ny = { a: _ + 1 }"].all(|source| RocSyntax.parse_str(source, {}).status != Complete)
 }
 
 significant_position : List(RocSyntax.Token), U64 -> U64
@@ -1288,13 +1272,13 @@ token_spelling : List(U8), RocSyntax.Token, Str -> Bool
 token_spelling = |source, token, text| token.end - token.start == text.count_utf8_bytes() and matches(source, token.start, text)
 
 expect {
-	["module [1 + 2]", "import 123", "import lower", "import f(1)", "module []\nmodule []"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("match x { 1 + 2 => 3 }").status != Complete
+	["module [1 + 2]", "import 123", "import lower", "import f(1)", "module []\nmodule []"].all(|source| RocSyntax.parse_str(source, {}).status != Complete) and RocSyntax.parse_str("match x { 1 + 2 => 3 }", { mode: Expression }).status != Complete
 }
 
 expect {
 	source = "module []\nanswer = 42 # hello\n"
 	tokens = RocSyntax.tokenize_str(source)
-	parsed = RocSyntax.parse_str(source)
+	parsed = RocSyntax.parse_str(source, {})
 	tokens.status == Complete and tokens.tokens == parsed.tokens and tokens.source == parsed.source and tokens.diagnostics == parsed.diagnostics
 }
 
@@ -1304,27 +1288,27 @@ expect {
 }
 
 expect {
-	["dbg 1 + 2", "crash \"failed\"", "return f(1)", "break", "...", "value.?field", "value.?field.other?"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["dbg 1 + 2", "crash \"failed\"", "return f(1)", "break", "...", "value.?field", "value.?field.other?"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	["dbg", "crash", "return", "value.?0", "value.?Upper", "value.? field", "value.?field(1)"].all(|source| RocSyntax.parse_expr_str(source).status == Recovered)
+	["dbg", "crash", "return", "value.?0", "value.?Upper", "value.? field", "value.?field(1)"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Recovered)
 }
 
 expect {
-	["|_| 1", "|Some(x), (a, b), {name}, [first, .. as rest]| x", "|var count| count", "|| {}", "match x { _ => 0 }", "match x { Some(a) | Other(a) => a, None => 0 }", "match x { {a: Some(v), ..rest} => v }", "match x { [first, .. as rest] if first > 0 => rest, _ => [] }", "|Thing.(value)| value", "|Thing.{field}| field", "|(a, _) as pair| pair"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["|_| 1", "|Some(x), (a, b), {name}, [first, .. as rest]| x", "|var count| count", "|| {}", "match x { _ => 0 }", "match x { Some(a) | Other(a) => a, None => 0 }", "match x { {a: Some(v), ..rest} => v }", "match x { [first, .. as rest] if first > 0 => rest, _ => [] }", "|Thing.(value)| value", "|Thing.{field}| field", "|(a, _) as pair| pair"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	["|1 + 2| 0", "match x { 1 + 2 => 0 }", "match x { [a b] => 0 }", "|var _| 0", "match x { [.. old] => 0 }", "match x { _ as Upper => 0 }"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+	["|1 + 2| 0", "match x { 1 + 2 => 0 }", "match x { [a b] => 0 }", "|var _| 0", "match x { [.. old] => 0 }", "match x { _ as Upper => 0 }"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete)
 }
 
 expect {
-	["(a, b) = pair", "{name, count} = value", "Some(x) = result", "expect 1 == 1", "dbg 1", "for x in items { dbg x }", "while True { break }", "main = { var count = 0\n count = count + 1\n expect count > 0\n count }"].all(|source| RocSyntax.parse_str(source).status == Complete)
+	["(a, b) = pair", "{name, count} = value", "Some(x) = result", "expect 1 == 1", "dbg 1", "for x in items { dbg x }", "while True { break }", "main = { var count = 0\n count = count + 1\n expect count > 0\n count }"].all(|source| RocSyntax.parse_str(source, {}).status == Complete)
 }
 
 expect {
-	RocSyntax.parse_str("var count = 0").status == Recovered and RocSyntax.parse_expr_str("for (a, b) in pairs { a + b }").status == Complete and RocSyntax.parse_expr_str("for! item in stream { dbg item }").status == Complete
+	RocSyntax.parse_str("var count = 0", {}).status == Recovered and RocSyntax.parse_str("for (a, b) in pairs { a + b }", { mode: Expression }).status == Complete and RocSyntax.parse_str("for! item in stream { dbg item }", { mode: Expression }).status == Complete
 }
 
 expect {
@@ -1360,31 +1344,31 @@ expect {
 }
 
 expect {
-	["\"hello \${name}!\"", "\"\${{ a: 1 }}\"", "\"\${\"inner \${x}\"}\"", "\\\\hello\n\\\\world", "\"\"\"hello\n\"\"\"world", "42.U8", "1.0.F64", "'a'.U32", "\"hello\".MyText", "0xFF.Gui.Color"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["\"hello \${name}!\"", "\"\${{ a: 1 }}\"", "\"\${\"inner \${x}\"}\"", "\\\\hello\n\\\\world", "\"\"\"hello\n\"\"\"world", "42.U8", "1.0.F64", "'a'.U32", "\"hello\".MyText", "0xFF.Gui.Color"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	["\"\${}\"", "\"\${x\"", "\"\${x}", "1 .U8"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+	["\"\${}\"", "\"\${x\"", "\"\${x}", "1 .U8"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete)
 }
 
 expect {
-	["import json.Json", "import json.Json as MyJson exposing [parse, Value]", "import http.Client.Auth as Auth exposing [get as fetch, Request.*]", "import ../Utils", "import ../../lib/Parser.Config", "import /root/Module", "import ./relative/Module", "import \"data.txt\" as text : Str", "import \"bytes.bin\" as data : List ( U8 )", "module [run as start, Foo.*, Foo.bar as Baz]", "hosted [main!]"].all(|source| RocSyntax.parse_str(source).status == Complete)
+	["import json.Json", "import json.Json as MyJson exposing [parse, Value]", "import http.Client.Auth as Auth exposing [get as fetch, Request.*]", "import ../Utils", "import ../../lib/Parser.Config", "import /root/Module", "import ./relative/Module", "import \"data.txt\" as text : Str", "import \"bytes.bin\" as data : List ( U8 )", "module [run as start, Foo.*, Foo.bar as Baz]", "hosted [main!]"].all(|source| RocSyntax.parse_str(source, {}).status == Complete)
 }
 
 expect {
-	["import lower", "import pkg.lower", "import json.Json as lower", "import Foo exposing [1]", "import Foo exposing [a b]", "import \"data\" as text : U64", "import \"data\" as text : List(U16)", "import \"\${name}\" as text : Str", "module [1 + 2]", "module [value as Type]"].all(|source| RocSyntax.parse_str(source).status != Complete)
+	["import lower", "import pkg.lower", "import json.Json as lower", "import Foo exposing [1]", "import Foo exposing [a b]", "import \"data\" as text : U64", "import \"data\" as text : List(U16)", "import \"\${name}\" as text : Str", "module [1 + 2]", "module [value as Type]"].all(|source| RocSyntax.parse_str(source, {}).status != Complete)
 }
 
 expect {
-	RocSyntax.parse_expr_str("{ x }").nodes.any(|n| n.kind == Block) and RocSyntax.parse_expr_str("{ { x } }").nodes.any(|n| n.kind == Record) and RocSyntax.parse_expr_str("{ field: { x } }").nodes.keep_if(|n| n.kind == Record).len() == 2
+	RocSyntax.parse_str("{ x }", { mode: Expression }).nodes.any(|n| n.kind == Block) and RocSyntax.parse_str("{ { x } }", { mode: Expression }).nodes.any(|n| n.kind == Record) and RocSyntax.parse_str("{ field: { x } }", { mode: Expression }).nodes.keep_if(|n| n.kind == Record).len() == 2
 }
 
 expect {
-	RocSyntax.parse_expr_str("value.?field.other(1)").status == Complete and RocSyntax.parse_expr_str("value.?field.0(1)").status == Complete
+	RocSyntax.parse_str("value.?field.other(1)", { mode: Expression }).status == Complete and RocSyntax.parse_str("value.?field.0(1)", { mode: Expression }).status == Complete
 }
 
 expect {
-	RocSyntax.parse_statement_str("var count = 0").status == Complete and RocSyntax.parse_statement_str("1 + 2").status == Complete and RocSyntax.parse_statement_str("x = 1\ny = 2").status == Recovered and RocSyntax.parse_header_str("module [run]").status == Complete and RocSyntax.parse_header_str("x = 1").status == Recovered and RocSyntax.parse_header_str("module []\nx = 1").status == Recovered
+	RocSyntax.parse_str("var count = 0", { mode: Statement }).status == Complete and RocSyntax.parse_str("1 + 2", { mode: Statement }).status == Complete and RocSyntax.parse_str("x = 1\ny = 2", { mode: Statement }).status == Recovered and RocSyntax.parse_str("module [run]", { mode: Header }).status == Complete and RocSyntax.parse_str("x = 1", { mode: Header }).status == Recovered and RocSyntax.parse_str("module []\nx = 1", { mode: Header }).status == Recovered
 }
 
 version_digits : Str, U64, U64, U64 -> Bool
@@ -1426,41 +1410,41 @@ valid_roc_version = |text| {
 }
 
 expect {
-	["app [main!] { pf: platform \"../platform/main.roc\" }", "app [] {}", "app [] { pf: platform glue }", "package [Parser, parse]", "package [parse] { util: \"util.roc\", other: \"other.roc\" }", "app [] { roc: \"nightly-2026-July-31-123c5d7\" }", "package [] { roc: \"1.0.0-rc1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+	["app [main!] { pf: platform \"../platform/main.roc\" }", "app [] {}", "app [] { pf: platform glue }", "package [Parser, parse]", "package [parse] { util: \"util.roc\", other: \"other.roc\" }", "app [] { roc: \"nightly-2026-July-31-123c5d7\" }", "package [] { roc: \"1.0.0-rc1\" }"].all(|source| RocSyntax.parse_str(source, { mode: Header }).status == Complete)
 }
 
 expect {
-	["app []", "app [] { pkg }", "app [] { pkg: 42 }", "app [] { a: platform glue, b: platform glue }", "app [] { roc: platform glue }", "package [] { roc: \"bad\" }", "package [] { roc: \"1.0.0\", roc: \"1.0.1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Recovered)
+	["app []", "app [] { pkg }", "app [] { pkg: 42 }", "app [] { a: platform glue, b: platform glue }", "app [] { roc: platform glue }", "package [] { roc: \"bad\" }", "package [] { roc: \"1.0.0\", roc: \"1.0.1\" }"].all(|source| RocSyntax.parse_str(source, { mode: Header }).status == Recovered)
 }
 
 expect {
-	RocSyntax.parse_header_str("").status == Complete and RocSyntax.parse_expr_str("match text { \"hello \${name}\" => name, \"\${_}\" => \"\" }").status == Complete and RocSyntax.parse_expr_str("match text { \"\${a + b}\" => 0 }").status != Complete and RocSyntax.parse_expr_str("match text { \"x\".Str => 0 }").status != Complete
+	RocSyntax.parse_str("", { mode: Header }).status == Complete and RocSyntax.parse_str("match text { \"hello \${name}\" => name, \"\${_}\" => \"\" }", { mode: Expression }).status == Complete and RocSyntax.parse_str("match text { \"\${a + b}\" => 0 }", { mode: Expression }).status != Complete and RocSyntax.parse_str("match text { \"x\".Str => 0 }", { mode: Expression }).status != Complete
 }
 
 expect {
-	["value->f", "value->f(1)", "value->Str.concat(\"x\")", "value->(|x| x + 1)", "value |> f(1).field", "value |> receiver.method(1)", "value |> (f)(1)", "value |> [1, 2].map(f)", "value->f(1).field", "1 + 2->f |> g"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["value->f", "value->f(1)", "value->Str.concat(\"x\")", "value->(|x| x + 1)", "value |> f(1).field", "value |> receiver.method(1)", "value |> (f)(1)", "value |> [1, 2].map(f)", "value->f(1).field", "1 + 2->f |> g"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	["value->.f(1)", "value |> .f(1)", "value->1", "value |> [1, 2]", "value |> 1 + 2"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+	["value->.f(1)", "value |> .f(1)", "value->1", "value |> [1, 2]", "value |> 1 + 2"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete)
 }
 
 expect {
-	RocSyntax.parse_expr_str("tuple.0.1").status == Complete and RocSyntax.parse_expr_str("tuple.01.002").status == Complete
+	RocSyntax.parse_str("tuple.0.1", { mode: Expression }).status == Complete and RocSyntax.parse_str("tuple.01.002", { mode: Expression }).status == Complete
 }
 
 expect {
 	# Dedicated type grammar covers every non-malformed TypeAnno family.
-	["f : a", "f : _", "f : _item", "f : A.B", "f : a.A(b)", "f : List(a -> b)", "f : a,b -> c", "f : (a,b) -> c", "f : (a,b -> c)", "f : () -> a", "f : ()", "f : (a,)", "f : {a: U8,b:Str}", "f : {a: U8, ..}", "f : {a: U8, ..ext}", "f : [A,..,]", "f : [A,..r]", "f : [a,U8]", "f : {a: U8 ?? 1}", "f : {a ?: U8}", "f : {_: U8}", "f : U8 => Str", "Foo(a,_b,_) : List(a)", "Foo := [A,B].{x = 1}", "Foo :: U8.{ x : U8\nx = 1 }", "f : a -> b where [a.to_b : a -> b]", "f : a -> b where [a.Foo(b), b.Bar]", "a.Sort : where [a.order : a,a -> [Before,Same,After]]", "Holder := {}.{a.Show : where [a.to_str : a -> Str]}\nf : a -> Str where [a .Holder .Show]"].all(|source| RocSyntax.parse_str(source).status == Complete)
+	["f : a", "f : _", "f : _item", "f : A.B", "f : a.A(b)", "f : List(a -> b)", "f : a,b -> c", "f : (a,b) -> c", "f : (a,b -> c)", "f : () -> a", "f : ()", "f : (a,)", "f : {a: U8,b:Str}", "f : {a: U8, ..}", "f : {a: U8, ..ext}", "f : [A,..,]", "f : [A,..r]", "f : [a,U8]", "f : {a: U8 ?? 1}", "f : {a ?: U8}", "f : {_: U8}", "f : U8 => Str", "Foo(a,_b,_) : List(a)", "Foo := [A,B].{x = 1}", "Foo :: U8.{ x : U8\nx = 1 }", "f : a -> b where [a.to_b : a -> b]", "f : a -> b where [a.Foo(b), b.Bar]", "a.Sort : where [a.order : a,a -> [Before,Same,After]]", "Holder := {}.{a.Show : where [a.to_str : a -> Str]}\nf : a -> Str where [a .Holder .Show]"].all(|source| RocSyntax.parse_str(source, {}).status == Complete)
 }
 
 expect {
 	# Value syntax, invalid qualification, and ambiguous arrows remain rejected.
-	["f : a -> b -> c", "f : a(b)", "f : A ()", "f : A(1)", "f : 0", "f : [1]", "f : {a: U8 = 1}", "f : {_ ?: U8}", "f : {a:?U8}", "f : A. B", "f : A .B", "f : @Foo", "f : __", "f : _a.A", "f : [A,..r,B]", "f : {a:U8,..r,b:Str}", "f : a,b", "Foo = U8", "Foo(U8) : U8", "Foo(a b) : U8", "Foo : U8.{x = 1}", "f : a -> b where []", "f : U8 where [x]", "f : U8 where [_a.foo : U8]", "f : U8 where [a.Foo : U8]", "a.Sort := where [a.foo : a]", "Foo := [A].{ x = 5\nx }"].all(|source| RocSyntax.parse_str(source).status != Complete)
+	["f : a -> b -> c", "f : a(b)", "f : A ()", "f : A(1)", "f : 0", "f : [1]", "f : {a: U8 = 1}", "f : {_ ?: U8}", "f : {a:?U8}", "f : A. B", "f : A .B", "f : @Foo", "f : __", "f : _a.A", "f : [A,..r,B]", "f : {a:U8,..r,b:Str}", "f : a,b", "Foo = U8", "Foo(U8) : U8", "Foo(a b) : U8", "Foo : U8.{x = 1}", "f : a -> b where []", "f : U8 where [x]", "f : U8 where [_a.foo : U8]", "f : U8 where [a.Foo : U8]", "a.Sort := where [a.foo : a]", "Foo := [A].{ x = 5\nx }"].all(|source| RocSyntax.parse_str(source, {}).status != Complete)
 }
 
 expect {
-	p = RocSyntax.parse_str("Box(a) := { value ?: List(a), ..ext }.{ make : a -> Box(a)\n make = |x| x }")
+	p = RocSyntax.parse_str("Box(a) := { value ?: List(a), ..ext }.{ make : a -> Box(a)\n make = |x| x }", {})
 	p.status == Complete and [TypeDeclaration, TypeHeader, TypeVariable, TypeRecord, TypeField, TypeApply, TypeExtension, AssociatedBlock, TypeAnnotation, TypeFunction].all(|kind| p.nodes.any(|n| n.kind == kind))
 }
 
@@ -1468,7 +1452,7 @@ expect {
 	# A parenthesized function's span holds neither parenthesis, and comments and
 	# newlines after the opening one stay outside it.
 	spans = |source, kind| {
-		p = RocSyntax.parse_str(source)
+		p = RocSyntax.parse_str(source, {})
 		p.nodes.keep_if(|n| n.kind == kind).map(|n| (n.start, n.end))
 	}
 	functions = |source| spans(source, TypeFunction)
@@ -1482,13 +1466,13 @@ expect {
 expect {
 	# Without arguments the parentheses begin the function, as they do outside
 	# another pair.
-	p = RocSyntax.parse_str("f : (() -> U8)")
+	p = RocSyntax.parse_str("f : (() -> U8)", {})
 	p.nodes.keep_if(|n| n.kind == TypeFunction).map(|n| (n.start, n.end)) == [(5, 13)]
 }
 
 expect {
 	# A comment may hold any bytes, as the compiler's trivia scan doesn't validate them.
-	comment = |bytes| RocSyntax.parse_bytes(['#', ' '].concat(bytes).concat(['\n', 'x', ' ', '=', ' ', '1'])).status
+	comment = |bytes| RocSyntax.parse_bytes(['#', ' '].concat(bytes).concat(['\n', 'x', ' ', '=', ' ', '1']), {}).status
 	comment([0xFF]) == Complete and comment([0xC3]) == Complete and comment(List.repeat(0xFF, 300)) == Complete
 }
 
@@ -1496,15 +1480,15 @@ expect {
 	# Bytes in a comment hide nothing outside it, even past the diagnostic limit,
 	# and a bidirectional control is still rejected there.
 	noisy = ['#'].concat(List.repeat(0xFF, 300)).concat(['\n'])
-	invalid = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', 0xFF]))
-	unclosed = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', '"']))
-	invalid.status == Recovered and invalid.diagnostics.any(|d| d.code == InvalidUtf8)
-		and unclosed.status == Recovered and RocSyntax.parse_str("# \u(202E)\n").status != Complete
+	invalid = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', 0xFF]), {})
+	unclosed = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', '"']), {})
+	invalid.status == Recovered and invalid.diagnostics.any(|d| d.problem.code == InvalidUtf8)
+		and unclosed.status == Recovered and RocSyntax.parse_str("# \u(202E)\n", {}).status != Complete
 }
 
 expect {
 	# Trivia alone is a header: the implicit one for a type module.
-	["", " \n", "# comment\n", "#_ comment\n"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+	["", " \n", "# comment\n", "#_ comment\n"].all(|source| RocSyntax.parse_str(source, { mode: Header }).status == Complete)
 }
 
 expect {
@@ -1512,7 +1496,7 @@ expect {
 	# that stops at one ends before it and its parent still covers it.
 	["{e:)=", "{e:]=", "Foo.{e:)=", "{e:) = 1\nf = 2", "f : (a, ]", "f : {a : )", "f : [)", "z:[(,\ne="].all(
 		|source| {
-			p = RocSyntax.parse_str(source)
+			p = RocSyntax.parse_str(source, {})
 			p.status != Complete and p.nodes.all(
 				|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
 					|id| match p.nodes.get(id) {
@@ -1527,7 +1511,7 @@ expect {
 
 expect {
 	# An unclosed type ends at what it parsed, not at the next declaration.
-	p = RocSyntax.parse_str("z:[(a\ne=")
+	p = RocSyntax.parse_str("z:[(a\ne=", {})
 	p.nodes.keep_if(|n| n.kind == TypeParenthesized).map(|n| (n.start, n.end)) == [(3, 5)]
 }
 
@@ -1535,7 +1519,7 @@ expect {
 	# Error recovery keeps all type children within their parent source spans.
 	["Pair(a, b+ : (", "a.Sort := where [a.foo : a]", "f : U8 where [a.method -> b]", "f : {a: U8 + 1}", "f : [A, ..r, B]"].all(
 		|source| {
-			p = RocSyntax.parse_str(source)
+			p = RocSyntax.parse_str(source, {})
 			p.status != Complete and p.nodes.all(
 				|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
 					|id| match p.nodes.get(id) {
@@ -1550,28 +1534,28 @@ expect {
 
 expect {
 	# The pinned parser accepts adjacent fields/tags without an explicit comma.
-	["f : {a: U8 b: Str}", "f : [A B]", "f : [A(a) B(b)]", "f : {a ?: U8 b ?: Str}", "f : {a: U8 ?? 1 b: Str}"].all(|source| RocSyntax.parse_str(source).status == Complete)
+	["f : {a: U8 b: Str}", "f : [A B]", "f : [A(a) B(b)]", "f : {a ?: U8 b ?: Str}", "f : {a: U8 ?? 1 b: Str}"].all(|source| RocSyntax.parse_str(source, {}).status == Complete)
 }
 
 expect {
-	["{ ..person, age: 31 }", "{ ..person, }", "{ field: _ }", "{ x: 1 }.Foo", "{ x: 1 }.Mod.Foo", "Foo.{ x: 1 }", "mapper.{ ..base, x: 1 }", "Foo.(1)", "Mod.Foo.(1, 2)", "{ x : U64\n x = 1\n x }"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["{ ..person, age: 31 }", "{ ..person, }", "{ field: _ }", "{ x: 1 }.Foo", "{ x: 1 }.Mod.Foo", "Foo.{ x: 1 }", "mapper.{ ..base, x: 1 }", "Foo.(1)", "Mod.Foo.(1, 2)", "{ x : U64\n x = 1\n x }"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	["{ ..person }", "{ ..person, x: 1 }.Foo", "0.(1)", "value.(1)", "{ field: _ + 1 }"].all(|source| RocSyntax.parse_expr_str(source).status != Complete) and RocSyntax.parse_str("Foo := {}.{ var x = 1 }").status != Complete
+	["{ ..person }", "{ ..person, x: 1 }.Foo", "0.(1)", "value.(1)", "{ field: _ + 1 }"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status != Complete) and RocSyntax.parse_str("Foo := {}.{ var x = 1 }", {}).status != Complete
 }
 
 expect {
-	RocSyntax.parse_expr_str("match person { { $name } => $name }").status == Complete
+	RocSyntax.parse_str("match person { { $name } => $name }", { mode: Expression }).status == Complete
 }
 
 expect {
-	RocSyntax.parse_expr_str("...").status == Complete and RocSyntax.parse_expr_str("value\n...").status == Recovered and RocSyntax.parse_expr_str("{ return Tag\n... }").status == Complete
+	RocSyntax.parse_str("...", { mode: Expression }).status == Complete and RocSyntax.parse_str("value\n...", { mode: Expression }).status == Recovered and RocSyntax.parse_str("{ return Tag\n... }", { mode: Expression }).status == Complete
 }
 
 expect {
 	# Minimized raw-fuzz recovery: a mismatched closer overlaps an error child.
-	p = RocSyntax.parse_bytes([89, 123, 1, 93])
+	p = RocSyntax.parse_bytes([89, 123, 1, 93], {})
 	p.status != Complete and p.nodes.all(
 		|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
 			|id| match p.nodes.get(id) {
@@ -1583,33 +1567,33 @@ expect {
 }
 
 expect {
-	["x = 1 y = 2", "main!=|0|\"\"_=\"\"", "C(_,b):()D:C(a,b)E:{b:r}F:e r={(){}}", "module[E.a.*]"].all(|source| RocSyntax.parse_str(source).status == Complete) and RocSyntax.parse_expr_str("{1 2}").status == Complete
+	["x = 1 y = 2", "main!=|0|\"\"_=\"\"", "C(_,b):()D:C(a,b)E:{b:r}F:e r={(){}}", "module[E.a.*]"].all(|source| RocSyntax.parse_str(source, {}).status == Complete) and RocSyntax.parse_str("{1 2}", { mode: Expression }).status == Complete
 }
 
 expect {
-	["module[Foo.bar as lower]", "module[Foo._]", "module[Foo._a]", "module[Foo.$bar]"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("x.$field").status != Complete
+	["module[Foo.bar as lower]", "module[Foo._]", "module[Foo._a]", "module[Foo.$bar]"].all(|source| RocSyntax.parse_str(source, {}).status != Complete) and RocSyntax.parse_str("x.$field", { mode: Expression }).status != Complete
 }
 
 expect {
 	# Empty names, requires type aliases, symbol paths, and target configuration.
-	["platform \"p\" requires {} exposes [] packages {} provides {}", "platform \"\" requires {} exposes [] packages {} provides {}", "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}", "platform \"p\" requires {}{} exposes [] packages {} provides {}", "platform \"p\" requires {main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}", "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"\${x}\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+	["platform \"p\" requires {} exposes [] packages {} provides {}", "platform \"\" requires {} exposes [] packages {} provides {}", "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}", "platform \"p\" requires {}{} exposes [] packages {} provides {}", "platform \"p\" requires {main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}", "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"\${x}\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}"].all(|source| RocSyntax.parse_str(source, { mode: Header }).status == Complete)
 }
 
 expect {
 	# Platform sections are ordered and their data atoms have restricted grammars.
-	["platform \"\${x}\" requires {} exposes [] packages {} provides {}", "platform \"\"\"name requires {} exposes [] packages {} provides {}", "platform p requires {} exposes [] packages {} provides {}", "platform \"p\" requires {[A:_a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:U8] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[a:a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a] run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {run U8} exposes [] packages {} provides {}", "platform \"p\" requires {run : 1} exposes [] packages {} provides {}", "platform \"p\" requires {run : U8 other : U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [1] packages {} provides {}", "platform \"p\" requires {} exposes {} packages {} provides {}", "platform \"p\" requires {} exposing [] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: platform \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"bad\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"1.0.0\",roc:\"1.0.1\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc} provides {}", "platform \"p\" requires {} exposes [] packages {_dep: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {x: \"url\" y: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep: _} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"symbol\": $Module.$method}", "platform \"p\" requires {} exposes [] packages {} provides {\"\${x}\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module .run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module. run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": _run}", "platform \"p\" requires {} exposes [] packages {} provides {x: run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run(1)}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module.lower.more}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run \"y\": other}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted []", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": call} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output:Exe inputs:[app]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {other:\"dir/\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[1]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[Upper]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:\"file\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:1.5}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:app}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:Module.name}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:{}}}", "platform \"p\" missing_requires {} exposes [] packages {} provides {}", "platform \"p\" requires {} missing_exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [] missing_packages {} provides {}", "platform \"p\" requires {} exposes [] packages {} missing_provides {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {", "platform \"p\" requires {} exposes [] packages {} provides {} provides {}"].all(|source| RocSyntax.parse_header_str(source).status != Complete)
+	["platform \"\${x}\" requires {} exposes [] packages {} provides {}", "platform \"\"\"name requires {} exposes [] packages {} provides {}", "platform p requires {} exposes [] packages {} provides {}", "platform \"p\" requires {[A:_a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:U8] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[a:a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a] run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {run U8} exposes [] packages {} provides {}", "platform \"p\" requires {run : 1} exposes [] packages {} provides {}", "platform \"p\" requires {run : U8 other : U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [1] packages {} provides {}", "platform \"p\" requires {} exposes {} packages {} provides {}", "platform \"p\" requires {} exposing [] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: platform \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"bad\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"1.0.0\",roc:\"1.0.1\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc} provides {}", "platform \"p\" requires {} exposes [] packages {_dep: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {x: \"url\" y: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep: _} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"symbol\": $Module.$method}", "platform \"p\" requires {} exposes [] packages {} provides {\"\${x}\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module .run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module. run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": _run}", "platform \"p\" requires {} exposes [] packages {} provides {x: run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run(1)}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module.lower.more}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run \"y\": other}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted []", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": call} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output:Exe inputs:[app]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {other:\"dir/\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[1]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[Upper]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:\"file\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:1.5}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:app}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:Module.name}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:{}}}", "platform \"p\" missing_requires {} exposes [] packages {} provides {}", "platform \"p\" requires {} missing_exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [] missing_packages {} provides {}", "platform \"p\" requires {} exposes [] packages {} missing_provides {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {", "platform \"p\" requires {} exposes [] packages {} provides {} provides {}"].all(|source| RocSyntax.parse_str(source, { mode: Header }).status != Complete)
 }
 
 expect {
-	["package [] {dep}", "package [] {dep:1}", "app [] {dep: \"a\", dep: \"b\"}", "package [] {dep: \"\${path}\"}", "package [] {dep: \"a\\nb\"}", "platform \"p\" requires {} exposes [] packages {dep} provides {}", "platform \"p\" requires {} exposes [] packages {dep:1} provides {}"].all(|source| RocSyntax.parse_header_str(source).status == Recovered)
+	["package [] {dep}", "package [] {dep:1}", "app [] {dep: \"a\", dep: \"b\"}", "package [] {dep: \"\${path}\"}", "package [] {dep: \"a\\nb\"}", "platform \"p\" requires {} exposes [] packages {dep} provides {}", "platform \"p\" requires {} exposes [] packages {dep:1} provides {}"].all(|source| RocSyntax.parse_str(source, { mode: Header }).status == Recovered)
 }
 
 expect {
-	RocSyntax.parse_expr_str("-...").status == Complete and RocSyntax.parse_expr_str("x-...").status == Complete and RocSyntax.parse_expr_str("x -...").status == Recovered and RocSyntax.parse_expr_str("- ...").status == Recovered
+	RocSyntax.parse_str("-...", { mode: Expression }).status == Complete and RocSyntax.parse_str("x-...", { mode: Expression }).status == Complete and RocSyntax.parse_str("x -...", { mode: Expression }).status == Recovered and RocSyntax.parse_str("- ...", { mode: Expression }).status == Recovered
 }
 
 expect {
-	["...-1", "...-...", "{ _ = 1\n-... }", "a - -...", "a - ..."].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["...-1", "...-...", "{ _ = 1\n-... }", "a - -...", "a - ..."].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 integer_token : List(U8), RocSyntax.Token -> Bool
@@ -1629,19 +1613,19 @@ integer_token = |source, t| {
 }
 
 expect {
-	["0xff.0", "0b10.00", "x -> _name", "x |> _", "match value { @Foo => 1 }", "|@A| 0", "match value { A .B => 0 }", "module [A .b]", "module [A .B]", "module [x as _name]", "module [x as _]", "module [A as @A]"].all(|source| (if (source.starts_with("module")) RocSyntax.parse_str(source) else RocSyntax.parse_expr_str(source)).status != Complete)
+	["0xff.0", "0b10.00", "x -> _name", "x |> _", "match value { @Foo => 1 }", "|@A| 0", "match value { A .B => 0 }", "module [A .b]", "module [A .B]", "module [x as _name]", "module [x as _]", "module [A as @A]"].all(|source| (if (source.starts_with("module")) RocSyntax.parse_str(source, {}) else RocSyntax.parse_str(source, { mode: Expression })).status != Complete)
 }
 
 expect {
-	["0xff .0", "1.0.0", "x->f(1)(2)", "x |> f .field", "x |> f .?field", "{ A() A() A() 0 }"].all(|source| RocSyntax.parse_expr_str(source).status == Complete) and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 }").status == Complete and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 3 }").status != Complete
+	["0xff .0", "1.0.0", "x->f(1)(2)", "x |> f .field", "x |> f .?field", "{ A() A() A() 0 }"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete) and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 }", {}).status == Complete and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 3 }", {}).status != Complete
 }
 
 expect {
-	["x |> 1.method().field", "x |> 1.method()?(1)", "x |> f(1)?(1)", "x->X .field", "x |> A.fn .else", "x.?if -> f", "Box.import", "{a:1 b:2}"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+	["x |> 1.method().field", "x |> 1.method()?(1)", "x |> f(1)?(1)", "x->X .field", "x |> A.fn .else", "x.?if -> f", "Box.import", "{a:1 b:2}"].all(|source| RocSyntax.parse_str(source, { mode: Expression }).status == Complete)
 }
 
 expect {
-	p = RocSyntax.parse_str("C,)")
+	p = RocSyntax.parse_str("C,)", {})
 	p.status != Complete and p.nodes.all(
 		|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
 			|id| {
@@ -1657,8 +1641,8 @@ expect {
 		|control| {
 			["# ".concat(control).concat("\nx = 1"), "\"".concat(control).concat("\""), "'".concat(control).concat("'")].all(
 				|source| {
-					p = RocSyntax.parse_str(source)
-					p.status != Complete and p.diagnostics.any(|d| d.code == BidiControlInSource)
+					p = RocSyntax.parse_str(source, {})
+					p.status != Complete and p.diagnostics.any(|d| d.problem.code == BidiControlInSource)
 				},
 			)
 		},
@@ -1666,8 +1650,8 @@ expect {
 }
 
 expect {
-	p = RocSyntax.parse_str("\u(FEFF)x = 1")
-	p.status != Complete and p.diagnostics.any(|d| d.code == Utf8ByteOrderMark and d.start == 0 and d.end == 3) and RocSyntax.parse_expr_str("\"\u(FEFF)\"").status == Complete
+	p = RocSyntax.parse_str("\u(FEFF)x = 1", {})
+	p.status != Complete and p.diagnostics.any(|d| d.problem.code == Utf8ByteOrderMark and d.problem.span.start == 0 and d.problem.span.end == 3) and RocSyntax.parse_str("\"\u(FEFF)\"", { mode: Expression }).status == Complete
 }
 
 # ---- Parser core -------------------------------------------------------------
@@ -1711,9 +1695,9 @@ spell = |ctx, pos, text| token_spelling(ctx.source, tok(ctx, pos), text)
 diag : List(RocSyntax.Diagnostic), RocSyntax.DiagnosticCode, U64, U64 -> List(RocSyntax.Diagnostic)
 diag = |diags, code, start, end| {
 	if diags.len() < 256 {
-		diags.append({ code, start, end })
-	} else if (code == UnsupportedSyntax or code == ResourceLimit) and !diags.drop_first(256).any(|d| d.code == code) {
-		diags.append({ code, start, end })
+		diags.append({ problem: { code, span: { start, end } }, location: ByteOffset(start), path: [] })
+	} else if (code == UnsupportedSyntax or code == ResourceLimit) and !diags.drop_first(256).any(|d| d.problem.code == code) {
+		diags.append({ problem: { code, span: { start, end } }, location: ByteOffset(start), path: [] })
 	} else {
 		diags
 	}
@@ -2294,10 +2278,10 @@ parse_source = |source, mode| {
 		$index = $index + 1
 	}
 	d3 = if ($header_count > 1 or $bad_header) diag(d2, UnexpectedToken, first_start, source.len()) else d2
-	unsupported = lexed.unsupported or d3.any(|d| d.code == UnsupportedSyntax)
-	limited = d3.any(|d| d.code == ResourceLimit)
+	unsupported = lexed.unsupported or d3.any(|d| d.problem.code == UnsupportedSyntax)
+	limited = d3.any(|d| d.problem.code == ResourceLimit)
 	diagnostics = if (d3.len() > 256) d3.take_first(256) else d3
-	has_error = diagnostics.any(|d| d.code != UnsupportedSyntax)
+	has_error = diagnostics.any(|d| d.problem.code != UnsupportedSyntax)
 	status = if (limited) Limited else if (unsupported) Unsupported else if (has_error) Recovered else Complete
 	{ source, tokens: ctx.tokens, nodes: n3, children: c3, diagnostics, status, root: root_node, consumed: tok(ctx, sig(ctx, end_state)).kind == EndOfFile }
 }
@@ -4765,3 +4749,29 @@ platform_target_value = |ctx, initial, nodes, children, diags, file, depth| {
 		finish(s + if (t.kind == EndOfFile) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
 	}
 }
+
+roc_syntax_validation_error : RocSyntax.ValidateProps, RocSyntax.Parsed -> [InvalidRocSyntax(RocSyntax.Error)]
+roc_syntax_validation_error = |props, parsed| match quotation_earliest_diagnostic(parsed.diagnostics) {
+	Ok(diagnostic) => {
+		offset = diagnostic.problem.span.start
+		position = Parser.Quotation.position(props.source, offset)
+		InvalidRocSyntax({ problem: Syntax(diagnostic.problem), location: Text({ offset, line: position.line, column: position.column }), path: [Source(props.name)] })
+	}
+	Err(Missing) => InvalidRocSyntax({ problem: if (!parsed.consumed) UnconsumedInput else Incomplete(parsed.status), location: Unavailable(NotRetained), path: [Source(props.name)] })
+}
+
+roc_syntax_quote_validate : RocSyntax.ValidateProps -> Try(RocSyntax.Parsed, [BadQuotedBytes(Str)])
+roc_syntax_quote_validate = |props| RocSyntax.validate(props).map_err(
+	|InvalidRocSyntax(error)| {
+		position = FailureDiagnostic.line_column(error.location) ?? { line: 1, column: 1 }
+		message = match error.problem {
+			PlaceholderExpression => "placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"
+			Syntax(detail) => quotation_diagnostic_message(detail.code)
+			Incomplete(Unsupported) => "unsupported Roc syntax"
+			Incomplete(Limited) => "Roc syntax resource limit exceeded"
+			Incomplete(_) => "recovered syntax is not a complete Roc source file"
+			UnconsumedInput => "the parser did not consume the complete Roc source file"
+		}
+		Parser.Quotation.error({ name: props.name, format: "RocSyntax", message, line: position.line, column: position.column })
+	},
+)

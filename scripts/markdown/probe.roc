@@ -38,7 +38,7 @@ run_case = |mode, body| {
 	} else if mode == "inline".to_utf8() {
 		"{\"status\":\"ok\",\"inlines\":${encode_inlines(Markdown.parse_inlines(text))}}"
 	} else {
-		"{\"status\":\"ok\",\"blocks\":[${Str.join_with(Markdown.parse_str(text).map(encode_block), ",")}]}"
+		"{\"status\":\"ok\",\"blocks\":[${Str.join_with(Markdown.parse_str(text, {}).map(encode_block), ",")}]}"
 	}
 }
 

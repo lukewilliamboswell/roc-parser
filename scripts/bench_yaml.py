@@ -70,7 +70,7 @@ def main():
         parser_root /= 'package'
     source = parser_root / 'main.roc' if parser_root.is_dir() else parser_root
     binary = out / 'benchmark'
-    cmd = [str(args.roc.expanduser()), 'build', '--debug', '--opt=speed',
+    cmd = [str(args.roc.expanduser()), 'build', '--debug',
            str(ROOT / 'scripts/yaml/benchmark.roc'), '--output=' + str(binary),
           ]
     if source != ROOT / 'package/main.roc':

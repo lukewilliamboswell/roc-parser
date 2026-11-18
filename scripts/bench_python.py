@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ElementTree
 
 def parse_csv(text: str) -> int:
     rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
-    return sum(1 + sum(len(field) for field in row) for row in rows)
+    return sum(1 + sum(field_checksum(field) for field in row) for row in rows)
 
 
 def yaml_walk(value) -> int:
@@ -118,7 +118,44 @@ def http_parser():
     return parse
 
 
+def field_checksum(text: str) -> int:
+    return sum((index + 1) * byte for index, byte in enumerate(text.encode("utf-8")))
+
+
+def finance_parser(name: str):
+    if name == "quiffen":
+        from quiffen import Qif
+
+        def parse(text: str) -> int:
+            model = Qif.parse_string(text, day_first=True)
+            return sum(1 + field_checksum(tx.payee or "") + field_checksum(tx.memo or "")
+                       for account in model.accounts.values()
+                       for transactions in account.transactions.values() for tx in transactions)
+        return parse
+    if name == "ofxtools":
+        from ofxtools.Parser import OFXTree
+
+        def parse(text: str) -> int:
+            tree = OFXTree()
+            tree.parse(io.BytesIO(text.encode("utf-8")))
+            model = tree.convert()
+            return sum(1 + field_checksum(tx.name or "") + field_checksum(tx.memo or "")
+                       for statement in model.statements for tx in statement.transactions)
+        return parse
+    from ofxparse import OfxParser
+
+    def parse(text: str) -> int:
+        model = OfxParser.parse(io.BytesIO(text.encode("utf-8")))
+        return sum(1 + field_checksum(tx.payee or "") + field_checksum(tx.memo or "")
+                   for account in model.accounts for tx in account.statement.transactions)
+    return parse
+
+
 def implementation(name: str):
+    if name in ("quiffen", "ofxtools", "ofxparse"):
+        return finance_parser(name)
+    if name == "csv-consume":
+        return lambda text: sum(1 + sum(field_checksum(field) for field in row) for row in csv.reader(io.StringIO(text, newline=""), strict=True))
     if name == "csv":
         return parse_csv
     if name == "pyyaml":

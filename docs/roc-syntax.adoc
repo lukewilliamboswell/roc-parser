@@ -46,6 +46,11 @@ Tokens retain half-open UTF-8 byte spans: `start` includes the first byte and
 token stream, so tooling can preserve the exact source even when it is incomplete.
 Keep the original source alongside the result when resolving spans.
 
+Each diagnostic uses `{ problem, location, path }`. Its typed code is
+`diagnostic.problem.code`, and its half-open source interval is
+`diagnostic.problem.span`. `location` identifies the original byte position;
+consumers can distinguish failures without matching rendered strings.
+
 The tree uses node indices and a separate child-index buffer. Follow a node's
 child range through that buffer to visit its children; do not assume adjacent
 nodes are siblings. This representation supports large inputs without allocating

@@ -5,8 +5,6 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.Utf8
-
 # tag::types[]
 Level : [Info, Warn, Error]
 
@@ -17,65 +15,65 @@ Entry : { time : Time, level : Level, message : Str }
 # end::types[]
 
 # tag::pieces[]
-two_digits : Parser(Utf8.Bytes, U64)
+two_digits : Parser(Parser.Utf8.Bytes, U64, _)
 two_digits =
 	Parser.const(|tens| |ones| tens * 10 + ones)
-		.keep(Utf8.digit)
-		.keep(Utf8.digit)
+		.keep(Parser.Utf8.digit({}))
+		.keep(Parser.Utf8.digit({}))
 
-time : Parser(Utf8.Bytes, Time)
+time : Parser(Parser.Utf8.Bytes, Time, _)
 time =
 	Parser.const(|hour| |minute| { hour, minute })
 		.keep(two_digits)
-		.skip(Utf8.codeunit(':'))
+		.skip(Parser.Utf8.codeunit(':'))
 		.keep(two_digits)
 		.map(
 			|t| if t.hour < 24 and t.minute < 60 {
 				Ok(t)
 			} else {
-				Err("no such time")
+				Err(NoSuchTime)
 			},
 		)
 		.flatten()
 
-level : Parser(Utf8.Bytes, Level)
+level : Parser(Parser.Utf8.Bytes, Level, _)
 level =
 	Parser.one_of([
-		Parser.const(Info).skip(Utf8.string("INFO")),
-		Parser.const(Warn).skip(Utf8.string("WARN")),
-		Parser.const(Error).skip(Utf8.string("ERROR")),
+		Parser.const(Info).skip(Parser.Utf8.string("INFO")),
+		Parser.const(Warn).skip(Parser.Utf8.string("WARN")),
+		Parser.const(Error).skip(Parser.Utf8.string("ERROR")),
 	])
 
-message : Parser(Utf8.Bytes, Str)
-message = Utf8.rest_str
+message : Parser(Parser.Utf8.Bytes, Str, _)
+message = Parser.Utf8.rest_str({})
 
 # end::pieces[]
 
 # tag::entry[]
-entry : Parser(Utf8.Bytes, Entry)
+entry : Parser(Parser.Utf8.Bytes, Entry, _)
 entry =
 	Parser.const(|t| |l| |m| { time: t, level: l, message: m })
 		.keep(time)
-		.skip(Utf8.codeunit(' '))
+		.skip(Parser.Utf8.codeunit(' '))
 		.keep(level)
-		.skip(Utf8.codeunit(' '))
+		.skip(Parser.Utf8.codeunit(' '))
 		.keep(message)
 # end::entry[]
 
 # tag::tests[]
-expect Utf8.parse_str(time, "09:05") == Ok({ hour: 9, minute: 5 })
-expect Utf8.parse_str(time, "24:00") == Err(ParseError({ message: "no such time", offset: 0 }))
-expect Utf8.parse_str(level, "WARN") == Ok(Warn)
+expect (time).parse_str("09:05") == Ok({ hour: 9, minute: 5 })
+expect (time).parse_str("24:00") == Err(ParseError(Parser.Diagnostic.{ problem: NoSuchTime, location: Text({ offset: 0, line: 1, column: 1 }), path: [] }))
+expect (level).parse_str("WARN") == Ok(Warn)
 
 expect
-	Utf8.parse_str(entry, "12:30 WARN disk almost full")
+	(entry).parse_str("12:30 WARN disk almost full")
 		== Ok({ time: { hour: 12, minute: 30 }, level: Warn, message: "disk almost full" })
 
-expect Utf8.parse_str(entry, "12:30 DEBUG hello").is_err()
+expect (entry).parse_str("12:30 DEBUG hello").is_err()
 # end::tests[]
 
 # tag::file[]
-Problem : { line : U64, reason : Str }
+Problem : { line : U64, problem : Parser.Problem(Parser.Utf8.Problem([NoSuchTime])) }
 
 parse_log : Str -> Try(List(Entry), Problem)
 parse_log = |text| {
@@ -83,12 +81,12 @@ parse_log = |text| {
 	var $number = 0
 	for line in text.split_on("\n") {
 		$number = $number + 1
-		match Utf8.parse_str(entry, line) {
+		match (entry).parse_str(line) {
 			_ if line.is_empty() => {}
 			Ok(e) => {
 				$entries = $entries.append(e)
 			}
-			Err(ParseError({ message: reason, offset: _ })) => return Err({ line: $number, reason })
+			Err(ParseError({ problem, .. })) => return Err({ line: $number, problem })
 		}
 	}
 	Ok($entries)
@@ -111,7 +109,7 @@ summary = |text| {
 	match parse_log(text) {
 		Ok(entries) =>
 			Str.join_with(entries.map(|e| "${level_name(e.level)} at ${e.time.hour.to_str()}h: ${e.message}"), "\n")
-		Err({ line, reason }) => "line ${line.to_str()}: ${reason}"
+		Err({ line, problem }) => "line ${line.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 

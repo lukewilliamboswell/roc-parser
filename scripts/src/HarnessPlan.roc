@@ -10,11 +10,15 @@ HarnessPlan := [].{
 		{ name: "xml", args: ["scripts/review_xml.py", "check", "--baseline", "scripts/xml/known-failures.json"], fast: True },
 		{ name: "json", args: ["scripts/review_json.py", "check", "--baseline", "scripts/json/known-failures.json"], fast: True },
 		{ name: "json-robustness", args: ["scripts/review_json.py", "campaign", "--smoke"], fast: False },
+		{ name: "ofx", args: ["scripts/review_ofx.py", "check"], fast: True },
+		{ name: "ofx-robustness", args: ["scripts/review_ofx.py", "campaign", "--smoke"], fast: False },
+		{ name: "qif", args: ["scripts/review_qif.py", "check"], fast: True },
+		{ name: "qif-robustness", args: ["scripts/review_qif.py", "campaign", "--smoke"], fast: False },
 		{ name: "csv", args: ["scripts/review_csv.py"], fast: True },
 		{ name: "http", args: ["scripts/review_http.py"], fast: True },
 	]
 
-	requirements = ["scripts/http/requirements.txt", "scripts/markdown/requirements.txt", "scripts/yaml/requirements.txt"]
+	requirements = ["scripts/ofx/requirements.txt", "scripts/qif/requirements.txt", "scripts/http/requirements.txt", "scripts/markdown/requirements.txt", "scripts/yaml/requirements.txt"]
 
 	select : List(Str) -> Try(List(Review), Str)
 	select = |requested| {
@@ -41,7 +45,7 @@ HarnessPlan := [].{
 		probe = ".roc-parser-tmp/asciidoc/probe"
 		steps = [
 			["python3", "scripts/asciidoc/setup_oracle.py"],
-			[roc, "build", "--no-cache", "--opt=speed", "scripts/asciidoc/probe.roc", "--output=${probe}"],
+			[roc, "build", "--opt=dev", "scripts/asciidoc/probe.roc", "--output=${probe}"],
 			["python3", "scripts/review_asciidoc.py", "check", "--require-complete", "--compare-html", "--probe", probe, "--generated", generated, "--mutations", mutations, "--seed", seed, "--corpus", "docs"],
 		]
 		if performance {
@@ -52,7 +56,7 @@ HarnessPlan := [].{
 	}
 }
 
-expect HarnessPlan.select([]).map_ok(|selected| selected.map(|review| review.name)) == Ok(["yaml", "markdown-inline", "markdown-blocks", "xml", "json", "csv", "http"])
+expect HarnessPlan.select([]).map_ok(|selected| selected.map(|review| review.name)) == Ok(["yaml", "markdown-inline", "markdown-blocks", "xml", "json", "ofx", "qif", "csv", "http"])
 expect HarnessPlan.select(["all"]) == Ok(HarnessPlan.reviews)
 expect HarnessPlan.select(["all", "yaml"]).is_err()
 expect HarnessPlan.select(["json", "yaml", "json"]).map_ok(|selected| selected.map(|review| review.name)) == Ok(["json", "yaml"])

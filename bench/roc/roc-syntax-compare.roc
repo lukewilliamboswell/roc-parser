@@ -70,13 +70,13 @@ main! = |_| {
 
 parse : Str, List(U8), Str -> RocSyntax.Parsed
 parse = |source, bytes, mode| match mode {
-	"expr" => RocSyntax.parse_expr_bytes(bytes)
-	"statement" => RocSyntax.parse_statement_str(source)
-	"header" => RocSyntax.parse_header_str(source)
+	"expr" => RocSyntax.parse_bytes(bytes, { mode: Expression })
+	"statement" => RocSyntax.parse_str(source, { mode: Statement })
+	"header" => RocSyntax.parse_str(source, { mode: Header })
 	"repl" => {
-		file = RocSyntax.parse_bytes(bytes)
+		file = RocSyntax.parse_bytes(bytes, {})
 		root = file.nodes.get(file.root) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-		if (file.status == Complete and root.children_len == 1) file else RocSyntax.parse_statement_str(source)
+		if (file.status == Complete and root.children_len == 1) file else RocSyntax.parse_str(source, { mode: Statement })
 	}
-	_ => RocSyntax.parse_bytes(bytes)
+	_ => RocSyntax.parse_bytes(bytes, {})
 }

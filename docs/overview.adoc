@@ -102,7 +102,7 @@ no anchors, aliases or tags
 |https://www.w3.org/TR/xml/[XML 1.0 (Fifth Edition)] well-formedness, without
 document type declarations
 
-|`XmlNs`
+|`Xml.Namespaced`
 |XML with namespaces resolved, read as a tree or an event at a time, and written back
 |https://www.w3.org/TR/xml-names/[Namespaces in XML 1.0 (Third Edition)]
 
@@ -123,7 +123,7 @@ and strikethrough
 |https://www.rfc-editor.org/rfc/rfc9112[RFC 9112] message syntax and
 https://www.rfc-editor.org/rfc/rfc9110[RFC 9110] field syntax
 
-|`Parser`, `Utf8`
+|`Parser`
 |Anything you describe with combinators
 |Not applicable
 |===
@@ -134,7 +134,7 @@ The format chapters describe each module's exact behaviour. The
 == How the pieces fit together
 
 A combinator is a function that takes parsers and returns a new parser. The
-`Utf8` module provides parsers for the smallest pieces of text, such as one
+`Parser.Utf8` namespace provides parsers for the smallest pieces of text, such as one
 byte, a digit, or an exact word. The `Parser` module combines them: one after
 another, one of several alternatives, repeated, or with the result
 transformed. Each format module also exposes its parser as a `Parser` value,
@@ -144,7 +144,7 @@ so your own parsers and the library's can be mixed.
 [mermaid]
 ....
 flowchart LR
-    Pieces["Utf8 parsers:<br/>codeunit, digits, string"] --> Combine["Parser combinators:<br/>keep, skip, one_of, many, map"]
+    Pieces["Parser.Utf8 parsers:<br/>codeunit, digits, string"] --> Combine["Parser combinators:<br/>keep, skip, one_of, many, map"]
     Combine --> Yours["Your parser<br/>for your format"]
     Combine --> Formats["Format parsers:<br/>CSV, HTTP, Markdown"]
     Yours --> Value["Typed Roc value<br/>or an error"]
@@ -156,18 +156,14 @@ step at a time.
 
 == When to choose something else
 
-roc-parser fits programs that read text formats of moderate size completely
-into memory and want typed results with clear errors. Consider something else
-when:
+roc-parser provides typed parsing with clear errors. CSV, QIF and OFX also
+support incremental input and output; see <<streaming>>. Consider something
+else when:
 
 * You need full YAML, with anchors, aliases, tags or several documents in one
-  stream, or XML with document type declarations, namespaces or schema
-  validation. These modules reject such input on purpose.
-* You need to parse a stream incrementally as it arrives, such as a very large
-  log file or a network connection. Every parser here works on a complete
-  input held in memory.
-* You want to render Markdown to HTML, or serialize values back to text in
-  a format other than JSON. Only `JsonValue` writes its format back out.
+  stream, or XML with document type declarations or schema validation. These modules reject such input on purpose.
+* You need incremental input for a format other than CSV, QIF or OFX. The
+  other format parsers require the complete input in memory.
 * You want to decode JSON straight into your own record type. Roc's builtin
   `Json` does that; `JsonValue` is for JSON whose shape a record cannot
   describe (see <<json>>).

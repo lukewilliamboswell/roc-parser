@@ -1,10 +1,11 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-15-f25da45",
 }
 
 import cli.Cmd
+import cli.Duration
 import cli.OsStr
 import cli.Path
 import cli.Stderr
@@ -55,8 +56,7 @@ check! = |name| {
 	}
 	source = Path.read_utf8!(Path.utf8("docs/examples/${name}")).map_err(|_| "cannot read example")?
 	if DocExamples.needs_tests(source) {
-		# Avoid reusing check's cache for test (roc-lang/roc#12437).
-		_ = run!(["test", "--no-cache", name])?
+		_ = run!(["test", name])?
 	}
 	output = run!([name])?
 	expected = Path.utf8("docs/examples/${name.drop_suffix(".roc")}.expected")
@@ -67,7 +67,7 @@ check! = |name| {
 }
 
 run! = |args| {
-	ran = Cmd.new("roc").args(args.map(OsStr.from_str)).cwd("docs/examples").stdout(Capture).stderr(Capture).timeout_ms(600_000).output_limit(50_000_000).run!().map_err(|_| "roc did not complete: ${Str.join_with(args, " ")}")?
+	ran = Cmd.new("roc").args(args.map(OsStr.from_str)).cwd("docs/examples").stdout(Capture).stderr(Capture).timeout(Duration.millis(600_000)).output_limit(MaxBytes(50_000_000)).run!().map_err(|_| "roc did not complete: ${Str.join_with(args, " ")}")?
 	if ran.status != Exited(0) {
 		return Err("roc ${Str.join_with(args, " ")} failed:\n${Str.from_utf8_lossy(ran.stdout_bytes)}${Str.from_utf8_lossy(ran.stderr_bytes)}")
 	}

@@ -7,7 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Xml
-import parser.Utf8
+import parser.Parser
 
 ## Read one XML document from stdin and print the parse result as JSON:
 ## {"status":"ok","declaration":...,"root":NODE} with NODE either
@@ -19,10 +19,10 @@ main! = |_| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(input) => {
-			match Xml.parse_str(input) {
+			match Xml.parse_str(input, {}) {
 				Ok(xml) => Stdout.line!("{\"status\":\"ok\",\"declaration\":${encode_declaration(xml.declaration)},\"root\":${encode(xml.root)}}")?
 				Err(InvalidXml(error)) =>
-					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(error.message)}}")?
+					Stdout.line!("{\"status\":\"error\",\"line\":${source_position(error.location).line.to_str()},\"column\":${source_position(error.location).column.to_str()},\"message\":${json_string(Str.inspect(error.problem))}}")?
 			}
 		}
 	}
@@ -73,4 +73,11 @@ escape_json = |bytes, out| {
 		}
 		[byte, .. as rest] => escape_json(rest, out.append(byte))
 	}
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
 }

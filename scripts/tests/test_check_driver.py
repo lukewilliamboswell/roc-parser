@@ -18,7 +18,7 @@ class CheckDriverTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.build = tempfile.TemporaryDirectory()
         cls.binary = Path(cls.build.name) / "check"
-        subprocess.run(["roc-stable", "build", str(ROOT / "scripts/check_all.roc"),
+        subprocess.run(["roc-stable", "build", "--opt=dev", str(ROOT / "scripts/check_all.roc"),
                         f"--output={cls.binary}"], cwd=ROOT, check=True, capture_output=True)
 
     @classmethod
@@ -37,7 +37,7 @@ with open(os.environ["CHECK_TEST_LOG"], "a") as log:
 sys.exit(7 if sys.argv[0].endswith("check_doc_examples.roc") else 0)
 ''')
         stub.chmod(0o755)
-        for program in ("roc", "python3", "scripts/check_doc_examples.roc", "scripts/check_conformance.roc"):
+        for program in ("roc", "python3", "scripts/check_doc_examples.roc"):
             (self.directory / program).parent.mkdir(exist_ok=True)
             (self.directory / program).symlink_to(stub)
         self.env = {**os.environ, "PATH": str(self.directory), "CHECK_TEST_LOG": str(self.log)}
@@ -52,18 +52,18 @@ sys.exit(7 if sys.argv[0].endswith("check_doc_examples.roc") else 0)
         self.assertFalse(self.log.exists())
 
     def test_failure_stops_the_section_and_following_sections(self) -> None:
-        result = self.run_driver("docs", "conformance")
+        result = self.run_driver("docs", "fuzz")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(self.log.read_text().splitlines(), ["version", ""])
 
     def test_keep_going_reports_failure_and_runs_next_section_once(self) -> None:
-        result = self.run_driver("--keep-going", "docs", "conformance", "conformance")
+        result = self.run_driver("--keep-going", "docs", "fuzz", "fuzz")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(self.log.read_text().splitlines(), [
-            "version", "", "--"])
+            "version", "", "scripts/run_fuzz.py smoke --ci all --jobs 2"])
 
     def test_list_requires_no_package_compiler(self) -> None:
         result = self.run_driver("--list")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("roc-syntax:", result.stdout)
+        self.assertIn("bench:", result.stdout)
         self.assertFalse(self.log.exists())

@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-15-f25da45",
 }
 
 import cli.Cmd
@@ -37,8 +37,11 @@ test! = || {
 	] {
 		run!(command, root)?
 	}
+	# The shared validator's uncached example builds independently verify the
+	# assembled bundle. Remove this exception when a reviewed shared validator
+	# supports cached checks with source/bundle identity bound to each receipt.
 	for args in [["build", "0.0.1-dryrun"], ["test-archive"]] {
-		Cmd.new("release-package").args(args.map(OsStr.from_str)).env("RP_COMPILER", "roc").env("RP_OUTPUT", OsStr.from_str(Path.display(Path.join(work, "dist")))).env("RP_DIRECTORY", OsStr.from_str(Path.display(Path.join(work, "logs")))).env("GITHUB_OUTPUT", "").exec_cmd!().map_err(|_| "shared release dry run failed: ${Str.join_with(args, " ")}")?
+		Cmd.new("release-package").args(args.map(OsStr.from_str)).env("RP_COMPILER", "roc").env("RP_OUTPUT", OsStr.from_str(Path.display(Path.join(work, "dist")))).env("RP_DIRECTORY", OsStr.from_str(Path.display(Path.join(work, "logs")))).env("GITHUB_OUTPUT", "").call!().map_err(|_| "shared release dry run failed: ${Str.join_with(args, " ")}")?
 	}
 	Ok({})
 }
@@ -46,7 +49,7 @@ test! = || {
 run! = |command, cwd| {
 	Stdout.line!("+ ${Str.join_with(command, " ")}").map_err(|_| "cannot write command")?
 	match command {
-		[program, .. as args] => Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).cwd(cwd).exec_cmd!().map_err(|_| "command failed: ${Str.join_with(command, " ")}")
+		[program, .. as args] => Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).cwd(cwd).call!().map_err(|_| "command failed: ${Str.join_with(command, " ")}")
 		[] => Err("empty command")
 	}
 }

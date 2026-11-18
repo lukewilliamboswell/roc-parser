@@ -35,7 +35,7 @@ main! = |_args| {
 	# end::calls[]
 	Stdout.line!("--")?
 	# tag::resolve[]
-	blocks = Markdown.parse_str(document)
+	blocks = Markdown.parse_str(document, {})
 	for block in blocks {
 		Stdout.line!(Str.inspect(block))?
 	}

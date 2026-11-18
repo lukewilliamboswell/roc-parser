@@ -6,8 +6,6 @@ app [main!] {
 import cli.OsStr
 import cli.Stdout
 import parser.Xml
-import parser.XmlNs
-
 # tag::document[]
 feed_text =
 	\\<?xml version="1.0" encoding="UTF-8"?>
@@ -33,9 +31,9 @@ describe_entry = |entry| {
 # tag::errors[]
 check : Str -> Str
 check = |text| {
-	match Xml.parse_str(text) {
+	match Xml.parse_str(text, {}) {
 		Ok(_) => "well-formed"
-		Err(InvalidXml({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidXml(error)) => "${Str.inspect(error.location)}: ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -44,14 +42,14 @@ check = |text| {
 print_feed! : Str => Try({}, _)
 print_feed! = |text| {
 	# tag::parse[]
-	match Xml.parse_str(text) {
+	match Xml.parse_str(text, {}) {
 		Ok(xml) =>
 			for entry in xml.root.children_named("entry") {
 				# Keep the displayed output portable across documentation fonts.
 				Stdout.line!(describe_entry(entry).replace_each("\u(1F600)", "\\u(1F600)"))?
 			}
 
-		Err(InvalidXml(problem)) => Stdout.line!("invalid XML: ${problem.message}")?
+		Err(InvalidXml(problem)) => Stdout.line!("invalid XML: ${Str.inspect(problem.problem)}")?
 	}
 	# end::parse[]
 	Ok({})
@@ -92,29 +90,31 @@ entry_titles = |text| {
 # tag::limits[]
 check_untrusted : Str -> Str
 check_untrusted = |text| {
-	match Xml.parse(text, { max_depth: 3, max_elements: 100 }) {
+	match Xml.parse_str(text, { limits: Bounded({ max_depth: 3, max_elements: 100 }) }) {
 		Ok(_) => "accepted"
-		Err(LimitExceeded({ limit, max, line, column })) => "${line.to_str()}:${column.to_str()}: more than ${max.to_str()} (${Str.inspect(limit)})"
-		Err(InvalidXml({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidXml(error)) => match error.problem {
+			LimitExceeded({ resource, max, .. }) => "${Str.inspect(error.location)}: more than ${max.to_str()} (${Str.inspect(resource)})"
+			_ => "${Str.inspect(error.location)}: ${Str.inspect(error.problem)}"
+		}
 	}
 }
 
 # end::limits[]
 
 # tag::namespaces[]
-atom : XmlNs.Namespace
+atom : Xml.Namespaced.Namespace
 atom = Uri("http://www.w3.org/2005/Atom")
 
 describe_atom : Str -> Str
 describe_atom = |text| {
-	match XmlNs.parse_str(text) {
+	match Xml.Namespaced.parse_str(text, {}) {
 		Ok(doc) => {
 			titles = doc.root.children_named(atom, "title").map(|title| title.text())
 			"${Str.inspect(doc.root.name())} ${Str.inspect(titles)}"
 		}
 
-		Err(InvalidNamespace({ problem, line, column })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
-		Err(InvalidXml({ message, .. })) => message
+		Err(InvalidNamespace(error)) => "${Str.inspect(error.location)}: ${Str.inspect(error.problem)}"
+		Err(InvalidXml({ problem, .. })) => Str.inspect(problem)
 	}
 }
 
@@ -125,9 +125,9 @@ describe_atom = |text| {
 ## was read with.
 rewrite_atom : Str -> Str
 rewrite_atom = |text| {
-	match XmlNs.parse_str(text) {
+	match Xml.Namespaced.parse_str(text, {}) {
 		Ok(doc) =>
-			match XmlNs.render(doc, { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "http://www.w3.org/2005/Atom" }]) }) {
+			match doc.encode({ declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "http://www.w3.org/2005/Atom" }]) }).map_ok(Str.from_utf8_lossy) {
 				Ok(written) => written
 				Err(Unrenderable({ problem, .. })) => Str.inspect(problem)
 			}
@@ -140,7 +140,7 @@ rewrite_atom = |text| {
 
 print_tree! : Str => Try({}, _)
 print_tree! = |text| {
-	match Xml.parse_str(text) {
+	match Xml.parse_str(text, {}) {
 		Ok(xml) => Stdout.line!(Str.inspect(xml.root))?
 		Err(_) => Stdout.line!("invalid XML")?
 	}
@@ -187,4 +187,4 @@ main! = |_args| {
 	Ok({})
 }
 
-expect Xml.parse_str(feed_text).map_ok(|xml| xml.root.children_named("entry").last().map_ok(|entry| entry.children_named("title").first().map_ok(|title| title.text()))) == Ok(Ok(Ok("<Hello> \u(1F600)")))
+expect Xml.parse_str(feed_text, {}).map_ok(|xml| xml.root.children_named("entry").last().map_ok(|entry| entry.children_named("title").first().map_ok(|title| title.text()))) == Ok(Ok(Ok("<Hello> \u(1F600)")))

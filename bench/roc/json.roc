@@ -4,6 +4,7 @@ app [main!] {
 }
 
 import cli.OsStr
+import parser.Parser
 import parser.JsonValue
 import Bench
 
@@ -15,9 +16,9 @@ main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
-	match JsonValue.parse_str(input) {
+	match JsonValue.parse_str(input, {}) {
 		Ok(value) => Ok(consume(value))
-		Err(InvalidJsonValue(error)) => Err(error.line + error.column)
+		Err(InvalidJsonValue(error)) => Err(source_position(error.location).line + source_position(error.location).column)
 	}
 }
 
@@ -29,4 +30,11 @@ consume = |value| match value {
 	String(text) => text.count_utf8_bytes().to_u64() + 5
 	Array(items) => items.fold(6, |total, item| total + consume(item))
 	Object(members) => members.fold(7, |total, member| total + member.key.count_utf8_bytes().to_u64() + consume(member.value))
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
 }

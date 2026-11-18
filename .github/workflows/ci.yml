@@ -2,28 +2,40 @@ name: CI
 
 # The working tree on the latest Roc nightly. `blueprint run check` holds
 # everything a pull request must pass (scripts/check_all.roc lists it): the
-# package's checks and tests, the examples against tests/examples.json, a
-# release dry run against a loopback bundle, the manual's examples, and smoke runs of every fuzz target, conformance review, oracle and
-# benchmark. Long campaigns run in fuzz.yml and bench.yml. The `check` job is
-# the required status check.
+# package's checks and tests, the examples against tests/spec.json, a
+# release dry run against a loopback bundle, the manual's examples, native Roc
+# fuzz smoke campaigns, and Roc benchmark driver smoke runs. Cross-language
+# comparisons run locally. The `check` job is the required status check.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      nightly-tag:
+        description: Exact Roc nightly; empty resolves the latest
+        type: string
+        default: ''
+    outputs:
+      nightly:
+        description: Exact Roc nightly that passed validation
+        value: ${{ jobs.check.outputs.nightly }}
 
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
     name: check
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 20
     permissions:
       contents: read
+    outputs:
+      nightly: ${{ steps.nightly.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,11 +44,15 @@ jobs:
         with:
           cache: 'true'
           cache-workload: check
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
       - id: nightly
-        name: Resolve the latest Roc nightly
+        name: Resolve the requested or latest Roc nightly
         env:
           GH_TOKEN: ${{ github.token }}
-        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+          REQUESTED_TAG: ${{ inputs.nightly-tag || '' }}
+        run: gh release view --repo roc-lang/nightlies --json tagName --jq 'if (.tagName | test("^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{7,40}$")) then "tag=" + .tagName else error("Expected a Roc nightly tag") end' -- ${REQUESTED_TAG:+"$REQUESTED_TAG"} >> "$GITHUB_OUTPUT"
       - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
         with:
           download-method: asset-api
@@ -50,11 +66,7 @@ jobs:
           name: check-evidence
           path: |
             .roc-parser-tmp/fuzz/runs/
-            .roc-parser-tmp/asciidoc/review/
-            .roc-parser-tmp/asciidoc/performance-smoke/
-            .roc-parser-tmp/roc-syntax-validation/*.json
-            .roc-parser-tmp/roc-syntax-validation/*.stdout
-            .roc-parser-tmp/roc-syntax-validation/*.stderr
             .roc-parser-tmp/bench/quick/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14

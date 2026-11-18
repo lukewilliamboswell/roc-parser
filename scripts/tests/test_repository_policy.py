@@ -14,6 +14,49 @@ PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
 ROC_AUTOMATION = "cc6d4081762c6d70bf95bf18c9abf99b5e9ade25"
 
 
+def comparison_policy_violations(workflows: dict[str, str], plan: str, blueprint: str) -> list[str]:
+    """Keep workflow entry points and their default plan free of foreign runs."""
+    failures = []
+    expected_sections = ["scripts", "package", "examples", "docs", "fuzz", "bench"]
+    if re.findall(r'name: "([^"\n]+)"', plan) != expected_sections:
+        failures.append("default check sections must contain only native validation")
+    if 'Task("check", [Use("package"),' not in blueprint:
+        failures.append("default check must use the package environment")
+    package_environment = re.search(r'Environment\("package",[^\n]+', blueprint)
+    if not package_environment or 'Extend("tooling")' not in package_environment[0] or 'Tools(' in package_environment[0]:
+        failures.append("package environment must use tooling without reference toolchains")
+    commands = plan.split("\n\t## Reject", 1)[0]
+    for command in re.findall(r'\[("[^"\n]*"(?:,\s*"[^"\n]*")*)\]', commands):
+        args = re.findall(r'"([^"\n]*)"', command)
+        if args[0] == "python3":
+            if args[1:4] == ["-m", "unittest", "discover"] or args[1:2] == ["scripts/run_fuzz.py"]:
+                continue
+            if args[1:2] == ["scripts/bench.py"] and "--langs" in args and args[args.index("--langs") + 1:] == ["roc", "--timeout", "60", "--fail-on-error"] and "--refresh-references" not in args:
+                continue
+            failures.append("default check runs a comparison or unreviewed Python entry point")
+        elif args[0] not in {"roc-stable", "scripts/test_package.roc", "release-package", "scripts/check_doc_examples.roc"}:
+            failures.append("default check runs a comparison or unreviewed entry point")
+    native_tasks = {"check", "test", "fuzz", "fuzz-smoke", "doc-examples", "docs", "api-docs", "release-package", "sbom-composition", "bundle", "examples", "test-examples-archive"}
+    comparison_script = re.compile(r'scripts/(?:review_|compare_|readme_|setup_oracles|check_asciidoc|check_roc_syntax|bench)')
+    for name, text in workflows.items():
+        for line in text.splitlines():
+            command = re.match(r'\s*(?:-\s*)?run:\s*(.*)', line)
+            if command:
+                run = command[1]
+                if not re.match(r'(?:blueprint run |gh |echo |test )', run):
+                    failures.append(f"{name}: unreviewed workflow command may execute a reference")
+                for task in re.findall(r'blueprint\s+run\s+([^\s]+)', run):
+                    if task not in native_tasks:
+                        failures.append(f"{name}: local comparison task {task} cannot run in CI")
+                if comparison_script.search(run):
+                    failures.append(f"{name}: comparison scripts are local-only")
+            if re.search(r'ROC_PARSER_RUN_ORACLE_TESTS\s*[:=]', line):
+                failures.append(f"{name}: CI must not enable live oracle tests")
+            if re.search(r'cache-workload:\s*[\'\"]?oracles\b|blueprint env oracle|oracle-cache|reference-cache', line):
+                failures.append(f"{name}: reference runtimes and caches are local-only")
+    return failures
+
+
 def repository_files() -> list[Path]:
     # Imported oracle source and build output live in ignored scratch folders.
     # Check repository-owned files, including new untracked changes, rather
@@ -26,6 +69,22 @@ def repository_files() -> list[Path]:
 
 
 class RepositoryPolicyTests(unittest.TestCase):
+    def test_cross_language_comparisons_remain_local(self) -> None:
+        workflows = {path.name: path.read_text() for path in WORKFLOW_DIR.glob("*.y*ml")}
+        plan = (ROOT / "scripts/src/CheckPlan.roc").read_text()
+        blueprint = (ROOT / "Blueprint.roc").read_text()
+        self.assertEqual(comparison_policy_violations(workflows, plan, blueprint), [])
+
+    def test_local_comparison_guard_catches_direct_and_indirect_execution(self) -> None:
+        plan = (ROOT / "scripts/src/CheckPlan.roc").read_text()
+        blueprint = (ROOT / "Blueprint.roc").read_text()
+        for command in ("blueprint run conformance", "blueprint run bench -- --langs roc rust", "python3 scripts/review_qif.py check", "python3 scripts/compare_markup_performance.py", "go run ./comparator", "ruby scripts/asciidoc/oracle.rb", "ROC_PARSER_RUN_ORACLE_TESTS=1 python3 -m unittest"):
+            with self.subTest(command=command):
+                self.assertTrue(comparison_policy_violations({"new.yml": "run: " + command}, plan, blueprint))
+        self.assertTrue(comparison_policy_violations({}, plan.replace('name: "bench"', 'name: "conformance"'), blueprint))
+        self.assertTrue(comparison_policy_violations({}, plan, blueprint.replace('Task("check", [Use("package")', 'Task("check", [Use("oracles")')))
+        self.assertTrue(comparison_policy_violations({}, plan.replace('"--langs", "roc"', '"--langs", "roc", "rust"'), blueprint))
+
     def test_runtime_exceptions_are_explicit_and_current(self) -> None:
         policy = json.loads((ROOT / "scripts/automation-policy.json").read_text())
         self.assertEqual(policy["schema_version"], 1)

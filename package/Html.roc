@@ -1,97 +1,65 @@
-import Markup
+import DiagnosticOwnership
+import MarkupDiagnosticOwnership
+import MarkupValidation
+import Parser
+import Diagnostic
+import DomConstruction
+import MarkupCore
 import MarkupTemplate
 import MarkupValidate
 import HtmlValidate
 import HtmlTree
 import HtmlTemplate
-import Literal
 
 ## HTML documents, fragments and typed literal templates. Strict HTML syntax and
 ## authoring checks are the default. Browser recovery is opt-in and retains typed
 ## diagnostics beside the repaired tree and exact original source bytes.
-Html := { parsed : Markup.Parsed }.{
+Html := { parsed : MarkupCore.Parsed }.{
+
+	RepairContext : DomConstruction.Context
+	RepairProblem : DomConstruction.Problem
+	RepairProps : DomConstruction.Props
 
 	## HTML defaults and explicit XML/recovery/validation/fragment-context options.
 	## exact_structure requires authored nesting without browser repairs.
 	## strict_foreign_spelling requires authored SVG/MathML names to match
 	## their canonical DOM spelling in HTML syntax, including closing tags.
-	Props := { syntax : Markup.Syntax ?? HtmlSyntax, exact_structure : Bool ?? False, strict_foreign_spelling : Bool ?? False, recovery : [Strict, Browser] ?? Strict, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256, context_namespace : Str ?? "http://www.w3.org/1999/xhtml", context_element : Str ?? "body", scripting : Bool ?? True }
+	Props := { syntax : MarkupCore.Syntax ?? HtmlSyntax, exact_structure : Bool ?? False, strict_foreign_spelling : Bool ?? False, recovery : [Strict, Browser] ?? Strict, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256, context_namespace : Str ?? "http://www.w3.org/1999/xhtml", context_element : Str ?? "body", scripting : Bool ?? True }
 
 	## Source and diagnostics label for checked imported constants.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
 
 	## Parse a complete HTML document with strict defaults.
-	parse_str : Str -> Try(Html, [InvalidMarkup(Markup.Error)])
-	parse_str = |text| parse_with(text, {})
 
 	## Parse and validate a document, retaining recovery diagnostics when enabled.
-	parse_with : Str, Props -> Try(Html, [InvalidMarkup(Markup.Error)])
-	parse_with = |text, props| {
-		{ parsed, domain } = authored_syntax(text, props, False)?
-		root = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "html", actual: "fragment" }), line: 1, column: 1 }))?
-		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup({ problem: Unsupported("missing document root"), line: 1, column: 1 }))
-		match node.kind {
-			Element(n) if n.namespace == Uri(Markup.html_namespace) and n.local == "html" => {}
-			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "html in the HTML namespace", actual: "other" }), line: 1, column: 1 }))
-		}
-		checked = validate_authored(parsed, shared(props), domain)?
-		Ok(Html.{ parsed: project_authored(checked, props, False, domain)? })
-	}
+	parse_str : Str, Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
+	parse_str = |source, props| parse_document(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Parse one or more roots in the configured fragment context.
-	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
-	parse_fragment = |text, props| {
-		{ parsed, domain } = authored_syntax(text, props, True)?
-		checked = validate_authored(parsed, shared(props), domain)?
-		Ok(Fragment.{ parsed: project_authored(checked, props, True, domain)? })
-	}
+	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(MarkupCore.Error)])
+	parse_fragment = |source, props| parse_fragment_source(source, props).map_err(MarkupDiagnosticOwnership.failure)
 
-	## Syntax-only parsing with all HTML options, including the scripting flag
-	## and fragment context. No scripts are executed by this pure parser.
-	parse_source : Str, Props, Bool -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	parse_source = syntax
-
-	## Syntax-only entrypoint used by mixed-format frontends and independent
-	## tree-construction oracles. This does not perform vocabulary/value checks.
-	parse_syntax : Str, Markup.Props, Bool, Markup.Name -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	parse_syntax = |text, props, fragment, context| {
-		if props.syntax == XmlSyntax {
-			if fragment {
-				Markup.parse_xml_fragment(text, namespace_uri(context), props)
-			} else {
-				Markup.parse_xml(text, props)
-			}
-		} else {
-			HtmlTree.parse(text, fragment, { name: context.local, namespace: namespace_uri(context) }, props)
-		}
-	}
-
-	## Validate mixed markup, skipping the future values of typed attribute holes.
-	validate_tree : Markup.Parsed, Markup.Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	validate_tree = |parsed, props, holes| {
-		foreign = MarkupValidate.foreign_with_html(parsed, props, holes)?
-		if foreign.has_html {
-			HtmlValidate.validate(foreign.parsed, props, holes)
-		} else {
-			Ok(foreign.parsed)
-		}
-	}
+	## Syntax-only parsing retains browser tree construction and diagnostics.
+	## Use Fragment mode for the configured enclosing element; Document is default.
+	SourceProps := { mode : [Document, Fragment] ?? Document, options : Props ?? {} }
+	parse_source : Str, SourceProps -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
+	parse_source = |source, props| syntax(source, props.options, props.mode == Fragment).map_err(MarkupDiagnosticOwnership.failure)
 
 	## Validate a complete document for a checked constant or imported file.
-	validate : ValidationProps -> Try(Html, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(e)| Literal.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: e.line, column: e.column }))
+	validate : ValidationProps -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| parse_str(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Check a complete HTML literal during compilation.
 	from_quote : Str -> Try(Html, [BadQuotedBytes(Str)])
-	from_quote = |source| validate({ source: source })
+	from_quote = |source| validate({ source: source }).map_err(|InvalidMarkup(error)| MarkupCore.quoted_error("Html", error))
 
 	## A fragment preserves all authored roots and source bytes.
 	Fragment : HtmlFragment
 
 	## Parse fixed segments and explicit text/whole-attribute holes. No textual
 	## sentinels are inserted, and structural positions cannot contain holes.
-	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
-	parse_segments = |segments, props| HtmlTemplate.parse_segments(segments, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props))
+	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(MarkupCore.Error)])
+	parse_segments = |segments, props| HtmlTemplate.parse_segments(segments, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props)).map_err(MarkupDiagnosticOwnership.failure)
 
 	## A parsed template and its typed bindings
 	## Binding performs no source parse.
@@ -100,13 +68,9 @@ Html := { parsed : Markup.Parsed }.{
 
 HtmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 
-	## Bind an explicit iterator to an existing plan without reparsing.
-	bind : MarkupTemplate.Plan, Iter(a) -> Try(Html.Template(a), [InvalidMarkup(Markup.Error)])
-	bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Html.Template.{ bound })
-
 	## Parse a static fragment as a template with no holes.
 	from_quote : Str -> Try(Html.Template(a), [BadQuotedBytes(Str)])
-	from_quote = |source| Html.parse_segments([source], {}).map_ok(|plan| Html.Template.{ bound: MarkupTemplate.capture(plan, [].iter()) }).map_err(|InvalidMarkup(e)| Markup.quoted_error("HTML", e))
+	from_quote = |source| Html.parse_segments([source], {}).map_ok(|plan| Html.Template.{ bound: MarkupTemplate.capture(plan, [].iter()) }).map_err(|InvalidMarkup(e)| MarkupCore.quoted_error("HTML", e))
 
 	## Validate fixed segments at compile time and capture arbitrary typed
 	## bindings through the compiler's Iter-based interpolation assembler.
@@ -114,27 +78,22 @@ HtmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 	from_interpolation = |segments| Html.parse_segments(segments, {}).map_ok(|plan| |values| Html.Template.{ bound: MarkupTemplate.capture(plan, values) }).map_err(|InvalidMarkup(e)| MarkupTemplate.interpolation_error(e))
 }
 
-HtmlFragment := { parsed : Markup.Parsed }.{
+HtmlFragment := { parsed : MarkupCore.Parsed }.{
 
 	## Validate imported fragment text with named diagnostics and options.
-	validate : Html.ValidationProps -> Try(Html.Fragment, [BadQuotedBytes(Str)])
-	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(e)| Literal.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: e.line, column: e.column }))
+	validate : Html.ValidationProps -> Try(Html.Fragment, [InvalidMarkup(MarkupCore.Error)])
+	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| InvalidMarkup({ ..error, path: error.path.append(Source(DiagnosticOwnership.own_text(props.name))) }))
 
 	## Check a fragment literal in the default body context.
 	from_quote : Str -> Try(Html.Fragment, [BadQuotedBytes(Str)])
-	from_quote = |text| Html.parse_fragment(text, {}).map_err(|InvalidMarkup(e)| Markup.quoted_error("HTML", e))
+	from_quote = |text| Html.parse_fragment(text, {}).map_err(|InvalidMarkup(e)| MarkupCore.quoted_error("HTML", e))
 
 	## Require exactly one element root, ignoring comments/whitespace.
-	single_element : Html.Fragment -> Try(Markup.Node, [RootCount(U64)])
+	single_element : Html.Fragment -> Try(MarkupCore.Node, [RootCount(U64)])
 	single_element = |fragment| {
-		root = Markup.single_root(fragment.parsed.tree)?
+		root = (fragment.parsed.tree).single_root()?
 		Ok(fragment.parsed.tree.nodes.get(root) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
-}
-
-namespace_uri = |name| match name.namespace {
-	Uri(uri) => uri
-	NoNamespace => ""
 }
 
 syntax = |text, props, fragment| {
@@ -142,11 +101,15 @@ syntax = |text, props, fragment| {
 		HtmlTree.parse(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props))
 	}
 	else {
-		Html.parse_syntax(text, shared(props), fragment, { local: props.context_element, namespace: Uri(props.context_namespace), prefix: Unprefixed })
+		if fragment {
+			MarkupCore.parse_xml_fragment(text, props.context_namespace, shared(props))
+		} else {
+			MarkupCore.parse_xml(text, shared(props))
+		}
 	}
 }
 
-shared : Html.Props -> Markup.Props
+shared : Html.Props -> MarkupCore.Props
 shared = |p| { syntax: p.syntax, exact_structure: p.exact_structure, strict_foreign_spelling: p.strict_foreign_spelling, recovery: p.recovery, allow_unknown_elements: p.allow_unknown_elements, allow_unknown_attributes: p.allow_unknown_attributes, check_values: p.check_values, max_source_bytes: p.max_source_bytes, max_depth: p.max_depth, max_elements: p.max_elements, max_nodes: p.max_nodes, max_slots: p.max_slots, max_attributes: p.max_attributes, max_diagnostics: p.max_diagnostics, max_work_per_byte: p.max_work_per_byte }
 
 # Browser recovery retains reference diagnostics while Exact independently checks
@@ -159,9 +122,9 @@ expect {
 			root = parsed.tree.roots.first()?
 			node = parsed.tree.nodes.get(root)?
 			attribute = node.attributes.first()?
-			Markup.text(parsed.tree, root) == "a\rb" and attribute.value == "a\rb" and parsed.source.bytes == source.to_utf8() and parsed.source.partition_valid() and parsed.diagnostics == [
-				{ problem: HtmlSyntax(InvalidCharacterReference), line: 1, column: 12 },
-				{ problem: HtmlSyntax(InvalidCharacterReference), line: 1, column: 21 },
+			(parsed.tree).text(root) == "a\rb" and attribute.value == "a\rb" and parsed.source.bytes == source.to_utf8() and parsed.source.partition_valid() and parsed.diagnostics == [
+				Diagnostic.{ problem: HtmlSyntax(InvalidCharacterReference), location: Text({ offset: 11, line: 1, column: 12 }), path: [] },
+				Diagnostic.{ problem: HtmlSyntax(InvalidCharacterReference), location: Text({ offset: 20, line: 1, column: 21 }), path: [] },
 			]
 		}
 		Err(_) => False
@@ -169,7 +132,7 @@ expect {
 }
 expect {
 	match Html.parse_fragment("<p title='a&#13;b'>a&#xD;b</p>", { exact_structure: True }) {
-		Err(InvalidMarkup({ problem: HtmlSyntax(InvalidCharacterReference), line: 1, column: 12 })) => True
+		Err(InvalidMarkup(Diagnostic.{ problem: HtmlSyntax(InvalidCharacterReference), location: Text({ offset: 11, line: 1, column: 12 }), path: [] })) => True
 		_ => False
 	}
 }
@@ -181,7 +144,7 @@ expect {
 			root = parsed.tree.roots.first()?
 			node = parsed.tree.nodes.get(root)?
 			attribute = node.attributes.first()?
-			Markup.text(parsed.tree, root) == "a\nb\nc" and attribute.value == "a\nb\nc" and parsed.source.bytes == source.to_utf8() and parsed.diagnostics.is_empty()
+			(parsed.tree).text(root) == "a\nb\nc" and attribute.value == "a\nb\nc" and parsed.source.bytes == source.to_utf8() and parsed.diagnostics.is_empty()
 		}
 		Err(_) => False
 	}
@@ -189,9 +152,9 @@ expect {
 expect {
 	source = "<p>\u(000B)</p>"
 	match (Html.parse_fragment(source, {}), Html.parse_fragment(source, { recovery: Browser, exact_structure: True })) {
-		(Err(InvalidMarkup({ problem: HtmlSyntax(ControlCharacterInInputStream), line: 1, column: 4 })), Ok(fragment)) => {
+		(Err(InvalidMarkup(Diagnostic.{ problem: HtmlSyntax(ControlCharacterInInputStream), location: Text({ offset: 3, line: 1, column: 4 }), path: [] })), Ok(fragment)) => {
 			root = fragment.parsed.tree.roots.first()?
-			Markup.text(fragment.parsed.tree, root) == "\u(000B)" and fragment.parsed.diagnostics == [{ problem: HtmlSyntax(ControlCharacterInInputStream), line: 1, column: 4 }]
+			(fragment.parsed.tree).text(root) == "\u(000B)" and fragment.parsed.diagnostics == [Diagnostic.{ problem: HtmlSyntax(ControlCharacterInInputStream), location: Text({ offset: 3, line: 1, column: 4 }), path: [] }]
 		}
 		_ => False
 	}
@@ -209,7 +172,7 @@ expect {
 	}
 }
 
-expect Html.parse_str("<!doctype html><html lang='en'><head><title>Example</title></head><body><p>Hello &amp; welcome</p></body></html>").is_ok()
+expect Html.parse_str("<!doctype html><html lang='en'><head><title>Example</title></head><body><p>Hello &amp; welcome</p></body></html>", {}).is_ok()
 expect Html.parse_fragment("<input type='CHECKBOX' checked><span aria-pressed='false'>x</span>", {}).is_ok()
 expect Html.parse_fragment("<div hidden='false'></div>", {}).is_err()
 expect Html.parse_fragment("<div hidden='until-found'></div>", {}).is_ok()
@@ -221,10 +184,10 @@ expect Html.parse_fragment("<x-widget custom='yes'></x-widget>", {}).is_ok()
 expect Html.parse_fragment("<span custom='yes'></span>", { allow_unknown_attributes: True }).is_ok()
 expect Html.parse_fragment("<span aria-presed='false'></span>", {}).is_err()
 expect Html.parse_fragment("<table><tr><td>x</table>", {}).is_ok()
-expect Html.parse_fragment("<circle r='2'/>", { context_namespace: Markup.svg_namespace, context_element: "svg" }).is_ok()
+expect Html.parse_fragment("<circle r='2'/>", { context_namespace: MarkupCore.svg_namespace, context_element: "svg" }).is_ok()
 expect Html.parse_fragment("<div xmlns='http://www.w3.org/1999/xhtml'/>", { syntax: XmlSyntax }).is_ok()
 expect Html.parse_fragment("<input checked>", { syntax: XmlSyntax }).is_err()
-expect Html.parse_segments(["<button disabled='", "'>", "</button>"], {}).map_ok(|p| p.slots.len()) == Ok(2)
+expect Html.parse_segments(["<button disabled='", "'>", "</button>"], {}).map_ok(|p| p.metadata().slots.len()) == Ok(2)
 expect Html.parse_segments(["<", "></div>"], {}).is_err()
 expect {
 	fragment : Html.Fragment
@@ -234,16 +197,16 @@ expect {
 expect {
 	template : Html.Template(U64)
 	template = "<p>${42.U64}</p>"
-	template.bound.values == [42]
+	template.bound.metadata().values == [42]
 }
 
 expect Html.parse_fragment("<input disabled checked=\"\"><br><hr>", {}).is_ok()
 expect {
 	p = Html.parse_segments(["<svg><circle r='", "'/></svg>"], {})?
-	p.slots.first()?.expected == NonnegativeLength
+	p.metadata().slots.first()?.expected == NonnegativeLength
 }
 expect Html.parse_segments(["<span>", "</span>"], { max_slots: 0 }).is_err()
-expect Html.parse_with("<html/>", { max_diagnostics: 0 }).is_err()
+expect Html.parse_str("<html/>", { max_diagnostics: 0 }).is_err()
 
 expect {
 	f = Html.parse_fragment("<unknown thing='x'></unknown>", { allow_unknown_elements: True, allow_unknown_attributes: True })?
@@ -254,7 +217,7 @@ expect Html.parse_fragment("<button><input type='hidden'></button>", {}).is_ok()
 expect Html.parse_segments(["<table>", "</table>"], {}).is_err()
 expect {
 	plan = Html.parse_segments(["<textarea>\nA", "B</textarea>"], {})?
-	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "AB"
+	(plan.metadata().parsed.tree).text((plan.metadata().parsed.tree).single_root()?) == "AB"
 }
 
 expect Html.parse_segments(["<script>if(a<b)x()</script><p>", "</p>"], {}).is_ok()
@@ -265,17 +228,18 @@ expect Html.parse_segments(["<style>a>b { color:red }</style><p>", "</p>"], {}).
 expect Html.parse_segments(["", ""], { context_element: "script" }).is_err()
 expect {
 	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option>", "</option></select>"], {})?
-	p.slots.len() == 2 and p.slots.all(|slot| slot.index == 0) and MarkupTemplate.bind(p, [42.U64].iter()).is_ok()
+	p.metadata().slots.len() == 2 and p.metadata().slots.all(|slot| slot.index == 0) and MarkupTemplate.bind_values(p, [42.U64].iter()).is_ok()
 }
 expect {
 	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option>", "", "</option></select>"], {})?
-	p.slots.len() == 4 and p.slots.keep_if(|slot| slot.index == 0).len() == 2 and p.slots.keep_if(|slot| slot.index == 1).len() == 2
+	p.metadata().slots.len() == 4 and p.metadata().slots.keep_if(|slot| slot.index == 0).len() == 2 and p.metadata().slots.keep_if(|slot| slot.index == 1).len() == 2
 }
 expect {
 	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option><span title='", "'>x</span></option></select>"], {})?
-	p.slots.len() == 2 and p.slots.all(|slot| slot.index == 0)
+	p.metadata().slots.len() == 2 and p.metadata().slots.all(|slot| slot.index == 0)
 }
 
+authored_syntax : Str, Html.Props, Bool -> Try({ parsed : MarkupCore.Parsed, domain : [General, PureHtmlNoProjection] }, [InvalidMarkup(MarkupCore.Error)])
 authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
 	HtmlTree.parse_classified(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting, defer_projection: True }, shared(props))
 } else {
@@ -288,7 +252,7 @@ authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
 validate_authored = |parsed, props, domain| if domain == PureHtmlNoProjection {
 	HtmlValidate.validate(parsed, props, [])
 } else {
-	Html.validate_tree(parsed, props, [])
+	MarkupValidation.check(parsed, props, [])
 }
 
 project_authored = |parsed, props, fragment, domain| if domain == PureHtmlNoProjection {
@@ -340,7 +304,7 @@ expect {
 		"<math xmlns='http://www.w3.org/1998/Math/MathML'><mfrac><mi>x</mi><mn>2</mn></mfrac></math>",
 		"<math xmlns='http://www.w3.org/1998/Math/MathML'><annotation-xml><h:img xmlns:h='http://www.w3.org/1999/xhtml'/></annotation-xml></math>",
 	]
-	options : List(Markup.Props)
+	options : List(MarkupCore.Props)
 	options = [
 		{},
 		{ allow_unknown_elements: True, allow_unknown_attributes: True },
@@ -349,13 +313,13 @@ expect {
 	]
 	var $same = True
 	for source in sources {
-		parsed = Markup.parse_xml_fragment(source, Markup.svg_namespace, {})?
+		parsed = MarkupCore.parse_xml_fragment(source, MarkupCore.svg_namespace, {})?
 		for props in options {
 			legacy = match MarkupValidate.foreign(parsed, props, []) {
 				Ok(foreign) => HtmlValidate.validate(foreign, props, [])
 				Err(error) => Err(error)
 			}
-			$same = $same and Html.validate_tree(parsed, props, []) == legacy
+			$same = $same and MarkupValidation.check(parsed, props, []) == legacy
 		}
 	}
 	$same
@@ -387,13 +351,13 @@ expect {
 	p.domain == General
 }
 expect {
-	p = Html.parse_source("<p>x</p>", {}, True)?
+	p = Html.parse_source("<p>x</p>", { mode: Fragment })?
 	id = p.tree.roots.first()?
 	node = p.tree.nodes.get(id)?
 	match node.kind {
 		Element(name) => {
 			forged = { ..p, tree: { ..p.tree, nodes: p.tree.nodes.set(id, { ..node, kind: Element({ ..name, namespace: Uri("urn:untrusted") }) })? } }
-			Html.validate_tree(forged, {}, []).is_err()
+			MarkupValidation.check(forged, {}, []).is_err()
 		}
 		_ => False
 	}
@@ -408,7 +372,7 @@ expect {
 	cases.all(
 		|case| match Html.parse_fragment(case.source, { strict_foreign_spelling: True, recovery: if (case.browser) Browser else Strict, allow_unknown_attributes: True, check_values: False }) {
 			Err(InvalidMarkup(error)) => match error.problem {
-				NonCanonicalName(detail) => detail == { authored: case.authored, expected: case.expected, span: { start: case.start, end: case.end } } and error.line == case.line and error.column == case.column
+				NonCanonicalName(detail) => detail == { authored: case.authored, expected: case.expected, span: { start: case.start, end: case.end } } and (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).line == case.line and (Diagnostic.line_column(error.location) ?? { line: 1, column: 1 }).column == case.column
 				_ => False
 			}
 			_ => False
@@ -425,15 +389,15 @@ expect Html.parse_fragment("<svg xmlns='http://www.w3.org/2000/svg' viewbox='0 0
 expect Html.parse_segments(["<svg viewbox='", "'></svg>"], { strict_foreign_spelling: True }).is_err()
 expect {
 	plan = Html.parse_segments(["<svg viewBox='", "'></svg>"], { strict_foreign_spelling: True })?
-	_ = Html.Template.bind(plan, ["0 0 1 1"].iter())?
+	_ = plan.bind(["0 0 1 1"].iter())?
 	True
 }
 expect match Html.parse_fragment("<svg viewbox='x' viewbox='y'></svg>", { strict_foreign_spelling: True, max_diagnostics: 0 }) {
-	Err(InvalidMarkup(error)) => error.problem == ResourceLimit("max_diagnostics")
+	Err(InvalidMarkup(error)) => error.problem == LimitExceeded({ resource: Diagnostics, max: 0, observed: AtLeast(0 + 1) })
 	_ => False
 }
 expect match Html.parse_fragment("<svg viewbox='x'></svg>", { strict_foreign_spelling: True, max_attributes: 0 }) {
-	Err(InvalidMarkup(error)) => error.problem == LimitExceeded(Attributes)
+	Err(InvalidMarkup(error)) => error.problem == LimitExceeded({ resource: Xml(Attributes), max: 0, observed: AtLeast(1) })
 	_ => False
 }
 expect match Html.parse_fragment("<svg viewbox='x' viewbox='y'></svg>", { strict_foreign_spelling: True }) {
@@ -464,4 +428,41 @@ expect match Html.parse_fragment("<svg a\u(0)b='x'></svg>", { strict_foreign_spe
 		_ => False
 	}
 	_ => False
+}
+
+parse_document : Str, Html.Props -> Try(Html, [InvalidMarkup(MarkupCore.Error)])
+parse_document = |text, props| {
+	authored = authored_syntax(text, props, False)?
+	parsed : MarkupCore.Parsed
+	parsed = authored.parsed
+	domain = authored.domain
+	root = (parsed.tree).single_root().map_err(|_| InvalidMarkup(Diagnostic.{ problem: WrongRoot({ expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" }, actual: Fragment }), location: LineColumn({ line: 1, column: 1 }), path: [] }))?
+	node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(MissingRoot), location: LineColumn({ line: 1, column: 1 }), path: [] }))
+	match node.kind {
+		Element(n) if n.namespace == Uri(MarkupCore.html_namespace) and n.local == "html" => {}
+		_ => return Err(
+			InvalidMarkup(
+				Diagnostic.{
+					problem: WrongRoot({
+						expected: { namespace: Uri(MarkupCore.html_namespace), local: "html" },
+						actual: match node.kind {
+							Element(name) => Element(name)
+							_ => Text
+						},
+					}),
+					location: LineColumn({ line: 1, column: 1 }),
+					path: [],
+				},
+			),
+		)
+	}
+	checked = validate_authored(parsed, shared(props), domain)?
+	Ok(Html.{ parsed: project_authored(checked, props, False, domain)? })
+}
+
+parse_fragment_source : Str, Html.Props -> Try(Html.Fragment, [InvalidMarkup(MarkupCore.Error)])
+parse_fragment_source = |text, props| {
+	{ parsed, domain } = authored_syntax(text, props, True)?
+	checked = validate_authored(parsed, shared(props), domain)?
+	Ok(HtmlFragment.{ parsed: project_authored(checked, props, True, domain)? })
 }

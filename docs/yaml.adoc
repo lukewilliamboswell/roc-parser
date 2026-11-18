@@ -31,7 +31,7 @@ Both import `parser.Yaml`.
 
 == Decode a document into a record
 
-`Yaml.decode` reads a document straight into your own Roc type. You do not
+`Yaml.decode_str(source, props)` reads a document straight into your own Roc type. You do not
 pass the type: it is inferred from how the result is used, usually from a
 type annotation. This configuration, held in a Roc multi-line string (each
 `\\` starts one line of the file):
@@ -75,10 +75,10 @@ The rules that map YAML onto Roc types:
   `email` for Grace above.
 
 A value of the wrong shape or out of range fails with `InvalidYaml` at that
-value's line and column, the same error invalid YAML gives. A required field
-whose key is absent fails with `MissingRequiredField(name)`. Your code does
-not declare that tag: the compiler adds it to the error type of every decoder
-of a record with required fields, so name it in the annotation:
+value's line and column, the same error invalid YAML gives. A required field whose key is absent fails with `InvalidYaml`: its problem is
+`MissingRequiredField(name)`, its path includes `Key(name)`, and its physical
+location is `Unavailable(NotRetained)`. No additional error tag is needed in the
+result annotation:
 
 [source,roc]
 ----
@@ -93,7 +93,7 @@ include::examples/yaml-guide.expected[lines=18..20]
 
 === Other key spellings and unknown keys
 
-`Yaml.decoder` builds a decoder with other conventions. `keys` says how YAML
+The props of `Yaml.decode_str` select other conventions. `keys` says how YAML
 spells Roc's `snake_case` field names: `SnakeCase` (as written), `KebabCase`
 (`user-id`) or `CamelCase` (`userId`). `unknown_keys: Reject` turns a key the
 record does not have into an `InvalidYaml` error, which catches typos in
@@ -104,9 +104,15 @@ hand-written configuration:
 include::examples/yaml-guide.roc[tag=strict,indent=0]
 ----
 
-Build the decoder once, as a top-level constant, and call it for each
-document. To write your own generic function over decodable types, require
-`a.Yaml.Parseable(errors)` in its `where` clause, the way `Yaml.decode` does.
+For a reusable configured parser, construct `Yaml.value_parser(props)` and
+call its `.parse_str(source)` runner. It reports the shared `ParseError`
+diagnostic envelope. A generic function over decodable types requires
+`a.Yaml.Parseable(errors)` in its `where` clause.
+
+Custom scalar types implement `parser_for` using `Yaml.Format(errors)` and
+return the same complete error row from their cursor callback. Include custom
+problem tags in a `Try` result annotation when combining them with a derived
+record; the format hooks preserve those payloads alongside native YAML errors.
 
 == Explore a document as a tree
 
@@ -146,9 +152,9 @@ include::examples/yaml-guide.expected[lines=16..17]
 ----
 
 Empty input, or a document holding only comments, parses as `Null`. To
-combine YAML with other parsers, `Yaml.parser` is a `Parser(Utf8.Bytes, Yaml)`
-that reads the rest of its input; its `ParseError` offset is the byte offset
-of the error's line and column.
+combine YAML with other parsers, `Yaml.parser(props)` is a `Parser(Parser.Utf8.Bytes, Yaml, Yaml.Problem)`
+that reads the rest of its input. Its runners report `ParseError` with the
+shared `{ problem, location, path }` envelope.
 
 == Read Markdown frontmatter
 
@@ -171,7 +177,7 @@ For `"---\ntitle: Hello\ntags: [roc, yaml]\n---\n# Hello\n"`, printing
 include::examples/yaml-guide.expected[lines=2..3]
 ----
 
-`Yaml.decode` works on the same text when you know the frontmatter's fields.
+`Yaml.decode_str(source, props)` works on the same text when you know the frontmatter's fields.
 
 [#yaml-scalars]
 == How plain values are typed
@@ -212,7 +218,7 @@ The last four values show what stays text: a version number such as `1.2.3`,
 a number with `_` separators, anything in quotes, and dates (YAML 1.2 has no
 timestamp type). `tRUE` and `0X1` are text too, because the core schema
 allows only the spellings in the table. In a tree, quote a value whenever it
-must stay text; `Yaml.decode` reads any non-null plain scalar into a `Str`
+must stay text; `Yaml.decode_str(source, props)` reads any non-null plain scalar into a `Str`
 field as written.
 
 `Yaml.to_inspect` prints a tree in Roc notation, escaping line breaks, tabs
@@ -436,8 +442,14 @@ Mapping keys are kept as their source text, not resolved like values. `1` and
 
 == Show where an error is
 
-`InvalidYaml` carries a `Yaml.Error` record: a one-based `line` and `column`
-and a message. Columns count bytes from the start of the line:
+`InvalidYaml` carries a `Yaml.Error` diagnostic with `problem`, `location`,
+and `path`. Complete source parsing provides `Text({ offset, line, column })`: a
+zero-based original byte offset and one-based line and byte column, including
+BOM and CRLF bytes. Missing cursor positions explicitly use
+`Unavailable(NotRetained)`. Match the native `Yaml.Problem` union to distinguish
+failures. Limit payloads include the typed resource, maximum and observed
+count; invalid characters retain a bounded source excerpt. Use `Str.inspect(error.problem)` when displaying
+a diagnostic at an application boundary:
 
 [source,roc]
 ----

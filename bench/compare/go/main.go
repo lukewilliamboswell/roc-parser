@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aclindsa/ofxgo"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -44,10 +45,30 @@ func parseCSV(s string) (uint64, error) {
 	for _, row := range rows {
 		total++
 		for _, f := range row {
-			total += uint64(len(f))
+			total += financeFieldChecksum(f)
 		}
 	}
 	return total, nil
+}
+
+func consumeCSV(s string) (uint64, error) {
+	reader := csv.NewReader(strings.NewReader(s))
+	reader.FieldsPerRecord = -1
+	reader.ReuseRecord = true
+	var total uint64
+	for {
+		row, err := reader.Read()
+		if err == io.EOF {
+			return total, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		total++
+		for _, field := range row {
+			total += financeFieldChecksum(field)
+		}
+	}
 }
 
 func yamlWalk(v interface{}) uint64 {
@@ -213,14 +234,50 @@ func parseHTTP(s string) (uint64, error) {
 	return uint64(headers+len(body)) + 1, nil
 }
 
+func financeFieldChecksum(s string) uint64 {
+	var sum uint64
+	for i, b := range []byte(s) {
+		sum += uint64(i+1) * uint64(b)
+	}
+	return sum
+}
+
+func parseOFX(s string) (uint64, error) {
+	model, err := ofxgo.ParseResponse(strings.NewReader(s))
+	if err != nil {
+		return 0, err
+	}
+	var total uint64
+	consume := func(list *ofxgo.TransactionList) {
+		if list != nil {
+			for _, tx := range list.Transactions {
+				total += 1 + financeFieldChecksum(string(tx.Name)) + financeFieldChecksum(string(tx.Memo))
+			}
+		}
+	}
+	for _, message := range model.Bank {
+		if statement, ok := message.(*ofxgo.StatementResponse); ok {
+			consume(statement.BankTranList)
+		}
+	}
+	for _, message := range model.CreditCard {
+		if statement, ok := message.(*ofxgo.CCStatementResponse); ok {
+			consume(statement.BankTranList)
+		}
+	}
+	return total, nil
+}
+
 func main() {
 	impls := map[string]parseFunc{
-		"encoding-csv":  parseCSV,
-		"yaml.v3":       parseYAML,
-		"encoding-xml":  parseXML,
-		"encoding-json": parseJSON,
-		"goldmark":      parseMarkdown,
-		"net-http":      parseHTTP,
+		"ofxgo":                parseOFX,
+		"encoding-csv":         parseCSV,
+		"encoding-csv-consume": consumeCSV,
+		"yaml.v3":              parseYAML,
+		"encoding-xml":         parseXML,
+		"encoding-json":        parseJSON,
+		"goldmark":             parseMarkdown,
+		"net-http":             parseHTTP,
 	}
 	parse, ok := impls[os.Args[1]]
 	if !ok {

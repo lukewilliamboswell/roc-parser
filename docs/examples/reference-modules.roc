@@ -9,66 +9,69 @@ import parser.HTTP
 import parser.JsonValue
 import parser.Markdown
 import parser.Parser
-import parser.Utf8
 import parser.Xml
 import parser.Yaml
 
 # tag::entry-points[]
-# Parser and Utf8: build a parser from combinators, run it on a Str.
-pair : Parser(Utf8.Bytes, (U64, U64))
-pair = Parser.const(|a| |b| (a, b)).keep(Utf8.digits).skip(Utf8.codeunit(',')).keep(Utf8.digits)
+# Parser and Parser.Utf8: build a parser from combinators, run it on a Str.
+pair : Parser(Parser.Utf8.Bytes, (U64, U64), _)
+pair =
+	Parser.const(|a| |b| (a, b))
+		.keep(Parser.Utf8.digits({}))
+		.skip(Parser.Utf8.codeunit(','))
+		.keep(Parser.Utf8.digits({}))
 
 # CSV: decode each row into a record type the compiler infers from use.
-people : Str -> Try(List({ name : Str, age : U64 }), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-people = |text| CSV.parse(text)
+people : Str -> Try(List({ name : Str, age : U64 }), [InvalidCsv(CSV.Error)])
+people = |text| CSV.decode_str(text, {})
 
 # HTTP: parse one message; bytes after it are left for the next message.
 http_target : Str -> Str
 http_target = |text| {
-	match HTTP.parse_request(text.to_utf8()) {
-		Ok({ request, rest: _ }) => request.target
-		Err(InvalidHttp(e)) => "invalid request at byte ${e.offset.to_str()}"
+	match HTTP.Request.parse_bytes(text.to_utf8(), {}) {
+		Ok(request) => request.target
+		Err(InvalidHttp(e)) => "invalid request at ${Str.inspect(e.location)}"
 	}
 }
 
 # Xml and Yaml: whole-document functions that report line and column.
 xml_root : Str -> Str
 xml_root = |text| {
-	match Xml.parse_str(text) {
+	match Xml.parse_str(text, {}) {
 		Ok(doc) => Str.inspect(doc.root)
-		Err(InvalidXml(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+		Err(InvalidXml(e)) => "${Str.inspect(e.location)}: ${Str.inspect(e.problem)}"
 	}
 }
 
 yaml_value : Str -> Str
 yaml_value = |text| {
-	match Yaml.parse_str(text) {
+	match Yaml.parse_str(text, {}) {
 		Ok(value) => value.to_inspect()
-		Err(InvalidYaml(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+		Err(InvalidYaml(e)) => "${Str.inspect(e.location)}: ${Str.inspect(e.problem)}"
 	}
 }
 
 # Yaml can also decode straight into a record.
-config : Str -> Try({ title : Str, draft : Bool }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-config = |text| Yaml.decode(text)
+config : Str -> Try({ title : Str, draft : Bool }, [InvalidYaml(Yaml.Error)])
+config = |text| Yaml.decode_str(text, {})
 
 # JsonValue: a lossless tree; numbers keep their text, and it writes JSON too.
 json_sorted : Str -> Str
 json_sorted = |text| {
-	match JsonValue.parse_str(text) {
-		Ok(value) => JsonValue.to_str_with(value, { sort_keys: True }) ?? "not writable"
-		Err(InvalidJsonValue(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+	match JsonValue.parse_str(text, {}) {
+		Ok(value) => value.encode({ sort_keys: True }).map_ok(Str.from_utf8_lossy) ?? "not writable"
+		Err(InvalidJsonValue(e)) => "${Str.inspect(e.location)}: ${Str.inspect(e.problem)}"
 	}
 }
 
 # Markdown: parsing never fails, so `parse_str` returns the blocks directly.
 markdown_blocks : Str -> Str
-markdown_blocks = |text| Str.join_with(Markdown.parse_str(text).map(Str.inspect), "\n")
+markdown_blocks = |text| Str.join_with(Markdown.parse_str(text, {}).map(Str.inspect), "\n")
 
 # end::entry-points[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(Utf8.parse_str(pair, "3,4")))?
+	Stdout.line!(Str.inspect((pair).parse_str("3,4")))?
 	Stdout.line!(Str.inspect(people("name,age\nAda,36\nAlan,41\n")))?
 	Stdout.line!(http_target("GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n"))?
 	Stdout.line!(xml_root("<greeting lang=\"en\">hi</greeting>"))?

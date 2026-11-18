@@ -136,7 +136,7 @@ def probe_identity(roc: str) -> dict:
     for path in sorted([*(ROOT / 'package').glob('*.roc'), *DATA.glob('*.roc')]):
         identity.update(path.relative_to(ROOT).as_posix().encode() + b'\0' + path.read_bytes() + b'\0')
     compiler = Path(shutil.which(roc) or roc)
-    return {'source_sha256': identity.hexdigest(), 'compiler_sha256': hashlib.sha256(compiler.read_bytes()).hexdigest(), 'flags': ['--no-cache', '--opt=dev']}
+    return {'source_sha256': identity.hexdigest(), 'compiler_sha256': hashlib.sha256(compiler.read_bytes()).hexdigest(), 'flags': ['--opt=dev']}
 
 
 def build_probe(roc: str, work: Path) -> Path:
@@ -151,7 +151,7 @@ def build_probe(roc: str, work: Path) -> Path:
                 return executable
         except (ValueError, KeyError):
             pass
-    result = subprocess.run([roc, 'build', '--no-cache', '--opt=dev', str(DATA / 'probe.roc'), '--output=' + str(executable)], cwd=ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run([roc, 'build', '--opt=dev', str(DATA / 'probe.roc'), '--output=' + str(executable)], cwd=ROOT, capture_output=True, text=True, check=False)
     log = work / 'probe-build.log'
     log.write_text(result.stdout + result.stderr)
     if result.returncode:

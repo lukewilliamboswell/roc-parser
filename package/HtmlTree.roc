@@ -1,6 +1,7 @@
-import Markup
+import Parser
+import Diagnostic
+import MarkupCore
 import HtmlTokenizer as Tok
-import Literal
 import MarkupHtmlError
 import MarkupVocabulary
 import HtmlContextRules
@@ -9,20 +10,20 @@ import HtmlContextRules
 ## separate from the indexed output tree so recovery can reparent existing nodes.
 HtmlTree :: [].{
 	# Internal HTML spellings used by constructor-context preservation checks.
-	canonical_element_name : Str, Str -> Markup.Name
+	canonical_element_name : Str, Str -> MarkupCore.Name
 	canonical_element_name = |qualified, namespace| { namespace: if (namespace == "") NoNamespace else Uri(namespace), prefix: Unprefixed, local: adjust_tag(Tok.lower(qualified), namespace) }
-	canonical_attribute_name : Str, Str -> Markup.Name
+	canonical_attribute_name : Str, Str -> MarkupCore.Name
 	canonical_attribute_name = |qualified, namespace| attribute_name(Tok.lower(qualified), namespace)
 	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True, defer_projection : Bool ?? False }
 
 	## Recompute derived selected option content after a template materializes
 	## explicit text-hole nodes. This edits the tree and never reparses source.
 	Clone : { original : U64, clone : U64 }
-	project_parsed : Markup.Parsed, Markup.Props -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
+	project_parsed : MarkupCore.Parsed, MarkupCore.Props -> Try({ parsed : MarkupCore.Parsed, clones : List(Clone) }, [InvalidMarkup(MarkupCore.Error)])
 	project_parsed = |parsed, props| project_parsed_with(parsed, props, True)
 
 	## Preserve document depth and element accounting for complete HTML roots.
-	project_parsed_with : Markup.Parsed, Markup.Props, Bool -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
+	project_parsed_with : MarkupCore.Parsed, MarkupCore.Props, Bool -> Try({ parsed : MarkupCore.Parsed, clones : List(Clone) }, [InvalidMarkup(MarkupCore.Error)])
 	project_parsed_with = |parsed, props, fragment| {
 		# Most fragments have no selected option projection. Keep their arena
 		# untouched and avoid rebuilding a parent index for the derived phase.
@@ -30,7 +31,7 @@ HtmlTree :: [].{
 		var $at = 0
 		while $at < parsed.tree.nodes.len() {
 			match (parsed.tree.nodes.get($at) ?? empty_node).kind {
-				Element(name) if name.namespace == Uri(Markup.html_namespace) and name.local == "selectedcontent" => {
+				Element(name) if name.namespace == Uri(MarkupCore.html_namespace) and name.local == "selectedcontent" => {
 					$candidate = True
 					break
 				}
@@ -55,21 +56,48 @@ HtmlTree :: [].{
 		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, context_class: HtmlNamespace, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		projected = project_selectedcontent(state, props).map_err(
 			|InvalidMarkup(e)| {
-				at = Markup.position(parsed.source, e.column)
-				InvalidMarkup({ ..e, line: at.line, column: at.column })
+				location = match Diagnostic.byte_offset(e.location) {
+					Ok(offset) => {
+						at = parsed.source.position(offset)
+						Text({ offset, line: at.line, column: at.column })
+					}
+					Err(NoByteOffset) => e.location
+				}
+				InvalidMarkup({ ..e, location })
 			},
 		)?
 		Ok({ parsed: { ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } }, clones: projected.clones })
 	}
-	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	# Template-only construction receipts. Origins describe source provenance;
+	# they are not element containment ranges (adoption/form closes may retain
+	# only an opening token). Record the actual open parent before each boundary.
+	Placement : { offset : U64, parent : Try(U64, [Missing]) }
+	Placed : { parsed : MarkupCore.Parsed, parents : List(Placement) }
+	parse_placed : Str, Bool, Context, MarkupCore.Props, List(U64) -> Try(Placed, [InvalidMarkup(MarkupCore.Error)])
+	parse_placed = |source, fragment, context, props, boundaries| {
+		if fragment and context.namespace == MarkupCore.html_namespace and (context.name == "body" or context.name == "div") {
+			match direct_fragment_placed(source, context.namespace, props, boundaries) {
+				Ok(result) => return Ok(result)
+				Err(Replay) => {}
+			}
+		}
+		if !fragment and context.namespace == MarkupCore.html_namespace {
+			match direct_document_placed(source, context.namespace, props, boundaries) {
+				Ok(result) => return Ok(result)
+				Err(Replay) => {}
+			}
+		}
+		parse_general_placed(source, fragment, context, props, boundaries)
+	}
+	parse : Str, Bool, Context, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	parse = |source, fragment, context, props| {
-		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
+		if fragment and context.namespace == MarkupCore.html_namespace and (context.name == "body" or context.name == "div") {
 			match direct_fragment(source, context.namespace, props) {
 				Ok(parsed) => return Ok(parsed)
 				Err(Replay) => {}
 			}
 		}
-		if !fragment and context.namespace == Markup.html_namespace {
+		if !fragment and context.namespace == MarkupCore.html_namespace {
 			match direct_document(source, context.namespace, props) {
 				Ok(parsed) => return Ok(parsed)
 				Err(Replay) => {}
@@ -80,16 +108,16 @@ HtmlTree :: [].{
 
 	## Internal proof carried only from a successful conservative direct parse.
 	Domain : [PureHtmlNoProjection, General]
-	Classified : { parsed : Markup.Parsed, domain : Domain }
-	parse_classified : Str, Bool, Context, Markup.Props -> Try(Classified, [InvalidMarkup(Markup.Error)])
+	Classified : { parsed : MarkupCore.Parsed, domain : Domain }
+	parse_classified : Str, Bool, Context, MarkupCore.Props -> Try(Classified, [InvalidMarkup(MarkupCore.Error)])
 	parse_classified = |source, fragment, context, props| {
-		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
+		if fragment and context.namespace == MarkupCore.html_namespace and (context.name == "body" or context.name == "div") {
 			match direct_fragment(source, context.namespace, props) {
 				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
 				Err(Replay) => {}
 			}
 		}
-		if !fragment and context.namespace == Markup.html_namespace {
+		if !fragment and context.namespace == MarkupCore.html_namespace {
 			match direct_document(source, context.namespace, props) {
 				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
 				Err(Replay) => {}
@@ -99,16 +127,20 @@ HtmlTree :: [].{
 		Ok({ parsed, domain: General })
 	}
 
-	parse_general : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	parse_general = |source, fragment, context, props| {
+	parse_general : Str, Bool, Context, MarkupCore.Props -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
+	parse_general = |source, fragment, context, props| parse_general_placed(source, fragment, context, props, []).map_ok(|result| result.parsed)
+
+	parse_general_placed : Str, Bool, Context, MarkupCore.Props, List(U64) -> Try(Placed, [InvalidMarkup(MarkupCore.Error)])
+	parse_general_placed = |source, fragment, context, props, boundaries| {
+		var $placements = { cursor: 0, parents: [] }
 		if source.count_utf8_bytes() > props.max_source_bytes {
-			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
+			return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: SourceBytes, max: props.max_source_bytes, observed: AtLeast(props.max_source_bytes + 1) }), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		initial : State
 		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, context_class: namespace_class(context.namespace), diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		var $state = initial
 		if fragment {
-			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
+			$state = insert_element($state, "html", MarkupCore.html_namespace, [], Implied(0), True)
 			$state = { ..$state, mode: context_mode(context.name) }
 		}
 		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
@@ -138,13 +170,13 @@ HtmlTree :: [].{
 			match next.limited {
 				NoLimit => {}
 				Attributes => {
-					at = Literal.position(source, next.token.span.start)
-					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+					at = Parser.Quotation.position(source, next.token.span.start)
+					return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Attributes), max: props.max_attributes, observed: AtLeast(props.max_attributes + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 				}
 				Diagnostics => {
 					offset = next.reader.diagnostics.last().map_ok(|d| d.offset) ?? next.token.span.start
-					at = Literal.position(source, offset)
-					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+					at = Parser.Quotation.position(source, offset)
+					return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 				}
 			}
 			if props.exact_structure {
@@ -167,6 +199,10 @@ HtmlTree :: [].{
 				Err(_) => {}
 			}
 
+			parent = if fragment and $state.stack.last() == Ok(0) {
+				Err(Missing)
+			} else $state.stack.last().map_err(|_| Missing)
+			$placements = record_boundaries(boundaries, $placements, next.token.span.start, parent)
 			previous_nodes = $state.nodes.len()
 			# Resolve the end target before mutation without retaining the old arena.
 			expected_end = if props.strict_foreign_spelling and $spelling_failure.is_err() {
@@ -216,29 +252,29 @@ HtmlTree :: [].{
 				}
 			}
 			if ($state.stack.len() - if (fragment) 1 else 0) > props.max_depth {
-				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: at.line, column: at.column }))
+				at = Parser.Quotation.position(source, next.token.span.start)
+				return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Depth), max: props.max_depth, observed: AtLeast(props.max_depth + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 			}
 			if ($state.element_count - if (fragment) 1 else 0) > props.max_elements {
-				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: at.line, column: at.column }))
+				at = Parser.Quotation.position(source, next.token.span.start)
+				return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Elements), max: props.max_elements, observed: AtLeast(props.max_elements + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 			}
 			if $state.nodes.len() > props.max_nodes {
-				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: at.line, column: at.column }))
+				at = Parser.Quotation.position(source, next.token.span.start)
+				return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Nodes, max: props.max_nodes, observed: AtLeast(props.max_nodes + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 			}
 			if $state.diagnostics_exceeded or $reader.diagnostics.len() + $state.diagnostics.len() > props.max_diagnostics {
-				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+				at = Parser.Quotation.position(source, next.token.span.start)
+				return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 			}
 			if $state.work > $state.work_limit {
-				at = Literal.position(source, next.token.span.start)
-				return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: at.line, column: at.column }))
+				at = Parser.Quotation.position(source, next.token.span.start)
+				return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: ParserWork, max: $state.work_limit, observed: AtLeast($state.work_limit + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 			}
 			match next.token.kind {
 				Start(tag) if tag.attributes.len() > props.max_attributes => {
-					at = Literal.position(source, next.token.span.start)
-					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+					at = Parser.Quotation.position(source, next.token.span.start)
+					return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Attributes), max: props.max_attributes, observed: AtLeast(props.max_attributes + 1) }), location: LineColumn({ line: at.line, column: at.column }), path: [] }))
 				}
 				Eof => {
 					$done = True
@@ -253,16 +289,17 @@ HtmlTree :: [].{
 		var $diagnostics = $state.diagnostics
 		for d in $reader.diagnostics {
 			if $diagnostics.len() < props.max_diagnostics {
-				$diagnostics = $diagnostics.append({ problem: HtmlSyntax(d.code), line: 0, column: d.offset })
+				$diagnostics = $diagnostics.append(Diagnostic.{ problem: HtmlSyntax(d.code), location: ByteOffset(d.offset), path: [] })
 			}
 		}
 		diagnostics = $diagnostics.map(
 			|d| {
-				if d.line != 0 {
-					d
-				} else {
-					at = Literal.position(source, d.column)
-					{ ..d, line: at.line, column: at.column }
+				match d.location {
+					ByteOffset(offset) => {
+						at = Parser.Quotation.position(source, offset)
+						{ ..d, location: Text({ offset, line: at.line, column: at.column }) }
+					}
+					_ => d
 				}
 			},
 		)
@@ -270,35 +307,45 @@ HtmlTree :: [].{
 			exact_structure(source, fragment, $state, $authored_tokens, $reader.diagnostics, $authored_repairs, $authored_creation)?
 		}
 		if props.recovery == Strict and !diagnostics.is_empty() {
-			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
+			return Err(InvalidMarkup(diagnostics.first() ?? Diagnostic.{ problem: HtmlSyntax(InvalidHtml), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 		}
 		match $spelling_failure {
 			Ok(detail) => {
-				at = Literal.position(source, detail.span.start)
-				return Err(InvalidMarkup({ problem: NonCanonicalName(detail), line: at.line, column: at.column }))
+				at = Parser.Quotation.position(source, detail.span.start)
+				return Err(InvalidMarkup(Diagnostic.{ problem: NonCanonicalName(detail), location: Text({ offset: detail.span.start, line: at.line, column: at.column }), path: [] }))
 			}
 			Err(None) => {}
 		}
 		if !context.defer_projection {
 			$state = project_selectedcontent($state, props).map_err(
 				|InvalidMarkup(e)| {
-					at = Literal.position(source, e.column)
-					InvalidMarkup({ ..e, line: at.line, column: at.column })
+					location = match Diagnostic.byte_offset(e.location) {
+						Ok(offset) => {
+							at = Parser.Quotation.position(source, offset)
+							Text({ offset, line: at.line, column: at.column })
+						}
+						Err(NoByteOffset) => e.location
+					}
+					InvalidMarkup({ ..e, location })
 				},
 			)?
 		}
 		roots = if fragment {
 			(node_at($state, 0)).children
 		} else $state.roots
-		Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics })
+		Ok({ parsed: { source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics }, parents: $placements.parents })
 	}
 }
 
 # A small proof domain over the unchanged context-sensitive tokenizer. Every
 # uncertain token, repair, diagnostic or resource boundary replays the complete
 # general parser, which owns error precedence and all HTML recovery behavior.
-direct_fragment : Str, Str, Markup.Props -> Try(Markup.Parsed, [Replay])
-direct_fragment = |source, namespace, props| {
+direct_fragment : Str, Str, MarkupCore.Props -> Try(MarkupCore.Parsed, [Replay])
+direct_fragment = |source, namespace, props| direct_fragment_placed(source, namespace, props, []).map_ok(|result| result.parsed)
+
+direct_fragment_placed : Str, Str, MarkupCore.Props, List(U64) -> Try(HtmlTree.Placed, [Replay])
+direct_fragment_placed = |source, namespace, props, boundaries| {
+	var $placements = { cursor: 0, parents: [] }
 	if source.count_utf8_bytes() > props.max_source_bytes {
 		return Err(Replay)
 	}
@@ -306,7 +353,7 @@ direct_fragment = |source, namespace, props| {
 	if !$reader.diagnostics.is_empty() {
 		return Err(Replay)
 	}
-	root : Markup.Node
+	root : MarkupCore.Node
 	root = { kind: Element({ local: "html", namespace: Uri(namespace), prefix: Unprefixed }), attributes: [], children: [], origin: Implied(0) }
 	var $nodes = [root]
 	var $open = [{ id: 0.U64, name: "html" }]
@@ -343,6 +390,10 @@ direct_fragment = |source, namespace, props| {
 			return Err(Replay)
 		}
 		$reader = next.reader
+		placement_parent = if $open.len() == 1 {
+			Err(Missing)
+		} else $open.last().map_ok(|entry| entry.id).map_err(|_| Missing)
+		$placements = record_boundaries(boundaries, $placements, next.token.span.start, placement_parent)
 		match source_token(next.token, $reader.bytes) {
 			Ok(region) => {
 				$regions = $regions.append(region)
@@ -446,7 +497,7 @@ direct_fragment = |source, namespace, props| {
 				# This accepted grammar already proves exact authored structure:
 				# explicit balanced ends, no repairs, and no dropped attributes.
 				# It contains no selectedcontent/template projection candidates.
-				return Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots }, diagnostics: [] })
+				return Ok({ parsed: { source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots }, diagnostics: [] }, parents: $placements.parents })
 			}
 			_ => return Err(Replay)
 		}
@@ -482,8 +533,12 @@ direct_formatting_flag = |name| match name {
 # Explicit authored documents use the unchanged tokenization and body grammar.
 # Missing wrappers, table repairs, foster text, foreign/template/raw content and
 # every uncertain resource boundary replay the complete general parser.
-direct_document : Str, Str, Markup.Props -> Try(Markup.Parsed, [Replay])
-direct_document = |source, namespace, props| {
+direct_document : Str, Str, MarkupCore.Props -> Try(MarkupCore.Parsed, [Replay])
+direct_document = |source, namespace, props| direct_document_placed(source, namespace, props, []).map_ok(|result| result.parsed)
+
+direct_document_placed : Str, Str, MarkupCore.Props, List(U64) -> Try(HtmlTree.Placed, [Replay])
+direct_document_placed = |source, namespace, props, boundaries| {
+	var $placements = { cursor: 0, parents: [] }
 	if source.count_utf8_bytes() > props.max_source_bytes {
 		return Err(Replay)
 	}
@@ -535,6 +590,8 @@ direct_document = |source, namespace, props| {
 			return Err(Replay)
 		}
 		$reader = next.reader
+		placement_parent = $open.last().map_ok(|entry| entry.id).map_err(|_| Missing)
+		$placements = record_boundaries(boundaries, $placements, next.token.span.start, placement_parent)
 		match source_token(next.token, $reader.bytes) {
 			Ok(region) => {
 				$regions = $regions.append(region)
@@ -762,7 +819,7 @@ direct_document = |source, namespace, props| {
 					if $nodes.len() > props.max_nodes {
 						return Err(Replay)
 					}
-					return Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots: $roots }, diagnostics: [] })
+					return Ok({ parsed: { source: MarkupCore.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots: $roots }, diagnostics: [] }, parents: $placements.parents })
 				}
 				_ => return Err(Replay)
 			}
@@ -773,7 +830,7 @@ direct_document = |source, namespace, props| {
 	}
 }
 
-direct_document_element : Tok.Tag, Str, Markup.Span -> Markup.Node
+direct_document_element : Tok.Tag, Str, MarkupCore.Span -> MarkupCore.Node
 direct_document_element = |tag, namespace, span| {
 	kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }),
 	attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }),
@@ -781,7 +838,7 @@ direct_document_element = |tag, namespace, span| {
 	origin: Authored(span),
 }
 
-direct_document_finish : List(Markup.Node), U64, U64 -> Try(List(Markup.Node), [Replay])
+direct_document_finish : List(MarkupCore.Node), U64, U64 -> Try(List(MarkupCore.Node), [Replay])
 direct_document_finish = |nodes, id, end| {
 	moved = nodes.replace(id, empty_node) ?? return Err(Replay)
 	origin = match moved.prev.origin {
@@ -792,7 +849,7 @@ direct_document_finish = |nodes, id, end| {
 }
 
 # Move the parent out before growing its children, just as edit_node does.
-direct_append : List(Markup.Node), U64, Markup.Node -> List(Markup.Node)
+direct_append : List(MarkupCore.Node), U64, MarkupCore.Node -> List(MarkupCore.Node)
 direct_append = |nodes, parent, node| {
 	id = nodes.len()
 	moved = nodes.replace(parent, empty_node) ?? { list: [], prev: empty_node }
@@ -800,7 +857,7 @@ direct_append = |nodes, parent, node| {
 	(moved.list.set(parent, parent_node) ?? []).append(node)
 }
 
-direct_text : List(Markup.Node), U64, Str, Markup.Span -> List(Markup.Node)
+direct_text : List(MarkupCore.Node), U64, Str, MarkupCore.Span -> List(MarkupCore.Node)
 direct_text = |nodes, parent, text, span| {
 	if text == "" {
 		return nodes
@@ -833,7 +890,7 @@ direct_text = |nodes, parent, text, span| {
 # Adoption emits implied-node witnesses; frameset detachment emits a diagnostic.
 # Foster insertion is checked at creation, including merged-text diagnostics.
 # Final reachability still rejects authored nodes removed by any of those paths.
-exact_structure : Str, Bool, State, List(Tok.Token), List(Tok.Diagnostic), List({ reason : Markup.StructureReason, span : Markup.Span }), List({ parent : Try(U64, [Missing]), origin : Markup.Origin }) -> Try({}, [InvalidMarkup(Markup.Error)])
+exact_structure : Str, Bool, State, List(Tok.Token), List(Tok.Diagnostic), List({ reason : MarkupCore.StructureReason, span : MarkupCore.Span }), List({ parent : Try(U64, [Missing]), origin : MarkupCore.Origin }) -> Try({}, [InvalidMarkup(MarkupCore.Error)])
 exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| {
 	var $failure = repairs.fold(Err(Missing), |best, repair| structure_failure(best, repair.reason, repair.span))
 	var $by_start = Dict.empty()
@@ -940,7 +997,7 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| 
 								if expected != node.attributes {
 									$failure = structure_failure($failure, ChangedAttributes, token.span)
 								}
-								html = namespace == Markup.html_namespace
+								html = namespace == MarkupCore.html_namespace
 								is_void = html and MarkupVocabulary.html_void(name.local)
 								if html and tag.self_closing and !is_void {
 									$failure = structure_failure($failure, NonVoidSelfClosing(name.local), token.span)
@@ -1023,14 +1080,14 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| 
 			HtmlSyntax(code) => match code {
 				MissingDoctype | NonConformingDoctype | EofWithOpenElements | EofInTemplate => {}
 				FosterParentedContent => {
-					span = trigger_span(tokens, diagnostic.column)
+					span = trigger_span(tokens, (Diagnostic.byte_offset(diagnostic.location) ?? 0))
 					$failure = match $failure {
 						Ok({ reason: IgnoredMarkup, span: previous }) if previous.start == span.start => Ok({ reason: ReparentedContent, span })
 						_ => structure_failure($failure, ReparentedContent, span)
 					}
 				}
 				_ => {
-					$failure = structure_failure($failure, ReconstructedContent, trigger_span(tokens, diagnostic.column))
+					$failure = structure_failure($failure, ReconstructedContent, trigger_span(tokens, (Diagnostic.byte_offset(diagnostic.location) ?? 0)))
 				}
 			}
 			_ => {}
@@ -1038,8 +1095,8 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| 
 	}
 	match $failure {
 		Ok(detail) => {
-			at = Literal.position(source, detail.span.start)
-			Err(InvalidMarkup({ problem: HtmlStructure(detail), line: at.line, column: at.column }))
+			at = Parser.Quotation.position(source, detail.span.start)
+			Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure(detail), location: Text({ offset: detail.span.start, line: at.line, column: at.column }), path: [] }))
 		}
 		Err(_) => Ok({})
 	}
@@ -1076,7 +1133,7 @@ Active : [Entry(U64), Marker]
 
 # Parent links and namespace classes share the arena's dense node indices.
 # Detached/root nodes retain an explicit missing parent entry.
-State : { nodes : List(Markup.Node), roots : List(U64), parents : List(NodeIndexEntry), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, context_class : NamespaceClass, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
+State : { nodes : List(MarkupCore.Node), roots : List(U64), parents : List(NodeIndexEntry), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, context_class : NamespaceClass, diagnostics : List(MarkupCore.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : MarkupCore.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : MarkupCore.Span }), clones : List(HtmlTree.Clone) }
 
 NamespaceClass : HtmlContextRules.NamespaceClass
 
@@ -1099,10 +1156,10 @@ adjusted_namespace_class = |s| if (s.fragment and s.stack.len() == 1) s.context_
 	Err(_) => HtmlNamespace
 }
 
-empty_node : Markup.Node
+empty_node : MarkupCore.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 
-node_at : State, U64 -> Markup.Node
+node_at : State, U64 -> MarkupCore.Node
 node_at = |s, i| s.nodes.get(i) ?? empty_node
 
 name_at : State, U64 -> Str
@@ -1125,15 +1182,15 @@ current = |s| match s.stack.last() {
 
 adjusted_namespace = |s| if (s.fragment and s.stack.len() == 1) s.context.namespace else match s.stack.last() {
 	Ok(i) => namespace_at(s, i)
-	Err(_) => Markup.html_namespace
+	Err(_) => MarkupCore.html_namespace
 }
 
 adjusted_name = |s| if (s.fragment and s.stack.len() == 1) s.context.name else current(s)
 
 problem : State, MarkupHtmlError.Code, U64 -> State
-problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append({ problem: HtmlSyntax(code), line: 0, column: offset }) } else { ..s, diagnostics_exceeded: True }
+problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append(Diagnostic.{ problem: HtmlSyntax(code), location: ByteOffset(offset), path: [] }) } else { ..s, diagnostics_exceeded: True }
 
-append_node : State, Markup.Node -> State
+append_node : State, MarkupCore.Node -> State
 append_node = |s, node| {
 	index = s.nodes.len()
 	foster = s.foster and (
@@ -1203,7 +1260,7 @@ append_node = |s, node| {
 
 # Move the old node out before editing its child/attribute lists. Otherwise the
 # node retained in the arena forces every append through copy-on-write.
-edit_node : State, U64, (Markup.Node -> Markup.Node) -> State
+edit_node : State, U64, (MarkupCore.Node -> MarkupCore.Node) -> State
 edit_node = |s, index, edit| {
 	if index >= s.nodes.len() {
 		return s
@@ -1221,7 +1278,7 @@ insert_element = |s, name, namespace, attrs, origin, push| {
 
 insert_tag = |s, tag, namespace, span, push| {
 	next = insert_element(s, adjust_tag(tag.name, namespace), namespace, tag.attributes.map(|a| { name: attribute_name(a.name, namespace), value: a.value, span: a.span }), Authored(span), push)
-	if namespace == Markup.html_namespace and tag.self_closing and push {
+	if namespace == MarkupCore.html_namespace and tag.self_closing and push {
 		problem(next, NonVoidHtmlElementStartTagWithTrailingSolidus, span.start)
 	} else {
 		next
@@ -1464,7 +1521,7 @@ content_mode = |s| {
 	if s.plaintext {
 		return Plaintext
 	}
-	if s.fragment and s.stack.len() == 1 and s.context.namespace == Markup.html_namespace {
+	if s.fragment and s.stack.len() == 1 and s.context.namespace == MarkupCore.html_namespace {
 		match MarkupVocabulary.text_behavior(s.context.name, s.context.scripting) {
 			Rcdata => return RcdataFragment
 			RawText => return RawtextFragment
@@ -1636,7 +1693,7 @@ process_html_general = |state, token, scripting| {
 			}
 			(BeforeHtml, Characters(t)) if whitespace(t) => {}
 			(BeforeHtml, Start(t)) if t.name == "html" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, mode: BeforeHead }
 			}
 			(BeforeHtml, End(n)) if !(
@@ -1648,14 +1705,14 @@ process_html_general = |state, token, scripting| {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(BeforeHtml, _) => {
-				$s = insert_element($s, "html", Markup.html_namespace, [], Implied(token.span.start), True)
+				$s = insert_element($s, "html", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 				$s = { ..$s, mode: BeforeHead }
 				$reprocess = True
 			}
 			(BeforeHead, Characters(t)) if whitespace(t) => {}
 			(BeforeHead, Start(t)) if t.name == "head" => {
 				id = $s.nodes.len()
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, head: Ok(id), mode: InHead }
 			}
 			(BeforeHead, End(n)) if !(
@@ -1668,7 +1725,7 @@ process_html_general = |state, token, scripting| {
 			}
 			(BeforeHead, _) => {
 				id = $s.nodes.len()
-				$s = insert_element($s, "head", Markup.html_namespace, [], Implied(token.span.start), True)
+				$s = insert_element($s, "head", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 				$s = { ..$s, head: Ok(id), mode: InHead }
 				$reprocess = True
 			}
@@ -1684,7 +1741,7 @@ process_html_general = |state, token, scripting| {
 					_ => False
 				}
 			) => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, False)
 			}
 			(InHead, Start(t)) if (
 				match t.name {
@@ -1692,7 +1749,7 @@ process_html_general = |state, token, scripting| {
 					_ => False
 				}
 			) or (t.name == "noscript" and scripting) => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			}
 			(InHead, End("head")) => {
 				$s = pop_mode($s, AfterHead)
@@ -1706,7 +1763,7 @@ process_html_general = |state, token, scripting| {
 				$s = pop_current($s)
 			}
 			(InHead, Start(t)) if t.name == "noscript" and !scripting => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, mode: InHeadNoscript }
 			}
 			(InHead, Start(t)) if t.name == "head" => {
@@ -1767,11 +1824,11 @@ process_html_general = |state, token, scripting| {
 				$s = insert_text($s, t, token.span)
 			}
 			(AfterHead, Start(t)) if t.name == "body" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, mode: InBody, frameset_ok: False }
 			}
 			(AfterHead, Start(t)) if t.name == "frameset" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, mode: InFrameset }
 			}
 			(AfterHead, Start(t)) if (
@@ -1800,7 +1857,7 @@ process_html_general = |state, token, scripting| {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(AfterHead, _) => {
-				$s = insert_element($s, "body", Markup.html_namespace, [], Implied(token.span.start), True)
+				$s = insert_element($s, "body", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 				$s = { ..$s, mode: InBody, frameset_ok: True }
 				$reprocess = True
 			}
@@ -1898,7 +1955,7 @@ process_html_general = |state, token, scripting| {
 						$s = insert_text($s, t, token.span)
 					}
 					Start(t) if t.name == "col" => {
-						$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+						$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, False)
 					}
 					End("colgroup") if current($s) != "colgroup" => {
 						$s = problem($s, UnexpectedColEnd, token.span.start)
@@ -1981,10 +2038,10 @@ process_html_general = |state, token, scripting| {
 				$s = insert_text($s, t, token.span)
 			}
 			(InFrameset, Start(t)) if t.name == "frameset" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			}
 			(InFrameset, Start(t)) if t.name == "frame" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, False)
 			}
 			(InFrameset, End("frameset")) if current($s) == "html" => {
 				$s = problem($s, UnexpectedFramesetContent, token.span.start)
@@ -1999,7 +2056,7 @@ process_html_general = |state, token, scripting| {
 				$s = insert_text($s, t, token.span)
 			}
 			(InFrameset, Start(t)) | (AfterFrameset, Start(t)) if t.name == "noframes" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			}
 			(InFrameset, Eof) => {
 				if current($s) != "html" {
@@ -2018,7 +2075,7 @@ process_html_general = |state, token, scripting| {
 				$s = body($s, token)
 			}
 			(AfterAfterFrameset, Start(t)) if t.name == "noframes" => {
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			}
 			(AfterAfterFrameset, _) => {
 				$s = problem($s, UnexpectedFramesetContent, token.span.start)
@@ -2086,7 +2143,7 @@ body = |state, token| {
 					body_id = last_named($s, "body") ?? 0
 					$s = detach($s, body_id)
 					$s = { ..$s, stack: $s.stack.take_first(1) }
-					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 					$s = { ..$s, mode: InFrameset }
 				}
 			} else if name == "head" {
@@ -2096,7 +2153,7 @@ body = |state, token| {
 				"base" | "basefont" | "bgsound" | "link" | "meta" => True
 				_ => False
 			} {
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, False)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, False)
 			}
 			else if name == "template" {
 				$s = start_template($s, tag, token.span)
@@ -2105,7 +2162,7 @@ body = |state, token| {
 				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 			} else if HtmlContextRules.heading(name) {
 				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
@@ -2114,13 +2171,13 @@ body = |state, token| {
 					$s = problem($s, NestedHeading, token.span.start)
 					$s = pop_current($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 			} else if name == "pre" or name == "listing" {
 				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(Markup.html_namespace, name), frameset_ok: False }
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
+				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(MarkupCore.html_namespace, name), frameset_ok: False }
 			} else if name == "form" {
 				if $s.form.is_ok() and !parsing_template($s) {
 					$s = problem($s, NestedForm, token.span.start)
@@ -2130,7 +2187,7 @@ body = |state, token| {
 						$s = close_p($s)
 					}
 					id = $s.nodes.len()
-					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 					if !parsing_template($s) {
 						$s = { ..$s, form: Ok(id) }
 					}
@@ -2155,13 +2212,13 @@ body = |state, token| {
 				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, frameset_ok: False }
 			} else if name == "plaintext" {
 				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, plaintext: True }
 			} else if name == "button" {
 				if in_scope($s, "button", DefaultScope) {
@@ -2169,7 +2226,7 @@ body = |state, token| {
 					$s = close_to(implied($s, ""), "button")
 				}
 				$s = reconstruct($s)
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, frameset_ok: False }
 			} else if formatting(name) {
 				if name == "a" {
@@ -2188,7 +2245,7 @@ body = |state, token| {
 				}
 				$s = reconstruct($s)
 				id = $s.nodes.len()
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				# Noah's Ark clause: retain at most three equivalent entries after
 				# the last marker, even while older elements remain open.
 				var $same = []
@@ -2213,13 +2270,13 @@ body = |state, token| {
 				$s = { ..$s, active: $s.active.append(Entry(id)) }
 			} else if HtmlContextRules.formatting_container(name) {
 				$s = reconstruct($s)
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, active: $s.active.append(Marker), frameset_ok: False }
 			} else if name == "table" {
 				if !$s.quirks and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, mode: InTable, frameset_ok: False }
 			} else if name == "input" and $s.fragment and $s.context.name == "select" {
 				$s = problem($s, UnexpectedSelectContent, token.span.start)
@@ -2239,7 +2296,7 @@ body = |state, token| {
 					$s = problem($s, ImageStartTag, token.span.start)
 				}
 				adjusted = if (name == "image") { ..tag, name: "img" } else tag
-				$s = insert_tag($s, adjusted, Markup.html_namespace, token.span, False)
+				$s = insert_tag($s, adjusted, MarkupCore.html_namespace, token.span, False)
 				if name == "hr" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
@@ -2252,8 +2309,8 @@ body = |state, token| {
 					$s = { ..$s, frameset_ok: False }
 				}
 			} else if name == "textarea" {
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(Markup.html_namespace, name), frameset_ok: False }
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
+				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(MarkupCore.html_namespace, name), frameset_ok: False }
 			} else if match name {
 				"xmp" | "iframe" | "noembed" | "noscript" | "script" | "style" | "title" | "noframes" => True
 				_ => False
@@ -2261,7 +2318,7 @@ body = |state, token| {
 				if name == "xmp" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 				$s = { ..$s, frameset_ok: False }
 			} else if name == "select" {
 				if $s.fragment and $s.context.name == "select" {
@@ -2271,7 +2328,7 @@ body = |state, token| {
 					$s = close_to($s, "select")
 				} else {
 					$s = reconstruct($s)
-					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 					$s = { ..$s, frameset_ok: False }
 				}
 			} else if name == "option" or name == "optgroup" {
@@ -2284,7 +2341,7 @@ body = |state, token| {
 					$s = pop_current($s)
 				}
 				$s = reconstruct($s)
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 			} else if match name {
 				"rb" | "rtc" | "rp" | "rt" => True
 				_ => False
@@ -2292,15 +2349,15 @@ body = |state, token| {
 				if in_scope($s, "ruby", DefaultScope) {
 					$s = implied($s, if (name == "rt" or name == "rp") "rtc" else "")
 				}
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 			} else if name == "math" or name == "svg" {
 				$s = reconstruct($s)
-				$s = insert_tag($s, tag, if (name == "svg") Markup.svg_namespace else Markup.mathml_namespace, token.span, !tag.self_closing)
+				$s = insert_tag($s, tag, if (name == "svg") MarkupCore.svg_namespace else MarkupCore.mathml_namespace, token.span, !tag.self_closing)
 			} else if HtmlContextRules.table_part(name) or name == "frame" or name == "head" {
 				$s = problem($s, UnexpectedTableElement, token.span.start)
 			} else {
 				$s = reconstruct($s)
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = insert_tag($s, tag, MarkupCore.html_namespace, token.span, True)
 			}
 		}
 		End(name) => {
@@ -2327,7 +2384,7 @@ body = |state, token| {
 			} else if name == "p" {
 				if !in_scope($s, "p", ButtonScope) {
 					$s = problem($s, UnexpectedPEnd, token.span.start)
-					$s = insert_element($s, "p", Markup.html_namespace, [], Implied(token.span.start), True)
+					$s = insert_element($s, "p", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 				}
 				$s = close_p($s)
 			} else if match name {
@@ -2414,7 +2471,7 @@ s_in_scope_id = |s, id| s.stack.contains(id) and in_scope(s, name_at(s, id), Def
 
 merge_attributes = |s, id, tag| {
 	node = node_at(s, id)
-	extra = tag.attributes.keep_if(|a| !node.attributes.any(|b| b.name.local == a.name)).map(|a| { name: attribute_name(a.name, Markup.html_namespace), value: a.value, span: a.span })
+	extra = tag.attributes.keep_if(|a| !node.attributes.any(|b| b.name.local == a.name)).map(|a| { name: attribute_name(a.name, MarkupCore.html_namespace), value: a.value, span: a.span })
 	{ ..s, nodes: s.nodes.set(id, { ..node, attributes: node.attributes.concat(extra) }) ?? [] }
 }
 
@@ -2440,7 +2497,7 @@ generic_end = |s, name, offset| {
 }
 
 start_template = |s, tag, span| {
-	next = insert_tag(s, tag, Markup.html_namespace, span, True)
+	next = insert_tag(s, tag, MarkupCore.html_namespace, span, True)
 	{ ..next, active: next.active.append(Marker), modes: next.modes.append(InTemplate), mode: InTemplate, frameset_ok: False }
 }
 
@@ -2670,28 +2727,28 @@ table = |state, token| {
 		}
 		Start(t) if t.name == "caption" => {
 			$s = clear_table_stack($s)
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			$s = { ..$s, active: $s.active.append(Marker), mode: InCaption }
 		}
 		Start(t) if t.name == "colgroup" => {
 			$s = clear_table_stack($s)
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			$s = { ..$s, mode: InColgroup }
 		}
 		Start(t) if t.name == "col" => {
 			$s = clear_table_stack($s)
-			$s = insert_element($s, "colgroup", Markup.html_namespace, [], Implied(token.span.start), True)
+			$s = insert_element($s, "colgroup", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InColgroup }
 			$s = process($s, token, $s.context.scripting)
 		}
 		Start(t) if HtmlContextRules.table_section(t.name) => {
 			$s = clear_table_stack($s)
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			$s = { ..$s, mode: InTableBody }
 		}
 		Start(t) if (t.name == "tr" or HtmlContextRules.table_cell(t.name)) => {
 			$s = clear_table_stack($s)
-			$s = insert_element($s, "tbody", Markup.html_namespace, [], Implied(token.span.start), True)
+			$s = insert_element($s, "tbody", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InTableBody }
 			$s = process($s, token, $s.context.scripting)
 		}
@@ -2719,13 +2776,13 @@ table = |state, token| {
 		}
 		Start(t) if t.name == "input" and t.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden") => {
 			$s = problem($s, HiddenInputInTable, token.span.start)
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+			$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, False)
 		}
 		Start(t) if t.name == "form" => {
 			$s = problem($s, FormInTable, token.span.start)
 			if $s.form.is_err() {
 				id = $s.nodes.len()
-				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+				$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, False)
 				$s = { ..$s, form: Ok(id) }
 			}
 		}
@@ -2790,13 +2847,13 @@ table_body = |state, token| {
 
 		Start(t) if t.name == "tr" => {
 			$s = clear_section_stack($s)
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			$s = { ..$s, mode: InRow }
 		}
 		Start(t) if HtmlContextRules.table_cell(t.name) => {
 			$s = problem($s, CellWithoutRow, token.span.start)
 			$s = clear_section_stack($s)
-			$s = insert_element($s, "tr", Markup.html_namespace, [], Implied(token.span.start), True)
+			$s = insert_element($s, "tr", MarkupCore.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InRow }
 			$s = process($s, token, $s.context.scripting)
 		}
@@ -2842,7 +2899,7 @@ row = |state, token| {
 	match token.kind {
 		Start(t) if HtmlContextRules.table_cell(t.name) => {
 			$s = clear_row_stack($s)
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = insert_tag($s, t, MarkupCore.html_namespace, token.span, True)
 			$s = { ..$s, active: $s.active.append(Marker), mode: InCell }
 		}
 		End("tr") => {
@@ -3028,7 +3085,7 @@ foreign_end_target = |s, name| {
 	MissingTarget
 }
 
-SpellingFailure : { authored : Str, expected : Str, span : Markup.Span }
+SpellingFailure : { authored : Str, expected : Str, span : MarkupCore.Span }
 
 foreign_end_spelling : State, Tok.Token -> Try(Str, [None])
 foreign_end_spelling = |state, token| {
@@ -3101,7 +3158,7 @@ check_spelling_names = |names, bytes, element, namespace| {
 	Err(None)
 }
 
-check_spelling_name : List(U8), Markup.Span, Str -> Try(SpellingFailure, [None])
+check_spelling_name : List(U8), MarkupCore.Span, Str -> Try(SpellingFailure, [None])
 check_spelling_name = |bytes, span, expected| {
 	authored = Str.from_utf8_lossy(bytes.sublist({ start: span.start, len: span.end - span.start }))
 	if authored == expected {
@@ -3110,7 +3167,7 @@ check_spelling_name = |bytes, span, expected| {
 }
 
 attribute_name = |raw, namespace| {
-	if namespace != Markup.html_namespace {
+	if namespace != MarkupCore.html_namespace {
 		if raw == "xmlns" {
 			return { namespace: Uri("http://www.w3.org/2000/xmlns/"), local: "xmlns", prefix: Unprefixed }
 		}
@@ -3130,11 +3187,11 @@ attribute_name = |raw, namespace| {
 			return { namespace: Uri("http://www.w3.org/XML/1998/namespace"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(4)), prefix: Prefix("xml") }
 		}
 	}
-	local = if (namespace == Markup.svg_namespace) adjust_svg_attribute(raw) else if (namespace == Markup.mathml_namespace and raw == "definitionurl") "definitionURL" else raw
+	local = if (namespace == MarkupCore.svg_namespace) adjust_svg_attribute(raw) else if (namespace == MarkupCore.mathml_namespace and raw == "definitionurl") "definitionURL" else raw
 	{ namespace: NoNamespace, local, prefix: Unprefixed }
 }
 
-adjust_tag = |raw, namespace| if (namespace == Markup.svg_namespace) adjusted(raw, svg_tags) else raw
+adjust_tag = |raw, namespace| if (namespace == MarkupCore.svg_namespace) adjusted(raw, svg_tags) else raw
 
 adjust_svg_attribute = |raw| adjusted(raw, svg_attributes)
 
@@ -3197,7 +3254,7 @@ expect {
 			_ => ("", NoNamespace)
 		},
 	)
-	named.contains(("linearGradient", Uri(Markup.svg_namespace))) and named.contains(("div", Uri(Markup.html_namespace))) and named.contains(("b", Uri(Markup.html_namespace)))
+	named.contains(("linearGradient", Uri(MarkupCore.svg_namespace))) and named.contains(("div", Uri(MarkupCore.html_namespace))) and named.contains(("b", Uri(MarkupCore.html_namespace)))
 }
 expect {
 	parsed = HtmlTree.parse("<textarea>\n&lt;b&gt;</textarea><script>if (a < b) x='&amp;'</script>", True, {}, {})?
@@ -3240,7 +3297,7 @@ texts = |tree| tree.nodes.keep_if(
 )
 
 expect HtmlTree.parse("<span/>x", True, {}, { max_diagnostics: 0 }).is_err()
-expect HtmlTree.parse("<div>\n<span>x</span></div>", True, {}, { max_depth: 1 }).map_err(|InvalidMarkup(e)| (e.line, e.column)) == Err((2, 1))
+expect HtmlTree.parse("<div>\n<span>x</span></div>", True, {}, { max_depth: 1 }).map_err(|InvalidMarkup(e)| ((Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).line, (Diagnostic.line_column(e.location) ?? { line: 1, column: 1 }).column)) == Err((2, 1))
 expect {
 	p = HtmlTree.parse("a\u(0)b", True, {}, { recovery: Browser })?
 	texts(p.tree) == ["ab"] and !p.diagnostics.is_empty()
@@ -3257,7 +3314,7 @@ work_limit = |per_byte, size| {
 	if (per_byte > (maximum - 4096) // (size + 1)) maximum else 4096 + per_byte * (size + 1)
 }
 expect HtmlTree.parse("<p>x</p>", True, {}, { max_work_per_byte: 0xFFFFFFFFFFFFFFFF }).is_ok()
-expect HtmlTree.parse("<b><div>x</b>y", True, {}, { recovery: Browser, max_elements: 2 }) == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 10 }))
+expect HtmlTree.parse("<b><div>x</b>y", True, {}, { recovery: Browser, max_elements: 2 }) == Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Elements), max: 2, observed: AtLeast(2 + 1) }), location: LineColumn({ line: 1, column: 10 }), path: [] }))
 
 expect {
 	source = "<b><i><div>x</b>y"
@@ -3270,7 +3327,7 @@ expect {
 			_ => 0
 		},
 	) - 1
-	limited == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 13 })) and elements == 5
+	limited == Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Elements), max: 4, observed: AtLeast(4 + 1) }), location: LineColumn({ line: 1, column: 13 }), path: [] })) and elements == 5
 }
 
 expect {
@@ -3284,7 +3341,7 @@ expect {
 			_ => 0
 		},
 	) - 1
-	limited == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 17 })) and elements == 4
+	limited == Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Elements), max: 3, observed: AtLeast(3 + 1) }), location: LineColumn({ line: 1, column: 17 }), path: [] })) and elements == 4
 }
 
 expect {
@@ -3303,18 +3360,18 @@ expect {
 expect {
 	p = HtmlTree.parse("<table><div>x</div><tr><td>y</table>", True, {}, { recovery: Browser })?
 	div = p.tree.nodes.get(p.tree.roots.first()?)?
-	div.children.len() == 1 and Markup.text(p.tree, p.tree.roots.first()?) == "x"
+	div.children.len() == 1 and (p.tree).text(p.tree.roots.first()?) == "x"
 }
 
 expect {
-	p = HtmlTree.parse("<g></path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser })?
-	Markup.text(p.tree, p.tree.roots.first()?) == "X"
+	p = HtmlTree.parse("<g></path>X", True, { namespace: MarkupCore.svg_namespace, name: "path" }, { recovery: Browser })?
+	(p.tree).text(p.tree.roots.first()?) == "X"
 }
-expect HtmlTree.parse("</path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser }).is_ok()
-expect HtmlTree.parse("</foreignObject>X", True, { namespace: Markup.svg_namespace, name: "foreignObject" }, { recovery: Browser }).is_ok()
-expect HtmlTree.parse("</math>X", True, { namespace: Markup.mathml_namespace, name: "math" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</path>X", True, { namespace: MarkupCore.svg_namespace, name: "path" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</foreignObject>X", True, { namespace: MarkupCore.svg_namespace, name: "foreignObject" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</math>X", True, { namespace: MarkupCore.mathml_namespace, name: "math" }, { recovery: Browser }).is_ok()
 
-append_misc : State, Markup.Node -> State
+append_misc : State, MarkupCore.Node -> State
 append_misc = |s, node| {
 	stack = s.stack
 	if s.mode == AfterBody {
@@ -3408,7 +3465,7 @@ expect {
 
 expect {
 	p = HtmlTree.parse("<table><a>1<p>2</a>3</p>", True, {}, { recovery: Browser })?
-	p.tree.roots.len() == 3 and Markup.text(p.tree, p.tree.roots.get(1)?) == "23"
+	p.tree.roots.len() == 3 and (p.tree).text(p.tree.roots.get(1)?) == "23"
 }
 
 expect {
@@ -3425,7 +3482,7 @@ expect {
 expect HtmlTree.parse("<p>\u(B)</p>", True, {}, {}).is_err()
 expect HtmlTree.parse("<p>\u(FDD0)</p>", True, {}, {}).is_err()
 
-skipped_lf_end : List(U8), Markup.Span -> U64
+skipped_lf_end : List(U8), MarkupCore.Span -> U64
 skipped_lf_end = |bytes, span| {
 	first = bytes.get(span.start) ?? 0
 	if first == '\r' {
@@ -3456,7 +3513,7 @@ expect {
 
 expect HtmlTree.parse("<p>x</p>", True, {}, { max_diagnostics: 0 }).is_ok()
 
-parsing_template = |s| last_named(s, "template").is_ok() or (s.fragment and s.context.name == "template" and s.context.namespace == Markup.html_namespace)
+parsing_template = |s| last_named(s, "template").is_ok() or (s.fragment and s.context.name == "template" and s.context.namespace == MarkupCore.html_namespace)
 
 flush_table_text : State -> State
 flush_table_text = |s| {
@@ -3482,7 +3539,7 @@ flush_table_text = |s| {
 }
 expect {
 	p = HtmlTree.parse("<table> x </table>", True, {}, { recovery: Browser })?
-	Markup.text(p.tree, p.tree.roots.first()?) == " x "
+	(p.tree).text(p.tree.roots.first()?) == " x "
 }
 expect {
 	p = HtmlTree.parse("<html a=b><template><col></col><html b=c><col></col></template>", False, {}, { recovery: Browser })?
@@ -3493,7 +3550,7 @@ expect {
 	names(p.tree) == ["html", "form", "form"]
 }
 
-source_token : Tok.Token, List(U8) -> Try(Markup.Token, [Empty])
+source_token : Tok.Token, List(U8) -> Try(MarkupCore.Token, [Empty])
 source_token = |token, bytes| {
 	if token.span.end == token.span.start {
 		return Err(Empty)
@@ -3522,12 +3579,12 @@ expect {
 }
 expect {
 	p = HtmlTree.parse("<div><svg><path><foreignObject><math></div>a", True, {}, { recovery: Browser })?
-	p.tree.roots.len() == 1 and Markup.text(p.tree, p.tree.roots.first()?) == "a"
+	p.tree.roots.len() == 1 and (p.tree).text(p.tree.roots.first()?) == "a"
 }
 
 # The standard selectedcontent element reflects the selected option's subtree.
 # Cloned origins retain physical source provenance for template slot fan-out.
-project_selectedcontent : State, Markup.Props -> Try(State, [InvalidMarkup(Markup.Error)])
+project_selectedcontent : State, MarkupCore.Props -> Try(State, [InvalidMarkup(MarkupCore.Error)])
 project_selectedcontent = |state, props| {
 	var $s = state
 	original_count = state.nodes.len()
@@ -3583,28 +3640,28 @@ project_selectedcontent = |state, props| {
 							# content, including their descendants, per the HTML clone steps.
 							removed = match original.kind {
 								Element(name) => (
-									name.namespace == Uri(Markup.html_namespace) and (
+									name.namespace == Uri(MarkupCore.html_namespace) and (
 										match name.local {
 											"script" | "frame" | "iframe" | "embed" | "object" => True
 											_ => False
 										}
 									)
-								) or (name.namespace == Uri(Markup.svg_namespace) and name.local == "script")
+								) or (name.namespace == Uri(MarkupCore.svg_namespace) and name.local == "script")
 								_ => False
 							}
 							if !removed {
 								if $s.nodes.len() >= props.max_nodes {
-									return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: 0, column: insertion_at }))
+									return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Nodes, max: props.max_nodes, observed: AtLeast(props.max_nodes + 1) }), location: ByteOffset(insertion_at), path: [] }))
 								}
 								is_element = match original.kind {
 									Element(_) => True
 									_ => False
 								}
 								if is_element and ($s.element_count - if ($s.fragment) 1 else 0) >= props.max_elements {
-									return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 0, column: insertion_at }))
+									return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Elements), max: props.max_elements, observed: AtLeast(props.max_elements + 1) }), location: ByteOffset(insertion_at), path: [] }))
 								}
 								if is_element and item.depth > props.max_depth {
-									return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: 0, column: insertion_at }))
+									return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Xml(Depth), max: props.max_depth, observed: AtLeast(props.max_depth + 1) }), location: ByteOffset(insertion_at), path: [] }))
 								}
 								new_id = $s.nodes.len()
 								source_span = match original.origin {
@@ -3616,7 +3673,7 @@ project_selectedcontent = |state, props| {
 								$s = append_node({ ..$s, stack: [item.parent], foster: False }, { ..original, children: [], origin: Cloned({ source: source_span, at: insertion_at }) })
 								$s = { ..$s, stack, clones: $s.clones.append({ original: item.source, clone: new_id }) }
 								if $s.work > $s.work_limit {
-									return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: 0, column: insertion_at }))
+									return Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: ParserWork, max: $s.work_limit, observed: AtLeast($s.work_limit + 1) }), location: ByteOffset(insertion_at), path: [] }))
 								}
 								var $i = original.children.len()
 								while $i > 0 {
@@ -3754,7 +3811,7 @@ expect {
 	root = p.tree.nodes.get(p.tree.roots.first()?)?
 	button = p.tree.nodes.get(root.children.first()?)?
 	selectedcontent = p.tree.nodes.get(button.children.first()?)?
-	Markup.text(p.tree, selectedcontent.children.first()?) == "Y" and (p.tree.nodes.get(selectedcontent.children.first()?)?).origin == Cloned({ source: { start: 86, end: 87 }, at: 16 })
+	(p.tree).text(selectedcontent.children.first()?) == "Y" and (p.tree.nodes.get(selectedcontent.children.first()?)?).origin == Cloned({ source: { start: 86, end: 87 }, at: 16 })
 }
 
 reverse_ids : List(U64) -> List(U64)
@@ -3796,20 +3853,20 @@ expect {
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	div = p.tree.nodes.get(select.children.first()?)?
 	content = p.tree.nodes.get(div.children.first()?)?
-	Markup.text(p.tree, content.children.first()?) == "A"
+	(p.tree).text(content.children.first()?) == "A"
 }
 expect {
 	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<script>x</script><object>y</object><svg><script>z</script><text>B</text></svg></option></select>", True, {}, {})?
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	content = p.tree.nodes.get(select.children.first()?)?
-	content.children.len() == 2 and Markup.text(p.tree, content.children.get(0)?) == "A" and Markup.text(p.tree, content.children.get(1)?) == "B"
+	content.children.len() == 2 and (p.tree).text(content.children.get(0)?) == "A" and (p.tree).text(content.children.get(1)?) == "B"
 }
 expect {
 	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<selectedcontent>original</selectedcontent></option></select>", True, {}, {})?
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	option = p.tree.nodes.get(select.children.get(1)?)?
 	inside = p.tree.nodes.get(option.children.get(1)?)?
-	Markup.text(p.tree, inside.children.first()?) == "original"
+	(p.tree).text(inside.children.first()?) == "original"
 }
 
 expect [
@@ -3824,7 +3881,7 @@ expect [
 	"<!doctype html><table><caption><svg>foo</table>bar",
 ].all(|source| HtmlTree.parse(source, False, {}, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser }).map_ok(|p| !p.diagnostics.is_empty()) == Ok(True))
 expect ["<caption><td>", "<col><td>", "<tbody><td>", "<tr><td>", "</table><td>", "</tbody></tfoot></thead><td>"].all(|source| HtmlTree.parse(source, True, { name: "tr" }, {}).is_err())
-expect HtmlTree.parse("<html>X", True, { namespace: Markup.svg_namespace, name: "desc" }, {}).is_err()
+expect HtmlTree.parse("<html>X", True, { namespace: MarkupCore.svg_namespace, name: "desc" }, {}).is_err()
 expect HtmlTree.parse("</html><!--abc-->", True, { name: "html" }, {}).is_err()
 expect HtmlTree.parse("<form><form>", True, { name: "template" }, {}).is_ok()
 
@@ -3840,7 +3897,7 @@ expect {
 	select = p.tree.nodes.get(p.tree.roots.first()?)?
 	button = p.tree.nodes.get(select.children.first()?)?
 	content = p.tree.nodes.get(button.children.first()?)?
-	Markup.text(p.tree, content.children.first()?) == "B"
+	(p.tree).text(content.children.first()?) == "B"
 }
 
 expect ["2junk", " +2", "000000000000000000000000000000000000002"].all(
@@ -3861,7 +3918,7 @@ expect {
 	tr = p.tree.nodes.get(tbody.children.first()?)?
 	td = p.tree.nodes.get(tr.children.first()?)?
 	fostered = p.tree.nodes.get(p.tree.roots.get(1)?)?
-	p.tree.roots.len() == 2 and tr.children.len() == 1 and td.kind == Element({ namespace: Uri(Markup.html_namespace), local: "td", prefix: Unprefixed }) and Markup.text(p.tree, td.children.first()?) == "y" and fostered.kind == Element({ namespace: Uri(Markup.html_namespace), local: "td'", prefix: Unprefixed }) and Markup.text(p.tree, fostered.children.first()?) == "x"
+	p.tree.roots.len() == 2 and tr.children.len() == 1 and td.kind == Element({ namespace: Uri(MarkupCore.html_namespace), local: "td", prefix: Unprefixed }) and (p.tree).text(td.children.first()?) == "y" and fostered.kind == Element({ namespace: Uri(MarkupCore.html_namespace), local: "td'", prefix: Unprefixed }) and (p.tree).text(fostered.children.first()?) == "x"
 }
 expect {
 	p = HtmlTree.parse("<tr>x y<td>z", True, { name: "table" }, { recovery: Browser })?
@@ -3871,9 +3928,9 @@ expect {
 expect {
 	p = HtmlTree.parse("<p>a &#32;b\u(0)c</p>", True, {}, { recovery: Browser })?
 	n = p.tree.nodes.get(p.tree.roots.first()?)?
-	n.children.len() == 1 and (p.tree.nodes.get(n.children.first()?)?).kind == Text("a  bc") and p.source.partition_valid() and p.diagnostics == [{ problem: HtmlSyntax(UnexpectedNull), line: 1, column: 12 }]
+	n.children.len() == 1 and (p.tree.nodes.get(n.children.first()?)?).kind == Text("a  bc") and p.source.partition_valid() and p.diagnostics == [Diagnostic.{ problem: HtmlSyntax(UnexpectedNull), location: Text({ offset: 11, line: 1, column: 12 }), path: [] }]
 }
-expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 2, column: 2 }))
+expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup(Diagnostic.{ problem: LimitExceeded({ resource: Diagnostics, max: 0, observed: AtLeast(0 + 1) }), location: LineColumn({ line: 2, column: 2 }), path: [] }))
 
 # Exact authored structure is separate from WHATWG recovery and precedes
 # selectedcontent projection. The default browser tree remains unchanged.
@@ -3887,7 +3944,7 @@ expect {
 }
 expect {
 	match HtmlTree.parse("<p>\n<div></div></p>", True, {}, { recovery: Browser, exact_structure: True }) {
-		Err(InvalidMarkup({ problem: HtmlStructure({ span, .. }), line, column })) => span == { start: 4, end: 9 } and line == 2 and column == 1
+		Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure({ span, .. }), location: Text({ offset, line, column }), path: [] })) => offset == span.start and span == { start: 4, end: 9 } and line == 2 and column == 1
 		_ => False
 	}
 }
@@ -3932,7 +3989,7 @@ expect {
 }
 expect {
 	match HtmlTree.parse("<div>", True, {}, { exact_structure: True, max_elements: 0 }) {
-		Err(InvalidMarkup({ problem: LimitExceeded(Elements), .. })) => True
+		Err(InvalidMarkup({ problem: LimitExceeded({ resource: Xml(Elements), .. }), .. })) => True
 		_ => False
 	}
 }
@@ -3956,24 +4013,24 @@ expect {
 # Foster merging must not blame the earlier text whose provenance changes.
 expect {
 	match HtmlTree.parse("before<table>outside<tr><td>inside</td></tr></table>", True, {}, { recovery: Browser, exact_structure: True }) {
-		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ReparentedContent, span }), line, column })) => span == { start: 13, end: 20 } and line == 1 and column == 14
+		Err(InvalidMarkup(Diagnostic.{ problem: HtmlStructure({ reason: ReparentedContent, span }), location: Text({ offset, line, column }), path: [] })) => offset == span.start and span == { start: 13, end: 20 } and line == 1 and column == 14
 		_ => False
 	}
 }
 
 expect {
 	accepted = ["", "plain &amp; α🙂 prose", "<section><article><h2>Card</h2><p>Hello &amp; <span>welcome</span>.</p><a href='/x'><span>more</span></a></article></section>", "<a><div><p>x<br>y<img src='x'/></p></div></a>", "<p><span>x</span></p><hr>"]
-	accepted.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, {}) == HtmlTree.parse_general(source, True, {}, {}))
+	accepted.all(|source| direct_fragment(source, MarkupCore.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, {}) == HtmlTree.parse_general(source, True, {}, {}))
 }
 expect {
 	replayed = ["<p><div></div></p>", "<h1><span><h2>x</h2></span></h1>", "<a><span><a>x</a></span></a>", "<p>x", "<div/>", "<p>x</p><svg><path/></svg>", "<p>x</p><!-- comment -->", "<p a='1' a='2'>x</p>", "<p>a\u(0)b</p>", "<p>word</p></br>"]
-	replayed.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
+	replayed.all(|source| direct_fragment(source, MarkupCore.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
 }
 expect {
 	source = "<section><a href='x'><p>text &amp; more<br></p></a></section>"
 	[0.U64, 1, 2, 4, 16, 256].all(
 		|limit| {
-			props : Markup.Props
+			props : MarkupCore.Props
 			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
 			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
 		},
@@ -3982,17 +4039,17 @@ expect {
 
 expect {
 	accepted = ["<main><header><h1>Title</h1><nav><a href='/x'>next</a></nav></header><p>A <strong><em><b><i>typed</i></b></em></strong> tree.</p><ul><li>one<ol><li>nested</li></ol></li><li>two</li></ul><form action='/search'><label for='q'>Search</label><input id='q' name='q' type='search'><button type='submit'>Find</button></form><footer>done</footer></main>", "<form><p><button><span>ok</span></button></p></form><form><input type='hidden'></form>", "<strong><main><form><button><em>x</em></button></form></main></strong>", "<p><button>ok</button><label>label<input></label></p>"]
-	accepted.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, { exact_structure: True }) == HtmlTree.parse_general(source, True, {}, { exact_structure: True }))
+	accepted.all(|source| direct_fragment(source, MarkupCore.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, { exact_structure: True }) == HtmlTree.parse_general(source, True, {}, { exact_structure: True }))
 }
 expect {
 	replayed = ["<strong><strong>x</strong></strong>", "<b><i>x</b>y</i>", "<form><form></form></form>", "<button><span><button>x</button></span></button>", "<ul><li>one<li>two</ul>", "<li>x</li>", "<ul><div><li>x</li></div></ul>", "<p><form></form></p>", "<p><ul><li>x</li></ul></p>", "<form><p>x</form></p>", "<p><strong>x</p>y</strong>"]
-	replayed.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
+	replayed.all(|source| direct_fragment(source, MarkupCore.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
 }
 expect {
 	source = "<main><form><label><strong><em><b><i><a>x</a></i></b></em></strong><input></label><button>ok</button></form><ul><li>x</li></ul></main>"
 	[0.U64, 1, 2, 4, 8, 16, 256].all(
 		|limit| {
-			props : Markup.Props
+			props : MarkupCore.Props
 			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
 			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
 		},
@@ -4001,24 +4058,24 @@ expect {
 
 expect {
 	source = "<!doctype html><html lang='en'><head><meta charset='utf-8'><title>A &amp; B</title></head><body><main><h1>Title</h1><p>Words.</p><table><tbody><tr><th>Item</th><th>Count</th></tr><tr><td>Examples</td><td>12</td></tr></tbody></table></main></body></html>"
-	direct_document(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }) and HtmlTree.parse_classified(source, False, {}, {}).map_ok(|result| result.domain) == Ok(PureHtmlNoProjection)
+	direct_document(source, MarkupCore.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }) and HtmlTree.parse_classified(source, False, {}, {}).map_ok(|result| result.domain) == Ok(PureHtmlNoProjection)
 }
 
 # The authored body remains on the general stack through EOF; its origin includes
 # </html>, unlike the explicit origins on head/title/table/cell elements.
 expect {
 	source = "<!doctype html><html><head><title>A&amp;B</title><meta charset='utf-8'></head><body><table><tbody><tr><th>H</th><td>X</td></tr></tbody></table></body></html>"
-	p = direct_document(source, Markup.html_namespace, {})?
-	element = |name, children, start, end| { kind: Element({ namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local: name }), attributes: [], children, origin: Authored({ start, end }) }
+	p = direct_document(source, MarkupCore.html_namespace, {})?
+	element = |name, children, start, end| { kind: Element({ namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed, local: name }), attributes: [], children, origin: Authored({ start, end }) }
 	text = |value, start, end| { kind: Text(value), attributes: [], children: [], origin: Authored({ start, end }) }
-	expected : List(Markup.Node)
+	expected : List(MarkupCore.Node)
 	expected = [
 		{ kind: Doctype({ name: "html", public_id: "", system_id: "" }), attributes: [], children: [], origin: Authored({ start: 0, end: 15 }) },
 		element("html", [2, 6], 15, 157),
 		element("head", [3, 5], 21, 78),
 		element("title", [4], 27, 49),
 		text("A&B", 34, 41),
-		{ kind: Element({ namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local: "meta" }), attributes: [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: "charset" }, value: "utf-8", span: { start: 55, end: 70 } }], children: [], origin: Authored({ start: 49, end: 71 }) },
+		{ kind: Element({ namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed, local: "meta" }), attributes: [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: "charset" }, value: "utf-8", span: { start: 55, end: 70 } }], children: [], origin: Authored({ start: 49, end: 71 }) },
 		element("body", [7], 78, 157),
 		element("table", [8], 84, 143),
 		element("tbody", [9], 91, 135),
@@ -4032,28 +4089,112 @@ expect {
 }
 expect {
 	accepted = ["<!doctype html><html><head></head><body></body></html>", "\r\n<!DOCTYPE HTML>\t<html>\n<head><title>literal <b> &amp; Ω</title><meta name='x' content='y'/></head> \r\n<body><p><b>hi</b></p><form><input></form><table><tbody></tbody></table></body></html>", "<!doctype html><html><head><title></title><title>x</title></head><body><form><table><tbody><tr><td>A &amp; B</td><th>Ω🙂</th></tr></tbody><tbody><tr></tr></tbody></table></form><p>after</p></body></html>"]
-	accepted.all(|source| direct_document(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }))
+	accepted.all(|source| direct_document(source, MarkupCore.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }))
 }
 expect {
 	bodies = ["<table> <tbody></tbody></table>", "<table><tbody>\n<tr><td>x</td></tr></tbody></table>", "<table><tbody><tr> <td>x</td></tr></tbody></table>", "<table><tr><td>x</td></tr></table>", "<table><tbody><td>x</td></tbody></table>", "<table><tbody><tr><td>x</tr></tbody></table>", "<b><table><tbody><tr><td>x</td></tr></tbody></table></b>", "<table><tbody><tr><td><b>x</b></td></tr></tbody></table>", "<table><tbody><tr><td><table></table></td></tr></tbody></table>", "<table><form></form></table>", "<p><table></table></p>", "<script>x()</script>", "<svg><g/></svg>", "<template><p>x</p></template>", "<!--x--><p>x</p>"]
 	bodies.all(
 		|content| {
 			source = "<!doctype html><html><head><title>x</title></head><body>${content}</body></html>"
-			direct_document(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True })
+			direct_document(source, MarkupCore.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True })
 		},
 	)
 }
 expect {
 	sources = ["<html><head></head><body></body></html>", "<!doctype html><html><body></body></html>", "<!doctype html><html><head></head><p>x</p></html>", "<!doctype html><html><head></head><body></html>", "<!doctype html><html><head></head><body></body>", "<!doctype html><html><head></head><body></body> </html>", "<!doctype html><html><head></head><body></body></html>\n", "<!doctype html PUBLIC 'legacy'><html><head></head><body></body></html>", "<!doctype html><html><head><style>x</style></head><body></body></html>", "<!doctype html><html><head><title>x</head><body></body></html>"]
-	sources.all(|source| direct_document(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True }))
+	sources.all(|source| direct_document(source, MarkupCore.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True }))
 }
 expect {
 	source = "<!doctype html><html><head><title>A&amp;B</title><meta charset='utf-8'></head><body><table><tbody><tr><th>H</th><td>X</td></tr></tbody></table></body></html>"
 	[0.U64, 1, 2, 3, 4, 5, 6, 9, 10, 13, 14, 15, 16, 156, 157, 256, 0xFFFFFFFFFFFFFFFF].all(
 		|limit| {
-			cases : List(Markup.Props)
+			cases : List(MarkupCore.Props)
 			cases = [{ max_depth: limit }, { max_elements: limit }, { max_nodes: limit }, { max_attributes: limit }, { max_work_per_byte: limit }, { max_source_bytes: limit }, { max_diagnostics: limit }]
 			cases.all(|props| HtmlTree.parse(source, False, {}, { ..props, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { ..props, exact_structure: True }))
 		},
 	)
+}
+
+# Each sorted boundary is visited once, independent of nesting depth. Attribute
+# and token-interior boundaries are classified by MarkupTemplate before use;
+# their receipts are irrelevant. Existing text spans retain their normal split.
+record_boundaries : List(U64), { cursor : U64, parents : List(HtmlTree.Placement) }, U64, Try(U64, [Missing]) -> { cursor : U64, parents : List(HtmlTree.Placement) }
+record_boundaries = |boundaries, progress, offset, parent| {
+	var $next = progress
+	while $next.cursor < boundaries.len() {
+		at = boundaries.get($next.cursor) ?? offset
+		if at > offset {
+			break
+		}
+		$next = { cursor: $next.cursor + 1, parents: $next.parents.append({ offset: at, parent }) }
+	}
+	$next
+}
+
+# Empty template boundaries follow construction ancestry, independently of the
+# deliberately opening-only formatting/form origins. Both proof paths retain
+# exactly the same public parse result as their ordinary entry points.
+expect {
+	["strong", "b", "em", "i", "a", "form"].all(
+		|name| {
+			prefix = Str.join_with(["<div><", name, ">"], "")
+			source = Str.join_with([prefix, "</", name, "></div>"], "")
+			boundaries = [prefix.count_utf8_bytes(), prefix.count_utf8_bytes()]
+			direct = match direct_fragment_placed(source, MarkupCore.html_namespace, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			general = match HtmlTree.parse_general_placed(source, True, {}, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			direct.parsed == general.parsed and direct.parents == general.parents and Ok(direct.parsed) == direct_fragment(source, MarkupCore.html_namespace, {}) and Ok(general.parsed) == HtmlTree.parse_general(source, True, {}, {}) and placement_names(direct) == [name, name]
+		},
+	)
+}
+expect {
+	["strong", "b", "em", "i", "a", "form"].all(
+		|name| {
+			prefix = Str.join_with(["<!doctype html><html><head></head><body><div><", name, ">"], "")
+			source = Str.join_with([prefix, "</", name, "></div></body></html>"], "")
+			boundaries = [prefix.count_utf8_bytes()]
+			direct = match direct_document_placed(source, MarkupCore.html_namespace, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			general = match HtmlTree.parse_general_placed(source, False, {}, {}, boundaries) {
+				Ok(value) => value
+				Err(_) => return False
+			}
+			direct.parsed == general.parsed and direct.parents == general.parents and Ok(direct.parsed) == direct_document(source, MarkupCore.html_namespace, {}) and placement_names(direct) == [name]
+		},
+	)
+}
+# A form-pointer close can remove a noncurrent stack entry. The still-open div
+# remains the insertion parent; lexical tag nesting cannot recover that fact.
+expect {
+	prefix = "<form><div></form>"
+	source = Str.concat(prefix, "</div>")
+	placed = HtmlTree.parse_general_placed(source, True, {}, { recovery: Browser }, [prefix.count_utf8_bytes()])?
+	placement_names(placed) == ["div"] and placed.parsed == HtmlTree.parse_general(source, True, {}, { recovery: Browser })?
+}
+
+placement_names : HtmlTree.Placed -> List(Str)
+placement_names = |placed| placed.parents.map(
+	|entry| match entry.parent {
+		Ok(id) => match (placed.parsed.tree.nodes.get(id) ?? empty_node).kind {
+			Element(name) => name.local
+			_ => ""
+		}
+		Err(Missing) => ""
+	},
+)
+
+# Recovery can reconstruct a formatting element only when the next authored
+# characters arrive. Receipts follow those real stack transitions and leave
+# the recovered tree and its clone provenance unchanged.
+expect {
+	source = "<b><i>x</b>y</i>"
+	placed = HtmlTree.parse_general_placed(source, True, {}, { recovery: Browser }, ["<b><i>x".count_utf8_bytes(), "<b><i>x</b>".count_utf8_bytes(), "<b><i>x</b>y".count_utf8_bytes()])?
+	Ok(placed.parsed) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }) and placement_names(placed) == ["i", "", "i"] and !placed.parsed.diagnostics.is_empty()
 }

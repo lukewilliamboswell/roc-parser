@@ -14,5 +14,5 @@ main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
-	Ok(Markdown.parse_str(input).len() + 1)
+	Ok(Markdown.parse_str(input, {}).len() + 1)
 }

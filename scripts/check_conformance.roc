@@ -1,10 +1,11 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-15-f25da45",
 }
 
 import cli.Cmd
+import cli.Duration
 import cli.Env
 import cli.OsStr
 import cli.Stderr
@@ -16,7 +17,7 @@ main! = |args| {
 	requested = args.map(OsStr.display)
 	if requested == ["--list"] {
 		for review in HarnessPlan.reviews {
-			kind = if review.fast "fast" else "scheduled"
+			kind = if (review.fast) "fast" else "scheduled"
 			Stdout.line!("${review.name}: ${kind}; ${Str.join_with(review.args, " ")}")?
 		}
 		return Ok({})
@@ -33,7 +34,7 @@ main! = |args| {
 reviews! = |requested| {
 	selected = HarnessPlan.select(requested)?
 	# One fingerprinted Python environment serves every selection.
-	setup = Cmd.new("python3").args(["scripts/setup_oracles.py"].concat(HarnessPlan.requirements).map(OsStr.from_str)).stdout(Capture).stderr(Inherit).timeout_ms(600_000).run!().map_err(|_| "Python oracle setup did not complete")?
+	setup = Cmd.new("python3").args(["scripts/setup_oracles.py"].concat(HarnessPlan.requirements).map(OsStr.from_str)).stdout(Capture).stderr(Inherit).timeout(Duration.millis(600_000)).run!().map_err(|_| "Python oracle setup did not complete")?
 	if setup.status != Exited(0) {
 		return Err("Python oracle setup failed")
 	}

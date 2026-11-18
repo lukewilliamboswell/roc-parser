@@ -162,7 +162,7 @@ table_of_contents = |blocks| {
 
 main! = |_args| {
 	# tag::main[]
-	blocks = Markdown.parse_str(source)
+	blocks = Markdown.parse_str(source, {})
 	Stdout.write!(render_blocks(blocks))?
 	Stdout.line!("--- contents ---")?
 	for line in table_of_contents(blocks) {

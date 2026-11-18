@@ -20,17 +20,17 @@ main! = |_| {
 	line =
 		match all.first() {
 			Ok('Q') => {
-				match HTTP.parse_request(bytes) {
-					Ok({ request: val, rest: input }) =>
+				match HTTP.Request.parser({}).run(bytes) {
+					Ok({ value: val, rest: input }) =>
 						"{\"status\":\"ok\",\"method\":${json_string(method_name(val.method))},\"target\":${json_string(val.target)},${version(val.version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
-					Err(InvalidHttp({ message, offset })) => error(message, offset)
+					Err(ParseError(diagnostic)) => error(Str.inspect(diagnostic.problem), source_offset(diagnostic.location))
 				}
 			}
 			Ok('S') => {
-				match HTTP.parse_response(bytes) {
-					Ok({ response: val, rest: input }) =>
+				match HTTP.Response.parser({}).run(bytes) {
+					Ok({ value: val, rest: input }) =>
 						"{\"status\":\"ok\",\"code\":${val.status_code.to_str()},\"reason\":${json_string(val.reason)},${version(val.version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
-					Err(InvalidHttp({ message, offset })) => error(message, offset)
+					Err(ParseError(diagnostic)) => error(Str.inspect(diagnostic.problem), source_offset(diagnostic.location))
 				}
 			}
 			_ => "{\"status\":\"bad_mode\"}"
@@ -82,4 +82,10 @@ escape_json = |bytes, out| {
 		[byte, .. as rest] if byte < 32 => escape_json(rest, out.concat(['\\', 'u', '0', '0', hex_digit(byte // 16), hex_digit(byte % 16)]))
 		[byte, .. as rest] => escape_json(rest, out.append(byte))
 	}
+}
+
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
 }

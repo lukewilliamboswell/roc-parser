@@ -15,3 +15,6 @@ __pycache__/
 .docs-api/
 .pages/
 .blueprint/
+
+/bench/compare/rust/target/
+/bench/*throughput.json

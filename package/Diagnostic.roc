@@ -1,0 +1,47 @@
+import SourceExcerpt
+
+## Shared failure metadata. Public aliases are owned by Parser and formats.
+Diagnostic(problem) := {
+	problem : problem,
+	location : Diagnostic.Location,
+	path : List(Diagnostic.PathSegment),
+}.{
+
+	## Compare and hash diagnostics structurally when their problems support it.
+	is_eq : _
+	to_hash : _
+
+	## Offsets count original bytes, except InputOffset which counts input elements.
+	## Lines, columns, records and fields are one-based; indexes are zero-based.
+	Location : [InputOffset(U64), ByteOffset(U64), Text({ offset : U64, line : U64, column : U64 }), LineColumn({ line : U64, column : U64 }), Unavailable(UnavailableReason)]
+
+	UnavailableReason : [NotRetained, GeneratedValue, NotApplicable]
+
+	## Logical context retained independently of physical source coordinates.
+	PathSegment : [Record(U64), Field(U64), Index(U64), Key(Str), Source(Str)]
+
+	## Counts can stop at the first violation without scanning additional input.
+	Observed : [Exact(U64), AtLeast(U64)]
+
+	## A bounded copy of offending source bytes and its original size.
+	Excerpt : SourceExcerpt
+
+	excerpt : List(U8) -> Excerpt
+	excerpt = SourceExcerpt.from_bytes
+
+	## Text coordinates when known; binary and generated values have none.
+	line_column : Location -> Try({ line : U64, column : U64 }, [NoTextPosition])
+	line_column = |location| match location {
+		Text(position) => Ok({ line: position.line, column: position.column })
+		LineColumn(position) => Ok(position)
+		_ => Err(NoTextPosition)
+	}
+
+	## Original byte offsets, distinct from generic parser input indexes.
+	byte_offset : Location -> Try(U64, [NoByteOffset])
+	byte_offset = |location| match location {
+		Text(position) => Ok(position.offset)
+		ByteOffset(offset) => Ok(offset)
+		_ => Err(NoByteOffset)
+	}
+}

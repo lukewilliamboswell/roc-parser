@@ -18,6 +18,7 @@ import argparse
 import dataclasses
 import datetime
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -34,14 +35,16 @@ from typing import Callable
 
 try:
     from ._common import measured_allocations
+    from ._reference_cache import ReferenceCache, ReferenceUnavailable, digest as reference_digest
 except ImportError:
     from _common import measured_allocations
+    from _reference_cache import ReferenceCache, ReferenceUnavailable, digest as reference_digest
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "bench"
 DEFAULT_OUT = ROOT / ".roc-parser-tmp" / "bench"
-FORMATS = ("csv", "yaml", "xml", "json", "markdown", "http")
-EXTENSIONS = {"csv": "csv", "yaml": "yaml", "xml": "xml", "json": "json", "markdown": "md", "http": "http"}
+FORMATS = ("csv", "yaml", "xml", "json", "markdown", "http", "qif", "ofx")
+EXTENSIONS = {"csv": "csv", "yaml": "yaml", "xml": "xml", "json": "json", "markdown": "md", "http": "http", "qif": "qif", "ofx": "ofx"}
 SIZES = {"small": 4 * 1024, "medium": 64 * 1024, "large": 1024 * 1024}
 SCHEMA_VERSION = 1
 
@@ -242,8 +245,28 @@ def http_chunked(rng: random.Random, target: int, chunk: int = 8192) -> str:
             f"Server: example\r\n\r\n{chunks}0\r\n\r\n")
 
 
+def qif_doc(rng: random.Random, target: int) -> str:
+    return fill(target, lambda i: f"D27/08/2026\nT-{i % 100}.25\nP{rng.choice(NAMES)}\nMrecord {i}\nLExpenses\n^\n", "!Type:Bank\n")
+
+
+def ofx_doc(rng: random.Random, target: int) -> str:
+    head = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<?OFX OFXHEADER="200" VERSION="203" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>\n'
+            '<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>'
+            '<DTSERVER>20260827120000</DTSERVER><LANGUAGE>ENG</LANGUAGE></SONRS></SIGNONMSGSRSV1>'
+            '<BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>'
+            '<STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>123</BANKID><ACCTID>456</ACCTID>'
+            '<ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST>'
+            '<DTSTART>20260801000000</DTSTART><DTEND>20260831000000</DTEND>')
+    tail = ('</BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260831000000</DTASOF>'
+            '</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>')
+    return fill(target - len(tail), lambda i: (
+        f'<STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-{i % 100}.25</TRNAMT>'
+        f'<FITID>{i}</FITID><NAME>{rng.choice(NAMES)}</NAME><MEMO>record {i}</MEMO></STMTTRN>'), head, tail)
+
+
 GENERATORS: dict[str, Callable[[random.Random, int], str]] = {
-    "csv": csv_doc, "yaml": yaml_doc, "xml": xml_doc, "json": json_doc, "markdown": markdown_doc,
+    "qif": qif_doc, "ofx": ofx_doc, "csv": csv_doc, "yaml": yaml_doc, "xml": xml_doc, "json": json_doc, "markdown": markdown_doc,
 }
 
 
@@ -255,6 +278,8 @@ def seed_for(name: str) -> int:
 def pathological() -> dict[str, dict[str, str]]:
     """Adversarial shapes that once were (or commonly are) super-linear."""
     return {
+        "qif": {"long-memo": "!Type:Bank\nD27/08/2026\nT1\nM" + "a" * 65536 + "\n^\n"},
+        "ofx": {"many-transactions": ofx_doc(random.Random(0), 128 * 1024)},
         "csv": {
             "wide-row": ",".join(f"f{i}" for i in range(20000)) + "\n",
             "escaped-quotes": '"' + '""' * 50000 + '"\n',
@@ -301,6 +326,8 @@ def pathological() -> dict[str, dict[str, str]]:
 def samples() -> dict[str, dict[str, bytes]]:
     folder = BENCH / "corpus" / "samples"
     return {
+        "qif": {"sample-bank": (folder / "bank-statement.qif").read_bytes()},
+        "ofx": {"sample-bank": (folder / "bank-statement.ofx").read_bytes()},
         "csv": {"sample-orders-export": (folder / "orders-export.csv").read_bytes()},
         "yaml": {"sample-github-actions": (folder / "github-actions.yaml").read_bytes()},
         "xml": {"sample-svg": (folder / "logo.svg").read_bytes()},
@@ -346,6 +373,12 @@ class Impl:
     notes: str = ""
 
     @property
+    def workload(self) -> str:
+        if self.name in {"qif_parser", "roxmltree", "rust-roxmltree"}:
+            return "collect-borrowed"
+        return "consume" if "consume" in self.name else "collect"
+
+    @property
     def id(self) -> str:
         return f"{self.lang}/{self.name}"
 
@@ -353,15 +386,18 @@ class Impl:
 #: Comparator libraries per language and format, with what each one measures.
 COMPARATORS = {
     "rust": {
-        "csv": [("csv", "csv 1.3 StringRecords copied into Vec<Vec<String>>")],
+        "qif": [("qif_parser", "qif_parser typed transactions (borrowed strings; f64 amounts)")],
+        "ofx": [("ofx-rs", "ofx-rs typed bank/card statements")],
+        "csv": [("csv", "collect: csv 1.3 StringRecords copied into Vec<Vec<String>>"), ("csv-consume", "consume: reusable StringRecord, values discarded")],
         "yaml": [("yaml-rust2", "yaml-rust2 YamlLoader tree"), ("serde_yaml", "serde_yaml Value tree (unsafe-libyaml)")],
-        "xml": [("quick-xml", "quick-xml pull events built into an owned tree"), ("roxmltree", "roxmltree read-only DOM")],
+        "xml": [("quick-xml", "quick-xml pull events built into an owned tree"), ("roxmltree", "roxmltree borrowed read-only DOM")],
         "json": [("serde_json", "serde_json Value with preserve_order and arbitrary_precision: ordered, lossless")],
         "markdown": [("pulldown-cmark", "pulldown-cmark events made 'static and collected"), ("comrak", "comrak arena AST")],
         "http": [("httparse", "httparse head plus Content-Length/chunked body framing, copied")],
     },
     "go": {
-        "csv": [("encoding-csv", "encoding/csv ReadAll")],
+        "qif": [], "ofx": [("ofxgo", "ofxgo validated bank/card statement model")],
+        "csv": [("encoding-csv", "collect: encoding/csv ReadAll"), ("encoding-csv-consume", "consume: encoding/csv Read with ReuseRecord")],
         "yaml": [("yaml.v3", "gopkg.in/yaml.v3 Unmarshal into interface{}")],
         "xml": [("encoding-xml", "encoding/xml tokens built into a tree")],
         "json": [("encoding-json", "encoding/json Decoder.UseNumber into interface{}; maps are unordered")],
@@ -369,7 +405,9 @@ COMPARATORS = {
         "http": [("net-http", "net/http ReadRequest/ReadResponse plus io.ReadAll body")],
     },
     "python": {
-        "csv": [("csv", "stdlib csv.reader (C) into lists")],
+        "qif": [("quiffen", "quiffen typed accounts and transactions")],
+        "ofx": [("ofxtools", "ofxtools typed statements"), ("ofxparse", "ofxparse typed statements")],
+        "csv": [("csv", "collect: stdlib csv.reader (C) into lists"), ("csv-consume", "consume: stdlib csv.reader (C), rows discarded")],
         "yaml": [("pyyaml", "PyYAML SafeLoader, pure Python"), ("pyyaml-libyaml", "PyYAML CSafeLoader (libyaml)")],
         "xml": [("etree", "xml.etree.ElementTree.fromstring (expat)")],
         "json": [("json", "stdlib json.loads (C scanner) into dicts and lists; numbers become int and float")],
@@ -387,18 +425,28 @@ def tool_version(command: list[str]) -> str:
     return (result.stdout + result.stderr).strip().splitlines()[0] if result.returncode == 0 else ""
 
 
+def python_comparator_path(requested: str | None) -> str:
+    if requested is not None:
+        return shutil.which(requested) or requested
+    cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    key = hashlib.sha256(str(Path(sys.executable).resolve()).encode()).hexdigest()[:12]
+    return str(cache / "roc-parser" / f"bench-venv-{key}" / "bin" / "python")
+
+
 class Builder:
-    def __init__(self, out: Path, roc: str, python: str | None, log: Callable[[str], None]):
+    def __init__(self, out: Path, roc: str, python: str | None, log: Callable[[str], None], optimization: str = "speed"):
         self.out = out
         self.roc = roc
+        self.optimization = optimization
+        self.roc_flags = [f"--opt={optimization}", "--debug"]
         self.python = python
         self.log = log
         self.skipped: dict[str, str] = {}
         self.versions: dict[str, object] = {}
 
-    def run(self, name: str, command: list[str], cwd: Path = ROOT) -> bool:
+    def run(self, name: str, command: list[str], cwd: Path = ROOT, env: dict | None = None) -> bool:
         self.log(f"build {name}: {' '.join(command)}")
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+        result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
         (self.out / "logs" / f"build-{name}.log").write_text(result.stdout + result.stderr)
         if result.returncode:
@@ -409,11 +457,16 @@ class Builder:
         impls = []
         self.versions["roc"] = tool_version([self.roc, "version"]) or tool_version([self.roc, "--version"])
         for fmt in formats:
-            binary = self.out / "bin" / f"roc-{fmt}"
-            binary.parent.mkdir(parents=True, exist_ok=True)
-            if self.run(f"roc-{fmt}", [self.roc, "build", "--opt=speed", str(BENCH / "roc" / f"{fmt}.roc"),
-                                        f"--output={binary}"]):
-                impls.append(Impl("roc", "roc-parser", fmt, [str(binary)], "roc build --opt=speed"))
+            drivers = [(fmt, "roc-parser", "collect")]
+            if fmt in {"csv", "qif", "ofx"}:
+                values = "string fields" if fmt == "csv" else "typed transactions"
+                drivers.append((f"{fmt}-stream", "roc-parser-consume", f"consume: {values}, preloaded 64 KiB chunks"))
+            for driver, name, notes in drivers:
+                binary = self.out / "bin" / f"roc-{driver}"
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                if self.run(f"roc-{driver}", [self.roc, "build", *self.roc_flags, str(BENCH / "roc" / f"{driver}.roc"),
+                                             f"--output={binary}"]):
+                    impls.append(Impl("roc", name, fmt, [str(binary)], notes + f"; roc build ({self.optimization}) --debug"))
         return impls
 
     def rust_impls(self, formats: tuple[str, ...]) -> list[Impl]:
@@ -433,23 +486,17 @@ class Builder:
             self.skipped["go"] = "go not found"
             return []
         binary = self.out / "bin" / "go-compare"
-        if not self.run("go", ["go", "build", "-mod=readonly", "-o", str(binary), "."], cwd=BENCH / "compare" / "go"):
+        if not self.run("go", ["go", "build", "-mod=readonly", "-o", str(binary), "."], cwd=BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"}):
             return []
-        self.versions["go"] = tool_version(["go", "version"])
+        self.versions["go"] = reference_probe(["go", "version"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"})
         self.versions["go_modules"] = go_mod_versions()
         return self._impls("go", [str(binary)], formats)
 
     def python_impls(self, formats: tuple[str, ...]) -> list[Impl]:
-        python = self.python
-        if python is None:
-            # Outside the checkout: repository policy rejects Python files
-            # anywhere but scripts/, and a venv is full of them.
-            cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-            # One venv per interpreter, so a blueprint (Nix) run and a plain
-            # run never share packages built for another Python.
-            key = hashlib.sha256(str(Path(sys.executable).resolve()).encode()).hexdigest()[:12]
-            venv = cache / "roc-parser" / f"bench-venv-{key}"
-            python = str(venv / "bin" / "python")
+        python = python_comparator_path(self.python)
+        if self.python is None:
+            # Only explicit reference refresh is allowed to create/install this environment.
+            venv = Path(python).parent.parent
             if not Path(python).exists():
                 if not self.run("python-venv", [sys.executable, "-m", "venv", str(venv)]):
                     return []
@@ -473,13 +520,26 @@ class Builder:
 
 
 def cargo_lock_versions() -> dict[str, str]:
-    lock = (BENCH / "compare" / "rust" / "Cargo.lock").read_text()
+    folder = BENCH / "compare" / "rust"
+    lock = (folder / "Cargo.lock").read_text()
+    pins = {name: direct or inline for name, direct, inline in re.findall(
+        r'^([\w-]+)\s*=\s*(?:"=([^"\n]+)"|\{[^\n]*?version\s*=\s*"=([^"\n]+)")',
+        (folder / "Cargo.toml").read_text(), re.M)}
     wanted = {name for lang in ["rust"] for fmt in COMPARATORS[lang].values() for name, _ in fmt}
     wanted |= {"pulldown-cmark", "unsafe-libyaml"}
-    found = {}
+    versions: dict[str, set[str]] = {}
     for name, version in re.findall(r'name = "([^"]+)"\nversion = "([^"]+)"', lock):
         if name in wanted:
-            found[name] = version
+            versions.setdefault(name, set()).add(version)
+    found = {}
+    for name, choices in versions.items():
+        if name in pins:
+            matching = [value for value in choices if value.split("+", 1)[0] == pins[name].split("+", 1)[0]]
+            if len(matching) != 1:
+                raise ValueError(f"locked direct comparator version is ambiguous or absent: {name}")
+            found[name] = matching[0]
+        else:
+            found[name] = ", ".join(sorted(choices))
     return found
 
 
@@ -562,14 +622,25 @@ def summarize(per_parse_ns: list[float], size: int) -> dict:
 
 def measure(impl: Impl, doc: Doc, args) -> dict:
     record = {"impl": impl.id, "lang": impl.lang, "library": impl.name, "doc": doc.id, "kind": doc.kind,
-              "bytes": len(doc.data)}
+              "bytes": len(doc.data), "workload": impl.workload}
     try:
         first = run_once(impl.command, doc.data, 1, args.timeout)
         iterations = calibrate(first["elapsed_ns"], int(args.target_ms * 1e6), args.max_iterations)
-        run_once(impl.command, doc.data, iterations, args.timeout)  # warmup batch, discarded
+        warmup = run_once(impl.command, doc.data, iterations, args.timeout)
         batches = [run_once(impl.command, doc.data, iterations, args.timeout) for _ in range(args.repetitions)]
     except RunError as error:
         record["error"] = str(error)
+        return record
+    if any((batch["successes"], batch["checksum"]) != (batches[0]["successes"], batches[0]["checksum"])
+           for batch in batches[1:]):
+        record["error"] = "unstable success count or content checksum across batches"
+        return record
+    measured = (batches[0]["successes"], batches[0]["checksum"])
+    if (first["successes"] * iterations, first["checksum"] * iterations) != measured:
+        record["error"] = "calibration success count or content checksum differs from measured batches"
+        return record
+    if (warmup["successes"], warmup["checksum"]) != measured:
+        record["error"] = "warmup success count or content checksum differs from measured batches"
         return record
     record.update(summarize([b["elapsed_ns"] / iterations for b in batches], len(doc.data)))
     record["iterations"] = iterations
@@ -578,6 +649,9 @@ def measure(impl: Impl, doc: Doc, args) -> dict:
     rss = [b["peak_rss_bytes"] for b in batches if b.get("peak_rss_bytes")]
     record["peak_rss_bytes"] = max(rss) if rss else None
     record["batch_elapsed_ns"] = [b["elapsed_ns"] for b in batches]
+    record["receipts"] = {"command": impl.command,
+                          "measured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+                          "calibration": first, "warmup": warmup, "batches": batches}
     return record
 
 
@@ -606,20 +680,30 @@ def comparison(results: list[dict]) -> list[dict]:
     by_key = {(r["impl"], r["doc"]): r for r in results if "median_ns" in r}
     rows = []
     for fmt in FORMATS:
-        roc = {doc: r for (impl, doc), r in by_key.items() if impl == "roc/roc-parser" and doc.startswith(fmt + "/")}
-        impls = sorted({impl for (impl, doc) in by_key if doc.startswith(fmt + "/") and impl != "roc/roc-parser"})
-        for impl in impls:
-            ratios, docs = [], []
-            for doc, mine in roc.items():
-                other = by_key.get((impl, doc))
-                if other and mine["kind"] != "pathological" and mine["accepted"] and other["accepted"]:
-                    ratios.append(mine["median_ns"] / other["median_ns"])
-                    docs.append(doc)
-            mbps = [by_key[(impl, d)]["mb_per_s"] for d in docs]
-            rows.append({"format": fmt, "impl": impl, "documents": len(docs),
-                         "speedup_vs_roc": geomean(ratios),
-                         "impl_mb_per_s": geomean(mbps),
-                         "roc_mb_per_s": geomean([roc[d]["mb_per_s"] for d in docs])})
+        for workload, reference in (("collect", "roc/roc-parser"), ("consume", "roc/roc-parser-consume")):
+            roc = {doc: r for (impl, doc), r in by_key.items()
+                   if impl == reference and doc.startswith(fmt + "/") and r.get("workload", "collect") == workload}
+            impls = sorted({impl for (impl, doc), r in by_key.items()
+                            if doc.startswith(fmt + "/") and not impl.startswith("roc/")
+                            and r.get("workload", "collect") == workload})
+            for impl in impls:
+                ratios, docs = [], []
+                mismatches = []
+                for doc, mine in roc.items():
+                    other = by_key.get((impl, doc))
+                    if other and mine["kind"] != "pathological" and mine["accepted"] and other["accepted"]:
+                        if (fmt in ("csv", "qif", "ofx") or workload == "consume") and (
+                            "checksum" not in mine or "checksum" not in other
+                            or mine["checksum"] * other.get("iterations", 1) != other["checksum"] * mine.get("iterations", 1)
+                        ) and not (mine.get("checksum_qualified") is True and other.get("checksum_qualified") is True):
+                            mismatches.append(doc)
+                            continue
+                        ratios.append(mine["median_ns"] / other["median_ns"])
+                        docs.append(doc)
+                mbps = [by_key[(impl, d)]["mb_per_s"] for d in docs]
+                rows.append({"format": fmt, "workload": workload, "impl": impl, "documents": len(docs), "semantic_mismatches": mismatches,
+                             "speedup_vs_roc": geomean(ratios), "impl_mb_per_s": geomean(mbps),
+                             "roc_mb_per_s": geomean([roc[d]["mb_per_s"] for d in docs])})
     return rows
 
 
@@ -647,8 +731,18 @@ def markdown_report(report: dict) -> str:
              f"- roc-parser commit: {meta['git']['commit']}{' (dirty)' if meta['git']['dirty'] else ''}",
              f"- Mode: {'quick' if meta['quick'] else 'full'}, {meta['repetitions']} batches of about "
              f"{meta['target_ms']} ms after a warmup batch", ""]
+    if meta.get("reference_cache"):
+        lines += ["Reference measurements: " + meta["reference_cache"]["mode"]
+                  + "; cached timings retain their original timestamps and measurement receipts.", ""]
     if meta["skipped"]:
         lines += ["Skipped: " + "; ".join(f"{k} ({v.splitlines()[0][:120]})" for k, v in meta["skipped"].items()), ""]
+    implementations = meta.get("implementations", [])
+    if implementations:
+        lines += ["## Implementations", "", "| Format | Implementation | Workload | Representation |",
+                  "| --- | --- | --- | --- |"]
+        for impl in implementations:
+            lines.append(f"| {impl['format']} | {impl['id']} | {impl.get('workload', 'collect')} | {impl['notes']} |")
+        lines.append("")
     lines += ["## Comparison", "",
               "Geometric mean over the non-pathological documents both accepted. "
               "\"3x slower\" means roc-parser takes three times as long as that library.", "",
@@ -657,8 +751,12 @@ def markdown_report(report: dict) -> str:
     for row in report["comparison"]:
         lib_mb = f"{row['impl_mb_per_s']:.3g}" if row["impl_mb_per_s"] else "-"
         roc_mb = f"{row['roc_mb_per_s']:.3g}" if row["roc_mb_per_s"] else "-"
-        lines.append(f"| {row['format']} | {row['impl']} | {row['documents']} | {lib_mb} | {roc_mb} | "
+        lines.append(f"| {row['format']} ({row.get('workload', 'collect')}) | {row['impl']} | {row['documents']} | {lib_mb} | {roc_mb} | "
                      f"{fmt_ratio(1 / row['speedup_vs_roc']) if row['speedup_vs_roc'] else '-'} |")
+    mismatches = [(row["impl"], doc) for row in report["comparison"] for doc in row.get("semantic_mismatches", [])]
+    if mismatches:
+        lines += ["", "Excluded from ratios because decoded checksums differ: "
+                  + "; ".join(f"{impl}: {doc}" for impl, doc in mismatches)]
     lines += ["", "## Every measurement", "",
               "| Document | Bytes | Implementation | Median | Spread | MB/s | Peak RSS | Result |",
               "| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |"]
@@ -668,10 +766,24 @@ def markdown_report(report: dict) -> str:
             continue
         rss = f"{r['peak_rss_bytes'] / 2**20:.1f} MiB" if r.get("peak_rss_bytes") else "-"
         result = "accepted" if r["accepted"] else "rejected"
+        cached = r.get("reference_cache", {})
+        if cached.get("status") == "hit":
+            result += f", cached {cached.get('provenance', {}).get('measured_at', '?')}"
         if "allocation_calls" in r:
             result += f", {r['allocation_calls']} allocs"
         lines.append(f"| {r['doc']} | {r['bytes']} | {r['impl']} | {fmt_ns(r['median_ns'])} | "
                      f"{r['spread_pct']:.0f}% | {r['mb_per_s']:.3g} | {rss} | {result} |")
+    if "performance_targets" in report:
+        lines += ["", "## Elapsed-time target", "",
+                  "Each ratio is Roc time divided by the fastest qualified reference time. "
+                  "Collection and consumption are separate; borrowing and model differences remain in the implementation notes.", "",
+                  "| Document | Roc implementation | Fastest reference | Slowdown | Limit | Status |",
+                  "| --- | --- | --- | ---: | ---: | --- |"]
+        for row in report["performance_targets"]:
+            ratio = f"{row['slowdown']:.3f}x" if "slowdown" in row else "-"
+            status = row["status"] + (": " + row["reason"] if "reason" in row else "")
+            lines.append(f"| {row['doc']} | {row['implementation']} | {row.get('reference', '-')} | "
+                         f"{ratio} | {row['maximum_slowdown']:g}x | {status} |")
     return "\n".join(lines) + "\n"
 
 
@@ -741,6 +853,119 @@ def write_corpus(docs: list[Doc], folder: Path) -> list[dict]:
     return manifest
 
 
+# Reference measurements intentionally exclude Roc sources, compiler and revision.
+# Only their own comparator, toolchain, input and measurement conditions qualify reuse.
+def reference_sources(lang: str) -> dict[str, str]:
+    if lang == "python":
+        files = [ROOT / "scripts" / "bench_python.py", BENCH / "compare" / "python" / "requirements.txt"]
+    else:
+        folder = BENCH / "compare" / lang
+        suffixes = {".rs", ".toml", ".lock"} if lang == "rust" else {".go", ".mod", ".sum"}
+        files = []
+        for current, directories, names in os.walk(folder):
+            directories[:] = [name for name in directories if name not in {"target", ".git", ".roc-parser-tmp"}]
+            files.extend(Path(current) / name for name in names if Path(name).suffix in suffixes)
+    return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(files)}
+
+
+def reference_probe(command: list[str], cwd: Path = ROOT, env: dict | None = None) -> str:
+    try:
+        result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ReferenceUnavailable(f"runtime identity unavailable: {error}") from None
+    if result.returncode or not result.stdout.strip():
+        raise ReferenceUnavailable(f"runtime identity unavailable for {command[0]}: {result.stderr.strip()[:200]}")
+    return result.stdout.strip()
+
+
+def reference_runtime(lang: str, python: str | None) -> dict:
+    if lang == "rust":
+        probe_env = {**os.environ, "RUSTUP_AUTO_INSTALL": "0"}
+        return {"compiler": reference_probe(["rustc", "--version", "--verbose"], env=probe_env),
+                "cargo": reference_probe(["cargo", "--version"], env=probe_env), "libraries": cargo_lock_versions()}
+    if lang == "go":
+        return {"compiler": reference_probe(["go", "version"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"}),
+                "configuration": json.loads(reference_probe(["go", "env", "-json", "GOOS", "GOARCH", "GOAMD64",
+                    "GOARM", "GOEXPERIMENT", "CGO_ENABLED", "GOTOOLCHAIN", "GOFLAGS", "CC", "CXX"], BENCH / "compare" / "go", env={**os.environ, "GOTOOLCHAIN": "local"})),
+                "libraries": go_mod_versions()}
+    executable = python_comparator_path(python)
+    code = ("import hashlib,importlib.metadata as m,json,platform,sys,sysconfig; "
+            "print(json.dumps({'version':sys.version,'compiler':platform.python_compiler(),"
+            "'build':platform.python_build(),'configuration':sysconfig.get_config_var('CONFIG_ARGS'),"
+            "'executable_sha256':hashlib.sha256(open(sys.executable,'rb').read()).hexdigest(),"
+            "'packages':sorted((d.metadata['Name'],d.version,hashlib.sha256((d.read_text('RECORD') or '').encode()).hexdigest()) "
+            "for d in m.distributions())}))")
+    return json.loads(reference_probe([executable, "-c", code]))
+
+
+def reference_machine() -> dict:
+    config = {"machine": machine(), "hostname": platform.node(),
+              "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None}
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        stable = [line for line in cpuinfo.read_text().splitlines()
+                  if line.split(":", 1)[0].strip() in {"vendor_id", "cpu family", "model", "stepping", "microcode", "flags", "Features"}]
+        config["cpu_identity_sha256"] = hashlib.sha256("\n".join(stable).encode()).hexdigest()
+    paths = [Path("/sys/fs/cgroup") / name for name in ("cpu.max", "cpuset.cpus.effective", "memory.max")]
+    paths += [Path("/sys/devices/system/cpu/intel_pstate/no_turbo"), Path("/sys/devices/system/cpu/cpufreq/boost")]
+    paths += list(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_min_freq"))
+    paths += list(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_max_freq"))
+    paths += list(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_governor"))
+    for path in paths:
+        try:
+            config[str(path)] = path.read_text().strip()
+        except OSError:
+            pass
+    config["environment"] = {key: value for key, value in sorted(os.environ.items())
+                             if key.startswith(("RUST", "CARGO_", "GO", "PYTHON", "MALLOC_"))
+                             or key in {"CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "LD_PRELOAD", "LD_LIBRARY_PATH",
+                                        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}}
+    # Dynamic CPU frequency/load and free memory are deliberately not identities.
+    return config
+
+
+def reference_profile(lang: str, args, machine_config: dict) -> dict:
+    runtime = reference_runtime(lang, args.python)
+    sources = reference_sources(lang)
+    if not sources:
+        raise ReferenceUnavailable("comparator source identity is unavailable")
+    if lang == "rust":
+        cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
+        for folder, label in ((cargo_home, "cargo-home"), (ROOT / ".cargo", ".cargo"),
+                              (BENCH / "compare" / "rust" / ".cargo", "bench/compare/rust/.cargo")):
+            for name in ("config", "config.toml"):
+                path = folder / name
+                if path.is_file():
+                    sources[f"{label}/{name}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    builder = getattr(Builder, f"{lang}_impls")
+    protocol = "\n".join(inspect.getsource(function) for function in
+                         (run_once, measure, calibrate, summarize, peak_rss_bytes, _install_wait_hook))
+    return {"runtime": runtime, "sources": sources, "machine": machine_config,
+            "build_recipe_sha256": hashlib.sha256((inspect.getsource(builder) + inspect.getsource(Builder.run)).encode()).hexdigest(),
+            "measurement_protocol_sha256": hashlib.sha256(protocol.encode()).hexdigest()}
+
+
+def reference_identity(impl: Impl, doc: Doc, args, profile: dict) -> dict:
+    return {"schema": 1, "profile": profile,
+            "implementation": {"id": impl.id, "lang": impl.lang, "name": impl.name,
+                               "workload": impl.workload, "ownership": impl.notes},
+            "document": {"id": doc.id, "kind": doc.kind, "bytes": len(doc.data), "sha256": doc.sha256},
+            "settings": {key: getattr(args, key) for key in
+                         ("quick", "repetitions", "target_ms", "timeout", "max_iterations")}}
+
+
+def reference_specs(languages: tuple[str, ...], formats: tuple[str, ...]) -> list[Impl]:
+    return [Impl(lang, name, fmt, [], notes) for lang in languages if lang != "roc"
+            for fmt in formats for name, notes in COMPARATORS[lang][fmt]]
+
+
+def reference_unavailable(impl: Impl, doc: Doc, reason: str, identity: dict | None = None) -> dict:
+    return {"impl": impl.id, "lang": impl.lang, "library": impl.name, "doc": doc.id, "kind": doc.kind,
+            "bytes": len(doc.data), "workload": impl.workload, "status": "ReferenceUnavailable",
+            "error": f"ReferenceUnavailable: {reason}",
+            "reference_cache": {"status": "unavailable", "key": reference_digest(identity) if identity else None}}
+
+
 # ---------------------------------------------------------------------------
 # Command line
 
@@ -749,9 +974,14 @@ def parse_args(argv: list[str] | None = None):
     ap.add_argument("--quick", action="store_true", help="small corpus and short batches, for CI smoke runs")
     ap.add_argument("--label", default=None, help="report folder name (default: full or quick)")
     ap.add_argument("--output-dir", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--refresh-references", action="store_true",
+                    help="explicitly rebuild/measure Go, Rust and Python references and refresh their cache")
+    ap.add_argument("--reference-cache-dir", type=Path, default=None,
+                    help="shared reference measurement cache (default: output-dir/reference-cache)")
+    ap.add_argument("--opt", choices=("dev", "speed"), default="speed", help="Roc backend: dev for CI smoke checks, speed for measurements")
     ap.add_argument("--roc", default=os.environ.get("ROC", "roc"))
     ap.add_argument("--formats", default=",".join(FORMATS))
-    ap.add_argument("--langs", default="roc,rust,go,python", help="comma-separated: roc,rust,go,python")
+    ap.add_argument("--langs", default=None, help="comma-separated: roc,rust,go,python; streaming defaults to roc,rust")
     ap.add_argument("--only", default="", help="comma-separated document names or kinds to keep")
     ap.add_argument("--python", default=None, help="interpreter with the comparator packages (default: a venv)")
     ap.add_argument("--repetitions", type=int, default=None)
@@ -759,6 +989,10 @@ def parse_args(argv: list[str] | None = None):
     ap.add_argument("--max-iterations", type=int, default=100000)
     ap.add_argument("--timeout", type=float, default=120.0, help="seconds allowed for one batch")
     ap.add_argument("--allocations", action="store_true", help="also count Roc allocations (builds bench/roc/alloc.roc)")
+    ap.add_argument("--streaming", action="store_true", help="consume JSON records and XML/HTTP events; compare separate pinned Rust consumers")
+    ap.add_argument("--chunk-bytes", type=int, default=4096, help="source chunk width for --streaming (default: 4096)")
+    ap.add_argument("--max-slowdown", type=float, default=None,
+                    help="require each selected non-pathological Roc result to take at most this multiple of the fastest qualified reference")
     ap.add_argument("--fail-on-error", action="store_true", help="exit 1 if any roc-parser measurement errored")
     ap.add_argument("--corpus-only", action="store_true", help="write the corpus and its manifest, then stop")
     ap.add_argument("--blueprint", action="store_true",
@@ -766,14 +1000,25 @@ def parse_args(argv: list[str] | None = None):
     args = ap.parse_args(argv)
     args.repetitions = args.repetitions or (3 if args.quick else 7)
     args.target_ms = args.target_ms or (20.0 if args.quick else 200.0)
-    args.label = args.label or ("quick" if args.quick else "full")
+    args.label = args.label or (("streaming-" if args.streaming else "") + ("quick" if args.quick else "full"))
     if args.repetitions < 1 or args.target_ms <= 0 or args.max_iterations < 1:
         ap.error("repetitions, target-ms and max-iterations must be positive")
+    if args.chunk_bytes < 1 or (args.max_slowdown is not None and
+                               (not math.isfinite(args.max_slowdown) or args.max_slowdown <= 0)):
+        ap.error("chunk-bytes and max-slowdown must be positive finite values")
     args.formats = tuple(f for f in args.formats.split(",") if f)
     unknown = set(args.formats) - set(FORMATS)
     if unknown:
         ap.error(f"unknown formats {sorted(unknown)}")
-    args.langs = tuple(x for x in args.langs.split(",") if x)
+    if args.streaming and set(args.formats) - {"json", "xml", "http"}:
+        ap.error("--streaming supports --formats json,xml,http")
+    if args.streaming and args.allocations:
+        ap.error("--streaming allocation checks use the format's stream-ceilings fuzz target")
+    args.langs = tuple(x for x in (args.langs or ("roc,rust" if args.streaming else "roc,rust,go,python")).split(",") if x)
+    if set(args.langs) - {"roc", "rust", "go", "python"}:
+        ap.error("langs must be roc, rust, go or python")
+    if args.streaming and set(args.langs) - {"roc", "rust"}:
+        ap.error("--streaming has pinned Rust consumers; choose --langs roc,rust")
     return args
 
 
@@ -790,17 +1035,44 @@ def main(argv: list[str] | None = None) -> int:
     def log(message: str) -> None:
         print(message, file=sys.stderr, flush=True)
 
-    docs = select(build_corpus(args.quick, args.formats), args.only)
+    streaming = None
+    if args.streaming:
+        if __package__:
+            from . import _streaming_bench as streaming
+        else:
+            import _streaming_bench as streaming
+    docs = select(streaming.documents(sys.modules[__name__], args.quick, args.formats)
+                  if streaming else build_corpus(args.quick, args.formats), args.only)
     manifest = write_corpus(docs, out / "corpus")
     (out / "corpus" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.corpus_only:
         return 0
 
     _install_wait_hook()
-    builder = Builder(out, args.roc, args.python, log)
-    impls: list[Impl] = []
-    for lang in args.langs:
-        impls += getattr(builder, f"{lang}_impls")(args.formats)
+    builder = Builder(out, args.roc, args.python, log, args.opt)
+    impls = ((streaming.roc_implementations(sys.modules[__name__], builder, args.formats, args.chunk_bytes)
+              if streaming else builder.roc_impls(args.formats)) if "roc" in args.langs else [])
+    references = (streaming.references(sys.modules[__name__], args.langs, args.formats)
+                  if streaming else reference_specs(args.langs, args.formats))
+    fresh: dict[tuple[str, str], Impl] = {}
+    if args.refresh_references:
+        for lang in args.langs:
+            if lang != "roc" and any(impl.lang == lang for impl in references):
+                built = getattr(builder, f"{lang}_impls")(args.formats)
+                if streaming and built:
+                    built = [dataclasses.replace(spec, command=[built[0].command[0], spec.name])
+                             for spec in references if spec.lang == lang]
+                fresh.update({(impl.id, impl.format): impl for impl in built})
+    impls += references
+    cache = ReferenceCache((args.reference_cache_dir or args.output_dir / "reference-cache").resolve())
+    machine_config = reference_machine() if references else {}
+    profiles, profile_errors = {}, {}
+    for lang in dict.fromkeys(impl.lang for impl in references):
+        try:
+            profiles[lang] = reference_profile(lang, args, machine_config)
+        except (ReferenceUnavailable, OSError, ValueError) as error:
+            profile_errors[lang] = str(error)
+    builder.versions["reference_profiles"] = {lang: profile["runtime"] for lang, profile in profiles.items()}
     alloc = builder.alloc_binary() if args.allocations and "roc" in args.langs else None
 
     metadata = {
@@ -809,28 +1081,80 @@ def main(argv: list[str] | None = None) -> int:
         "machine": machine(), "git": git_state(), "environment": environment(blueprint=args.blueprint),
         "versions": builder.versions,
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
-        "implementations": [{"id": i.id, "format": i.format, "notes": i.notes} for i in impls],
+        "implementations": [{"id": i.id, "format": i.format, "workload": i.workload, "notes": i.notes} for i in impls],
+        "streaming": args.streaming, "chunk_bytes": args.chunk_bytes if args.streaming else None,
+        "maximum_slowdown": args.max_slowdown,
         "corpus": manifest,
+        "reference_cache": {"mode": "refresh" if args.refresh_references else "reuse", "directory": str(cache.folder)},
         "measurement": "in-process parse loop around an in-memory document; stdin, process start and "
                        "output are outside the timed region; median of per-parse time over batches",
     }
     results: list[dict] = []
     report = {"metadata": metadata, "results": results, "comparison": []}
     for doc in docs:
-        for impl in (i for i in impls if i.format == doc.format):
-            record = measure(impl, doc, args)
+        for impl in (i for i in impls if i.format == doc.format and
+                     (streaming is None or streaming.accepts(i, doc))):
+            if impl.lang == "roc":
+                record = measure(impl, doc, args)
+                if streaming:
+                    record = streaming.qualify_checksum(impl, doc, record)
+            elif impl.lang in profile_errors:
+                record = reference_unavailable(impl, doc, profile_errors[impl.lang])
+            else:
+                identity = reference_identity(impl, doc, args, profiles[impl.lang])
+                if args.refresh_references:
+                    measured_impl = fresh.get((impl.id, impl.format))
+                    if measured_impl is None:
+                        record = reference_unavailable(impl, doc, builder.skipped.get(impl.lang, "reference build failed"), identity)
+                    else:
+                        record = measure(measured_impl, doc, args)
+                        if streaming:
+                            record = streaming.qualify_checksum(impl, doc, record)
+                        provenance = {"report": str(out / "results.json"), "git": metadata["git"],
+                                      "measured_at": record.get("receipts", {}).get("measured_at")}
+                        try:
+                            cache.save(identity, record, provenance)
+                            record = {**record, "reference_cache": {"status": "refreshed", "key": reference_digest(identity),
+                                                                   "provenance": provenance}}
+                        except (ReferenceUnavailable, OSError, ValueError) as error:
+                            reason = record.get("error") or str(error)
+                            rejected = record
+                            record = reference_unavailable(impl, doc, f"unqualified refresh: {reason}", identity)
+                            record["unqualified_measurement"] = rejected
+                else:
+                    try:
+                        record, provenance = cache.load(identity)
+                        record = {**record, "reference_cache": {"status": "hit", "key": reference_digest(identity),
+                                                               "provenance": provenance}}
+                    except ReferenceUnavailable as error:
+                        record = reference_unavailable(impl, doc, str(error), identity)
             if alloc and impl.lang == "roc":
                 record.update(count_allocations(alloc, doc, out / "logs", args.timeout))
+            if streaming:
+                record = streaming.qualify_checksum(impl, doc, record)
             results.append(record)
             log(f"{doc.id:40} {impl.id:28} " + (f"error: {record['error'][:80]}" if "error" in record else
                 f"{fmt_ns(record['median_ns']):>10} {record['mb_per_s']:8.3g} MB/s ±{record['spread_pct']:.0f}%"))
             report["comparison"] = comparison(results)
             (out / "results.json").write_text(json.dumps(report, indent=2) + "\n")
+    target_failed = False
+    if args.max_slowdown is not None:
+        if __package__:
+            from ._performance_target import evaluate
+        else:
+            from _performance_target import evaluate
+        targets = evaluate(results, args.max_slowdown)
+        report["performance_targets"] = targets
+        target_failed = not targets or any(row["status"] != "passed" for row in targets)
+        for row in targets:
+            log(f"target {row['doc']} {row['implementation']}: {row['status']} " +
+                (f"{row['slowdown']:.3f}x versus {row['reference']}" if "slowdown" in row else row["reason"]))
+    (out / "results.json").write_text(json.dumps(report, indent=2) + "\n")
     (out / "report.md").write_text(markdown_report(report))
     log(f"wrote {out / 'results.json'} and {out / 'report.md'}")
     roc_errors = [r for r in results if r["lang"] == "roc" and "error" in r]
     roc_missing = [s for s in builder.skipped if s.startswith("roc-")]
-    return 1 if args.fail_on_error and (roc_errors or roc_missing) else 0
+    return 1 if target_failed or (args.max_slowdown is not None and roc_missing) or (args.fail_on_error and (roc_errors or roc_missing)) else 0
 
 
 if __name__ == "__main__":

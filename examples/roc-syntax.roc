@@ -8,7 +8,7 @@ import parser.RocSyntax
 
 main! = |_args| {
 	source = "# Example Roc source\nanswer = 1 + 2 * 3\n"
-	parsed = RocSyntax.parse_str(source)
+	parsed = RocSyntax.parse_str(source, {})
 	Stdout.line!("parse: ${Str.inspect(parsed.status)}, ${parsed.nodes.len().to_str()} syntax nodes")?
 	lexed = RocSyntax.tokenize_str(source)
 	for token in lexed.tokens {

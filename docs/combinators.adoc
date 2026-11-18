@@ -12,8 +12,8 @@ endif::[]
 :idseparator: _
 
 This chapter is for readers who have finished <<combinator-primer>> and are
-writing a parser of their own. It groups the combinators in the `Parser` and
-`Utf8` modules by the job they do, and explains the three rules that most
+writing a parser of their own. It groups `Parser` combinators and
+`Parser.Utf8` primitives by the job they do, and explains the three rules that most
 often surprise people: how alternatives backtrack, when repetition stops,
 and why parsers read bytes rather than characters. The {api}[API reference]
 has the exact signature of every function.
@@ -28,44 +28,45 @@ every `expect` in them passes.
 |===
 |Function |Use it to
 
-|`Utf8.parse_str(p, str)`
-|Parse a whole `Str`. Returns `Ok(value)` or `Err(ParseError({ message, offset }))`,
-where `offset` is the byte offset of the furthest failure. Input left over is
+|`p.parse_str(str)`
+|Parse a whole `Str`. Returns `Ok(value)` or `Err(ParseError({ problem, location, path }))`,
+where `location` identifies the furthest failure. Text runners report
+`Text({ offset, line, column })`; raw runners use `InputOffset(offset)`. Input left over is
 a failure too.
 
-|`Utf8.parse_bytes(p, bytes)`
+|`p.parse(bytes)`
 |The same for a `List(U8)`.
 
-|`Utf8.parse_str_partial(p, str)`, `Utf8.parse_bytes_partial(p, bytes)`
+|`p.run_str(str)`, `p.run(bytes)`
 |Parse the start of the input and return `{ value, rest }`, where `rest` is
 what is left. Use these to read one message from a stream that holds several.
 
-|`Parser.parse(p, input)`, `Parser.run(p, input)`
+|`p.parse(input)`, `p.run(input)`
 |Run a parser whose input is not text, such as the `CSV.Record` that
 record parsers read. Call them as methods: `p.parse(input)`.
 |===
 
 == Reading text
 
-All of these read from `Utf8.Bytes`, which is `List(U8)`.
+All of these read from `Parser.Utf8.Bytes`, which is `List(U8)`.
 
 [cols="2,3",options="header"]
 |===
 |Parser |Reads
 
-|`Utf8.codeunit(b)`
-|Exactly the byte `b`, such as `Utf8.codeunit('=')`.
+|`Parser.Utf8.codeunit(b)`
+|Exactly the byte `b`, such as `Parser.Utf8.codeunit('=')`.
 
-|`Utf8.codeunit_satisfies(pred)`
+|`Parser.Utf8.codeunit_satisfies(pred)`
 |One byte that `pred` accepts.
 
-|`Utf8.any_codeunit`
+|`Parser.Utf8.any_codeunit({})`
 |Any one byte.
 
-|`Utf8.string(s)`, `Utf8.utf8(bytes)`
+|`Parser.Utf8.string(s)`, `Parser.Utf8.utf8(bytes)`
 |Exactly the given text, returned as a `Str` or as bytes.
 
-|`Utf8.digit`, `Utf8.digits`
+|`Parser.Utf8.digit({})`, `Parser.Utf8.digits({})`
 |One ASCII digit, or a run of them, as a `U64`. `digits` fails on a number
 too large for a `U64`.
 
@@ -75,7 +76,7 @@ too large for a `U64`.
 |`Parser.chomp_until(b)`
 |Bytes up to, but not including, the byte `b`. Fails if `b` never appears.
 
-|`Utf8.rest_str`, `Utf8.rest`
+|`Parser.Utf8.rest_str({})`, `Parser.Utf8.rest({})`
 |All remaining input, as a `Str` (failing if it is not valid UTF-8) or as
 bytes.
 |===
@@ -108,17 +109,29 @@ results of subsequent `keep` calls.
 |Keeps the input `p` reads but replaces its result with `{}`.
 
 |`p.flatten()`
-|Turns a parser producing `Try(a, Str)` into one producing `a`, where `Err(msg)`
-becomes a parse failure with that message.
+|Turns a parser producing `Try(a, Parser.Problem(p))` into one producing `a`, where `Err(problem)`
+becomes a parse failure with that structured tag.
 |===
 
 `flatten` is how you validate a value while parsing. Here a number above
-65535 is rejected with a message of your choosing:
+65535 is rejected with a tag carrying the authored value and allowed maximum:
 
 [source,roc]
 ----
 include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
 ----
+
+The third `Parser` parameter is the grammar's problem union. Primitive UTF-8
+constructors extend `Parser.Utf8.Problem(p)` with your tags, preserving each branch's
+payload through composition. Parameterless primitives are factories, such as
+`Parser.Utf8.digits({})`, so they can adopt the surrounding grammar's problem type.
+An infallible top-level parser can use `[]` as its problem parameter.
+
+A native format parser has its own closed problem union. When combining it
+with another grammar, use `map_problem` to retain its domain as a structured
+payload: `Yaml.parser({}).map_problem(|problem| YamlProblem(problem))`. This
+changes only problem identity; byte offsets and furthest-failure selection
+remain intact. A caller can match `YamlProblem(detail)` without parsing text.
 
 == Alternatives and optional parts
 
@@ -128,17 +141,17 @@ include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
 
 |`Parser.one_of(list)`
 |Tries each parser in order; the first success wins. On failure, reports the
-last parser's message.
+furthest failure, using the later failure on a tie.
 
 |`Parser.one_of(list)`, `Parser.alt(p, q)`
-|The same for any input type. On failure, joins all the messages with "or".
+|The same furthest-failure behavior for any input type.
 
 |`Parser.maybe(p)`
 |Produces `Ok(value)` if `p` succeeds, or `Err(Missing)` without reading
 anything if it fails.
 
-|`Parser.fail(message)`
-|Always fails with `message`. Useful as the last alternative.
+|`Parser.fail(problem)`
+|Always fails with the structured `problem`. Useful as the last alternative.
 |===
 
 [source,roc]
@@ -168,10 +181,9 @@ include::examples/combinators-behaviour.roc[tag=order,indent=0]
 
 With the short keyword first, `"int"` reads as `"in"` and leaves `t` behind.
 
-Backtracking also means a failure deep inside one alternative is replaced by
-the failures of the ones after it. If error messages matter, keep the
-alternatives distinct from their first byte, so that only one of them gets
-far.
+Failures from alternatives retain the furthest location; the later failure
+wins only when both reach the same position. Distinct prefixes still make
+grammars easier to understand and avoid repeated work.
 
 == Repetition
 
@@ -192,8 +204,7 @@ far.
 |The same, requiring at least one.
 |===
 
-These combinators require the input type to support `==`, which every input
-type in this package does. They use it to enforce the next rule.
+These combinators use the input length to detect progress.
 
 === Repetition stops when an element makes no progress
 
@@ -218,8 +229,8 @@ include::examples/combinators-behaviour.roc[tag=many-backtracks,indent=0]
 ----
 
 The failure of the element that stopped the repetition is kept, though. So
-when you parse a whole input with `Utf8.parse_str`, a bad element in the
-middle of a list is reported by its own failure message and offset.
+when you parse a whole input with `parser.parse_str`, a bad element in the
+middle of a list is reported by its own problem tag and offset.
 <<errors>> shows how to turn that into a useful message.
 
 == Recursive structures
@@ -247,7 +258,7 @@ recursive, and each parser is a value.
 
 == Bytes, not characters
 
-The `Utf8` parsers read UTF-8 _code units_, which are bytes. An ASCII
+The `Parser.Utf8` parsers read UTF-8 _code units_, which are bytes. An ASCII
 character is one byte, but other characters take two to four. `é`, for
 example, is the two bytes `0xC3 0xA9`:
 
@@ -258,7 +269,7 @@ include::examples/combinators-behaviour.roc[tag=bytes,indent=0]
 
 This has three consequences:
 
-* `Utf8.string` and `Utf8.codeunit` work for any text, because they
+* `Parser.Utf8.string` and `Parser.Utf8.codeunit` work for any text, because they
   compare exact bytes.
 * `codeunit_satisfies` and `chomp_while` see one byte at a time. A predicate
   such as "is a letter" written for ASCII never matches the bytes of `é`. A
@@ -272,9 +283,11 @@ This has three consequences:
 
 == Parsers over other input
 
-`Parser(input, a)` works for any input type, not only bytes. The `CSV`
+`Parser(input, a, problem)` works for any input type, not only bytes. The `CSV`
 module's record parsers read a `CSV.Record`, a list of fields, and
 `CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
 parser for your own input type, use `Parser.custom` with a
 function from input to `Ok({ value, rest })` or
-`Err(ParseError({ message, offset }))`.
+`Err(ParseError(Parser.Diagnostic.{ problem, location: InputOffset(offset), path: [] }))`.
+Use a typed native problem union; the runner adds generic parser failures and
+preserves explicit locations and logical paths.

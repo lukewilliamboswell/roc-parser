@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("bench", SCRIPTS / "bench.py")
@@ -103,11 +104,46 @@ class Measurement(unittest.TestCase):
             record = bench.measure(impl, doc, args)
         self.assertIn("error", record)
 
+    def measure_receipts(self, language, receipts):
+        impl = bench.Impl(language, "fixture", "json", ["unused-driver"])
+        doc = bench.Doc("json", "fixture", "small", b"[]")
+        args = bench.parse_args(["--quick", "--repetitions", "2", "--max-iterations", "3"])
+        with patch.object(bench, "run_once", side_effect=receipts):
+            return bench.measure(impl, doc, args)
+
+    def stable_receipts(self, accepted=True):
+        def batch(count):
+            return {"iterations": count, "elapsed_ns": 100 * count,
+                    "successes": count if accepted else 0, "checksum": 7 * count}
+        return [batch(1), batch(3), batch(3), batch(3)]
+
+    def test_measure_requires_calibration_and_warmup_agreement_for_every_language(self):
+        for language in ("roc", "rust", "go", "python"):
+            for stage, index in (("calibration", 0), ("warmup", 1)):
+                for field in ("successes", "checksum"):
+                    with self.subTest(language=language, stage=stage, field=field):
+                        receipts = self.stable_receipts()
+                        receipts[index][field] = 0
+                        record = self.measure_receipts(language, receipts)
+                        self.assertIn(stage, record["error"])
+                        self.assertNotIn("accepted", record)
+                        self.assertNotIn("median_ns", record)
+
+    def test_measure_accepts_scaled_calibration_and_identical_warmup(self):
+        for accepted in (True, False):
+            with self.subTest(accepted=accepted):
+                record = self.measure_receipts("roc", self.stable_receipts(accepted))
+                self.assertNotIn("error", record)
+                self.assertEqual(record["accepted"], accepted)
+                self.assertEqual(record["iterations"], 3)
+                self.assertEqual(record["checksum"], 21)
+                self.assertEqual(record["median_ns"], 100)
+
 
 class Reports(unittest.TestCase):
     def result(self, impl, doc, ns, kind="small", accepted=True):
         return {"impl": impl, "doc": doc, "kind": kind, "median_ns": ns, "accepted": accepted,
-                "mb_per_s": 1000 / ns, "lang": impl.split("/")[0]}
+                "mb_per_s": 1000 / ns, "lang": impl.split("/")[0], "checksum": 1, "iterations": 1}
 
     def test_comparison_skips_pathological_and_rejected_documents(self):
         results = [
@@ -121,6 +157,35 @@ class Reports(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["documents"], 2)
         self.assertAlmostEqual(rows[0]["speedup_vs_roc"], 2.0)
+
+    def test_collection_and_consumption_ratios_use_matching_references(self):
+        formats = ("csv", "qif", "ofx")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(bench, "tool_version", return_value="test-compiler"), \
+                patch.object(bench.Builder, "run", return_value=True) as build:
+            impls = bench.Builder(Path(tmp), "unused-roc", None, lambda _: None).roc_impls(formats)
+        self.assertTrue(all(Path(next(arg for arg in call.args[1] if arg.endswith(".roc"))).is_file() for call in build.call_args_list))
+        results = [dict(self.result(impl.id, f"{impl.format}/a", 400 if impl.workload == "consume" else 100),
+                        workload=impl.workload) for impl in impls]
+        for fmt in formats:
+            results += [self.result("go/reference", f"{fmt}/a", 50),
+                        dict(self.result("go/reference-consume", f"{fmt}/a", 100), workload="consume")]
+        ratios = {(row["format"], row["workload"]): row["speedup_vs_roc"] for row in bench.comparison(results)}
+        self.assertEqual(ratios, {(fmt, workload): ratio for fmt in formats
+                                 for workload, ratio in (("collect", 2), ("consume", 4))})
+
+    def test_semantically_different_results_are_excluded_from_ratios(self):
+        rows = bench.comparison([self.result("roc/roc-parser", "csv/a", 100),
+                                 dict(self.result("go/encoding-csv", "csv/a", 10), checksum=2)])
+        self.assertEqual(rows[0]["documents"], 0)
+        self.assertIsNone(rows[0]["speedup_vs_roc"])
+        self.assertEqual(rows[0]["semantic_mismatches"], ["csv/a"])
+
+    def test_borrowed_qif_and_xml_models_do_not_enter_owned_ratios(self):
+        for name in ("qif_parser", "roxmltree"):
+            self.assertEqual(bench.Impl("rust", name, "xml", []).workload, "collect-borrowed")
+        rows = bench.comparison([self.result("roc/roc-parser", "xml/a", 100),
+                                 dict(self.result("rust/roxmltree", "xml/a", 10), workload="collect-borrowed")])
+        self.assertEqual(rows, [])
 
     def test_ratio_wording(self):
         self.assertEqual(bench.fmt_ratio(0.5), "2x slower")
@@ -178,8 +243,9 @@ class Reports(unittest.TestCase):
     def test_every_format_has_a_roc_driver_and_comparators(self):
         for fmt in bench.FORMATS:
             self.assertTrue((bench.BENCH / "roc" / f"{fmt}.roc").exists(), fmt)
+            self.assertTrue(any(bench.COMPARATORS[lang][fmt] for lang in bench.COMPARATORS), fmt)
             for lang in bench.COMPARATORS:
-                self.assertTrue(bench.COMPARATORS[lang][fmt], (lang, fmt))
+                self.assertIn(fmt, bench.COMPARATORS[lang])
 
 
 if __name__ == "__main__":

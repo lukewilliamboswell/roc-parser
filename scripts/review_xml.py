@@ -100,8 +100,8 @@ def oracle(text: str) -> dict:
 
 
 def build(roc: str, output_dir: Path, fuzz: str | None = None) -> Path:
-    source = ROOT / "fuzz" / (fuzz + ".roc") if fuzz else DATA / "probe.roc"
-    executable = output_dir / "bin" / (fuzz or "probe")
+    source = ROOT / "fuzz" / "XmlProperties.roc" if fuzz else DATA / "probe.roc"
+    executable = output_dir / "bin" / ("Xml" if fuzz else "probe")
     executable.parent.mkdir(parents=True, exist_ok=True)
     command = [roc, "build", str(source), "--output=" + str(executable)]
     if fuzz:
@@ -273,7 +273,7 @@ def corpus(args) -> int:
     target = build(args.roc, args.work_dir, args.target)
     counts, mismatches = Counter(), []
     for path in sorted(args.corpus.iterdir()):
-        shown = subprocess.run([str(target), "show", str(path)], capture_output=True, text=True, check=False).stdout
+        shown = subprocess.run([str(target), f"--target={args.target}", "show", str(path)], capture_output=True, text=True, check=False).stdout
         match = re.search(r"XML-HEX: ([0-9a-f]*)", shown)
         if not match:
             counts["no_document"] += 1

@@ -3,6 +3,7 @@ app [main!] {
 	parser: "../../package/main.roc",
 }
 
+import parser.Parser
 import cli.OsStr
 import parser.Xml
 import Bench
@@ -13,9 +14,9 @@ main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
-	match Xml.parse_str(input) {
+	match Xml.parse_str(input, {}) {
 		Ok(xml) => Ok(consume(xml.root))
-		Err(InvalidXml(error)) => Err(error.line + error.column)
+		Err(InvalidXml(error)) => Err(source_position(error.location).line + source_position(error.location).column)
 	}
 }
 
@@ -26,4 +27,11 @@ consume = |node| match node {
 		attrs = attributes.fold(0, |total, attr| total + attr.name.count_utf8_bytes().to_u64() + attr.value.count_utf8_bytes().to_u64())
 		children.fold(name.count_utf8_bytes().to_u64() + attrs, |total, child| total + consume(child))
 	}
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source coordinates"
 }

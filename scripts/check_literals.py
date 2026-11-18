@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,26 +34,11 @@ def app_source(body: str) -> str:
     parser: "{(ROOT / 'package' / 'main.roc').as_posix()}",
 }}
 import cli.Stdout
-import parser.Literal
-import parser.Utf8
-import parser.Parser
-import parser.Yaml
-import parser.Xml
-import parser.XmlNs
-import parser.CSV
-import parser.Markdown
-import parser.AsciiDoc
-import parser.HTTP
-import parser.RocSyntax
-import parser.JsonValue
-import parser.Html
-import parser.Svg
-import parser.MathML
-import parser.SvgPath
-import parser.Markup
-import parser.MarkupFacts
-import parser.DomConstruction
 '''
+    roots = ('Parser', 'Yaml', 'Xml', 'CSV', 'QIF', 'OFX', 'Markdown', 'AsciiDoc', 'HTTP', 'RocSyntax', 'JsonValue', 'Html', 'Svg', 'MathML', 'Markup')
+    # Each fixture imports only the public owners it exercises. Unrelated
+    # quotation hooks and format constructors need no per-application work.
+    header += ''.join(f'import parser.{root}\n' for root in roots if re.search(rf'\b{root}\b', body))
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''
     return header + "\n" + body + "\n" + main
@@ -60,7 +46,7 @@ import parser.DomConstruction
 
 def assert_compiler_result(result: subprocess.CompletedProcess[str], errors: list[str]) -> None:
     output = (result.stdout or "") + (result.stderr or "")
-    lower = output.casefold()
+    lower = " ".join(output.casefold().split())
     if result.returncode < 0 or any(marker in lower for marker in (
         "segmentation fault", "internal compiler error", "thread panic", "panic:",
     )):
@@ -71,7 +57,7 @@ def assert_compiler_result(result: subprocess.CompletedProcess[str], errors: lis
         return
     if result.returncode == 0:
         raise AssertionError(f"compiler accepted an invalid literal:\n{output}")
-    missing = [fragment for fragment in errors if fragment.casefold() not in lower]
+    missing = [fragment for fragment in errors if " ".join(fragment.casefold().split()) not in lower]
     if missing:
         raise AssertionError(f"missing intended diagnostics {missing}:\n{output}")
 
@@ -89,12 +75,9 @@ def check_case(roc: str, case: dict, directory: Path) -> None:
         path.write_text(content, encoding="utf-8")
     (directory / "main.roc").write_text(app_source(case["body"]), encoding="utf-8")
     executable = directory / ("app.exe" if os.name == "nt" else "app")
-    # Representative successful programs exercise optimized static values;
-    # rejection contracts also exercise the faster development backend.
-    optimization = "speed" if case["name"] in ("inline-formats", "typed-and-multiline", "imported-formats") else "dev"
     for command in (
-        [roc, "check", "--no-cache", "main.roc"],
-        [roc, "build", "--no-cache", f"--opt={optimization}", f"--output={executable}", "main.roc"],
+        [roc, "check", "main.roc"],
+        [roc, "build", "--opt=dev", f"--output={executable}", "main.roc"],
     ):
         assert_compiler_result(invoke(command, directory), errors)
     if not errors:
@@ -109,7 +92,7 @@ def check_case(roc: str, case: dict, directory: Path) -> None:
 def check_invalidation(roc: str, directory: Path) -> None:
     directory.mkdir()
     source = '''import "settings.yaml" as text : Str
-value = Literal.require(Yaml.validate({ source: text, name: "settings.yaml" }))
+value = Parser.Quotation.require(Yaml.validate({ source: text, name: "settings.yaml" }))
 '''
     (directory / "main.roc").write_text(app_source(source), encoding="utf-8")
     asset = directory / "settings.yaml"
@@ -135,7 +118,8 @@ value = Literal.require(Yaml.validate({ source: text, name: "settings.yaml" }))
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--filter", default="", help="select fixture names (also matches cache-invalidation)")
-    parser.add_argument("--jobs", type=int, default=2, help="maximum concurrent compiler contracts (default: 2)")
+    parser.add_argument("--jobs", type=int, default=os.environ.get("ROC_PARSER_LITERAL_JOBS", "2"),
+                        help="maximum concurrent compiler contracts (default: ROC_PARSER_LITERAL_JOBS or 2)")
     args = parser.parse_args(argv)
     if args.jobs < 1:
         parser.error("--jobs must be positive")

@@ -1,10 +1,12 @@
+import ExpandedName
 # TODO(https://github.com/roc-lang/roc/issues/13077): move Node and its methods
-# back under XmlNs once nested derived methods stop producing duplicate warnings.
+# back under XmlNsCore once nested derived methods stop producing duplicate warnings.
 # Keep these backing types in a separate module until public aliases also work
 # with exposed-field validation (https://github.com/roc-lang/roc/issues/13023).
 XmlNsTypes :: [].{
 	Namespace : [Uri(Str), NoNamespace]
-	Name : { namespace : Namespace, local : Str, prefix : [Prefix(Str), Unprefixed] }
+	Name : ExpandedName
+
 	Binding : { prefix : [Prefix(Str), Default], namespace : Namespace }
 	Attribute : { name : Name, value : Str }
 
@@ -33,7 +35,7 @@ XmlNsTypes :: [].{
 		##
 		## ```roc
 		## expect {
-		##     root = XmlNs.parse_str("<a xmlns:x='urn:x' x:id='1' id='2'/>")?.root
+		##     root = Xml.Namespaced.parse_str("<a xmlns:x='urn:x' x:id='1' id='2'/>", {})?.root
 		##     root.attribute(Uri("urn:x"), "id") == Ok("1") and root.attribute(NoNamespace, "id") == Ok("2")
 		## }
 		## ```

@@ -11,23 +11,45 @@ works with any platform. Runtime parsers return invalid input as an error value.
 Checked literals and imported constants can reject invalid input during
 compilation, with configurable validation checks.
 
-| Format | Specification | Manual |
-| --- | --- | --- |
-| CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) |
-| YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) |
-| XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) |
-| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) |
-| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) |
-| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) |
-| JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) |
-| Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) |
-| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) |
-| HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) |
-| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) |
-| Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) |
+| Format | Specification | Manual | Throughput |
+| --- | --- | --- | ---: |
+| CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) | 51 MB/s<br>vs encoding/csv (Go) 420 MB/s |
+| QIF | Quicken bank/cash/card records | [Reading QIF](docs/qif.adoc) | 23 MB/s<br>vs qif_parser (Rust)† 190 MB/s |
+| OFX | Banking/card statements in SGML and XML | [Reading OFX](docs/ofx.adoc) | 4.4 MB/s<br>vs ofx-rs (Rust) 120 MB/s |
+| YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) | 54 MB/s<br>vs yaml-rust2 (Rust) 59 MB/s |
+| XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) | 150 MB/s<br>vs roxmltree (Rust)† 300 MB/s |
+| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) | 60 MB/s<br>vs x/net/html (Go)‡ 75 MB/s |
+| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) | 46 MB/s<br>vs roxmltree (Rust)†‡ 450 MB/s |
+| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) | 22 MB/s<br>vs roxmltree (Rust)†‡ 210 MB/s |
+| JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) | 94 MB/s<br>vs serde_json (Rust) 180 MB/s |
+| Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) | 51 MB/s<br>vs pulldown-cmark (Rust) 200 MB/s |
+| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) | 9 MB/s<br>vs Asciidoctor (Ruby) 2 MB/s |
+| HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) | 350 MB/s<br>vs httparse (Rust) 1700 MB/s |
+| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) | 230 MB/s<br>vs Roc compiler parser (Zig) 270 MB/s |
+| Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) | Varies |
 
-It reads complete inputs held in memory and does not stream. JSON and namespace-aware XML can also be written back out, with
-`JsonValue.to_str` and `XmlNs.render`.
+Each cell shows Roc versus the fastest measured reference parser. Measured
+on an AMD Ryzen 7 9700X under Linux using one pinned logical core. Roc apps
+were built with `nightly-2026-11-15-f25da45` and `--opt=speed --debug`. Figures are
+medians of seven calibrated batches targeting 200 ms, including parsing,
+result construction and checksum traversal, excluding I/O. Inputs are
+representative ~64 KiB documents (HTTP: a 555-byte request head).
+MB/s uses 1,000,000 bytes per MB.
+
+Reference libraries construct different result models. † Uses caller-bound
+borrowing; Roc supports shared slices with reference-counted ownership.
+`qif_parser` also uses floating-point amounts. ‡ Builds a DOM; Roc also
+retains source information and validates vocabulary and values. See the
+[method and reproduction command](docs/benchmarks.adoc#_reproduce_the_readme_throughput_table).
+Reproduced reports include library versions and full measurement receipts.
+
+CSV, QIF, OFX and JSON record streams support
+[chunked reading and writing](docs/streaming.adoc) through Roc’s builtin `Iter`
+and `Stream`. JSON supports NDJSON records and top-level array items through
+`JsonValue.record_decoder`; complete JSON documents use `JsonValue.parse_str`. XML, including namespaces,
+and HTTP/1.1 support chunked event reading. The other format parsers require
+complete input in memory. JSON and namespace-aware XML also support
+whole-document writing, with `value.encode(props)` and `Xml.Namespaced` values.
 
 ## Try it
 
@@ -64,15 +86,14 @@ input =
 	\\Earth,1
 	\\Mars,2
 
-planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-planets = |text| CSV.parse(text)
+planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error)])
+planets = |text| CSV.decode_str(text, {})
 
 describe : Str -> Str
 describe = |text| {
 	match planets(text) {
 		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if p.moons == 1 "moon" else "moons"}"), "\n")
-		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${error.message}"
-		Err(MissingRequiredField(name)) => "no ${name} column"
+		Err(InvalidCsv(error)) => Str.inspect(error)
 	}
 }
 

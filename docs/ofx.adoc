@@ -1,0 +1,120 @@
+[#ofx]
+= Reading and writing OFX
+
+`OFX` reads bank and credit-card statement responses from OFX 1.x SGML and
+2.x XML. Both dialects can be written: `WriteProps.syntax` defaults to
+`Xml203`; select `Sgml102` for legacy consumers. Runtime parsing returns
+`InvalidOfx` with an original byte offset, line, column, and structured `OFX.Problem` tag.
+
+== Choose whole-document or incremental reading
+
+`OFX.parse_str(text, props)` reads already decoded UTF-8. `OFX.parse_bytes(bytes,
+props)` detects declarations and accepts UTF-8, ASCII, and Windows-1252.
+An explicit `Props.encoding` must agree with a declaration. Undefined
+Windows-1252 bytes, unsupported encodings, and contradictory headers fail.
+A leading UTF-8 BOM is accepted, including when split across chunks.
+
+`OFX.decoder(props).read_iter(chunks)` consumes an `Iter(List(U8))` lazily.
+`OFX.decoder(props).read_stream(chunks)` accepts a `Stream(Try(List(U8), source_error))`.
+The source owns file and network I/O; the package never opens a connection.
+Byte boundaries may split tags, CRLF, references, and encoded characters.
+Empty chunks are ordinary input. Source exhaustion alone finalizes the parser.
+Source failure is terminal and never treated as a successful end of file.
+
+Items are `StatementStart(context)`, `Transaction(transaction)`,
+`LedgerBalance(balance)`, `AvailableBalance(balance)`, and `StatementEnd`.
+A successful item does not establish validity of the entire document:
+consume the shared `Finished(report)` event to establish successful EOF.
+The report counts emitted logical items and rejected transactions.
+
+Decoder error handling defaults to `FailFast`. Configure it with
+`errors: { policy: ReportInvalidRecords }` in its constructor props. `SkipInvalidRecords` and
+`ReportInvalidRecords` recover only semantic failures in a fully delimited
+`STMTTRN`. Report mode also emits `Rejected(error)`. Syntax, encoding,
+context, source, and resource-limit failures remain terminal. The error budget
+allows 1,000 rejected transactions by default; the next is terminal and includes
+its diagnostic. Zero stops on the first rejected transaction.
+
+Whole-document `parse_bytes` uses fail-fast handling. Use
+`decoder.collect_report(chunks)` to collect events,
+diagnostics, and the completion report under a selected policy. The executable example is
+`docs/examples/ofx-guide.roc`.
+
+== Preserve financial values
+
+Transaction amounts, balances, dates, and identifiers are strings. Leading
+zeroes, decimal spelling, and OFX timestamp offsets survive a semantic round
+trip without binary floating-point conversion. Timestamps validate calendar
+dates, right-truncated time components, optional fractions, and offsets.
+
+Context preserves bank/card identity, account fields, statement dates, wrapper
+`TRNUID`, successful status fields, file identifiers, and the supported signon
+server/language/institution fields. Non-success response statuses are explicitly
+unsupported. Missing wrapper identity/status, duplicate accounts or balances,
+and late context changes fail rather than changing an already emitted context.
+
+Transaction `extensions` retain supported XML elements in relative order.
+Attributes and unknown SGML extension tags are unsupported. SGML has omitted
+leaf closes, so guessing whether an unknown tag is a leaf would be ambiguous.
+Padded CDATA in typed scalar fields is explicitly unsupported; ordinary scalar
+whitespace is normalized. This avoids discarding spaces that CDATA makes
+significant. DTD declarations, external entities, investment statements, and nonstatement
+message sets are outside this banking/card subset. Files containing unsupported
+constructs are rejected rather than silently interpreted as another format.
+
+== Write bounded output
+
+`OFX.encoder(props)` configures contextual writing through `.write_iter(events)`
+and `.write_stream(source)`. Each item is validated before bytes are emitted;
+an invalid transaction cannot leave a partial record. Successful source completion
+closes the document, while an unfinished statement fails.
+
+Set `chunk_bytes` in the encoder props to bound output fragments. A zero
+chunk size fails. The effectful writer preserves source errors and does not
+finish a failed source. Windows-1252 writing rejects unrepresentable characters.
+`document.encode(props)` collects the same encoding for callers who need
+a complete output buffer.
+
+The reader retains one unfinished record and its stack. Defaults bound tokens
+at 65,536 bytes, captured records at 4 MiB, nesting at 64, and transaction fields
+at 1,024. A consumer retaining all transactions still needs memory proportional
+to that result. Streaming callers can discard each transaction as it arrives.
+
+== Verify changes
+
+Run `scripts/review_ofx.py check` with the pinned packages from
+`scripts/ofx/requirements.txt`. The primary oracle is ofxtools 1.1.1; ofxparse
+0.21 checks its represented account and transaction fields independently.
+The adapter explicitly decodes declared Windows-1252 using strict Python codecs
+and normalizes transport for libraries that assume UTF-8 or ASCII. XML values are projected from Python's standard XML parser after ofxtools
+validation, preserving CDATA/reference provenance. SGML raw-tree entity spelling
+is decoded once. Cross-writer checks compare original semantic values as well
+as readers of the written output. Reproduced ofxtools 1.1.1 text loss for
+CDATA/numeric references is reported separately with both models; unexpected
+writer data changes fail the review.
+
+The review exercises bank/card, SGML/XML, and UTF-8/Windows-1252 combinations,
+our writers through external readers, and the independent ofxtools XML writer
+through our reader. `campaign --smoke`, `campaign --seconds N --seed S`,
+`corpus DIR`, and `replay REPRO.json` support reproducible exploration.
+
+The `ofx-raw`, `ofx-stream`, `ofx-roundtrip`, and `ofx-malformed` roc-fuzz targets
+check source bytes, chunk schedules, independent generated models, incremental
+reader/writer pipelines, and safe recovery. `ofx-ceilings` creates distinct
+chunks inside `Fuzz.measure!` and discards events immediately. Its small/large
+examples hold chunk size, record size, and depth fixed while increasing record
+count, enforcing constant peak retained memory and linear allocator traffic.
+
+The retention measuring examples keep a 32-byte first transaction identifier
+while draining later records. Their first source chunk includes a 64-KiB record
+and 256 KiB of unrelated markup. Both the source chunk and captured record must
+be released: only the retained string remains live after the drain. This checks
+retention by returned values separately from the discard-all parser-state test.
+
+The conformance review uses the shared <<correctness-oracle-cache,correctness oracle cache>>.
+
+Errors use `{ problem, location, path }`. Source failures retain original byte
+coordinates; detached values explicitly identify unavailable locations. Limits
+carry a typed `resource`, `max`, and `observed: Exact(count)` or `AtLeast(count)`.
+Writer failures use `Unavailable(GeneratedValue)`. Logical paths identify records
+or fields where available. Large offending values use bounded excerpts with their original size.

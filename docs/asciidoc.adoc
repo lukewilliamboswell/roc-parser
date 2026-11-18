@@ -20,23 +20,23 @@ whitespace wherever they land, and directives in them, such as `ifdef::` or
 
 == Parsing and rendering
 
-`parse_str` uses the default attributes and leaves includes as links.
-`parse_with` accepts initial attributes and an explicit map of virtual include
-sources as a list of `{path, source}` records. Set `expand_includes: True`
-explicitly; the default is `False`. Includes never read files or the network.
-The parser supports nested includes, line and tag selectors, conditionals, attribute definitions and
-include level offsets. `render` converts a parsed document to embedded HTML;
-`render_inline` applies inline substitutions to a string and attributes.
+`AsciiDoc.parse_str(source, props)` returns the parsed document. Props fields
+have defaults: includes remain links unless `expand_includes: True`, and
+`includes` supplies virtual sources as `{ path, source }` records. Includes
+never read files or the network. The parser supports nested includes, line
+and tag selectors, conditionals, attribute definitions and include level offsets.
+Call `document.render_html()` to render embedded HTML, or
+`AsciiDoc.render_inline(source, attributes)` for independent inline text.
 
-For example, supply a virtual chapter using these options:
+For example, supply a virtual chapter in the constructor props:
 
 [source,roc]
 ----
-options = {
-    ..AsciiDoc.default_options,
+document = AsciiDoc.parse_str("include::chapter.adoc[]", {
     includes: [{ path: "chapter.adoc", source: "Chapter text" }],
     expand_includes: True,
-}
+})?
+html = document.render_html()
 ----
 
 Listing, source, literal and verse blocks and paragraphs honour `tabsize` as
@@ -73,8 +73,11 @@ with `AsciiDoc.attributes`; the original snapshot remains unchanged.
 
 Input is bounded to 256 KiB, expanded input to 1 MiB and structural nesting to
 64 levels. Virtual includes default to a maximum depth of 16. Invalid input or
-resource-limit failures return a message, one-based line and zero-based UTF-8
-byte offset. An initial UTF-8 byte order mark is ignored.
+resource-limit failures return `Unsupported` or `InvalidAsciiDoc` with a
+structured `{ problem, location, path }` diagnostic. Source positions use
+`Text({ offset, line, column })`, with a zero-based UTF-8 byte offset and
+one-based line and column. Include paths are represented by `Source(path)`;
+limits retain their typed resource, maximum and observed count. An initial UTF-8 byte order mark is ignored.
 
 [source,roc]
 ----
@@ -117,7 +120,7 @@ AsciiDoc file, it first removes trailing whitespace from each line, as
 Asciidoctor does, so a line of only spaces doesn't count toward `indent=`.
 
 In a document that sets `tabsize`, `indent=` first expands tabs. For such a
-document, call `select_include_with(source, attributes, { tabsize: 4 })`
+document, call `select_include(source, attributes, { tabsize: 4 })`
 with the document's tab size. Asciidoctor ignores a `tabsize=` in the
 directive's own attribute list, and so do both functions.
 
@@ -171,7 +174,7 @@ Use the latest Roc nightly, plus Ruby and Python:
 ----
 python3 scripts/asciidoc/setup_oracle.py
 mkdir -p .roc-parser-tmp/asciidoc
-$ROC build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+$ROC build --opt=dev scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
 python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 200 --mutations 200 --corpus docs
 python3 scripts/run_fuzz.py smoke asciidoc-raw asciidoc-structured
 ----
@@ -263,8 +266,7 @@ variants supply a same-value standard attribute or change and restore that
 attribute. Both retain ordered requests and the same HTML predicates to check
 initialization and baseline tracking across scope transitions.
 These families guard revision history, dynamic-state reconciliation and shared
-table scopes. The fixed `performance-guards.json` corpus appends 248 retained
-inputs after all historical inputs: standard-scope controls, small and ordered
+table scopes. Compact generators append standard-scope controls, small and ordered
 Options boundaries, and larger counter-reset and section-title cases. Title
 variants include ordinary and escaped quoted passes, role-prefixed passthroughs,
 explicit links, angle-wrapped HTTP/HTTPS links and literal angle prefixes,
@@ -276,13 +278,14 @@ listing callouts through 4,096 entries. Callout cases include missing `>`,
 Unicode HTML-like text, many numbered callouts on separate lines or one line,
 and a growing placeholder-prefix collision. Two default-substitution families
 retain normal HTML-comment callouts and escaped numeric callouts through 4,096
-entries. Their fixed sources keep cached comparisons reproducible. These
+entries. Deterministic parameters keep cached comparisons reproducible. These
 remain local scaling inputs and do not expand the two-case CI smoke.
 Larger counter-preview, colliding
 attribute-name and alternating Options inputs retain the exact requests that
 exposed repeated copying and rescanning.
-Source-scaled fixed guards above 512 load only when the largest requested size
-is at least 1,024. A bounded campaign retains the other 134 fixed guards. Use
+Source-scaled guards above 512 are generated only when the largest requested size
+is at least 1,024. Seeded samples also explore sizes between the scaling points;
+`--generated 0` disables them along with the generated document campaign. Use
 `--sizes 128 256 512` for a bounded local scaling campaign, or `--replay` with a
 retained exact-source case to isolate a measured failure. Stateful pass previews mixed with unrelated sets
 check work that can otherwise be discarded before shared-state evaluation.

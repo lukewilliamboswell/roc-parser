@@ -19,9 +19,11 @@ old measurements do not establish the performance of a current nightly.
 == Choose an appropriate workload
 
 roc-parser is a pure-Roc package that returns typed values and structured errors.
-Every parser needs the complete input in memory. It has no streaming or event
-interface, so measure carefully when parsing is a high-volume bottleneck or
-inputs approach your application's memory limit.
+CSV, QIF and OFX provide incremental readers and writers through builtin
+`Iter` and `Stream`; see <<streaming>>. Their whole-document convenience
+functions collect results in memory. The other formats require complete input.
+XML provides event readers over an in-memory source. Measure the representation
+and source lifetime needed by your application.
 
 A parser returning a full tree does different work from a tokenizer returning
 borrowed events. Compare the representation and validation your caller actually
@@ -54,7 +56,9 @@ for untrusted recursive formats and test the limit and the first rejected input.
 [#performance-memory]
 == Memory behaviour
 
-The complete input and parsed values contribute to peak memory. Allocation
+For whole-document APIs, the complete input and parsed values contribute to
+peak memory. Chunk readers retain the current source chunk, bounded unfinished
+syntax and format context; collecting their results adds retained output. Allocation
 traffic also depends on how many fields, nodes and decoded strings are created;
 byte length alone does not describe the workload.
 
@@ -99,8 +103,8 @@ high-level Roc source.
 [#performance-simd]
 == Byte scanning and slices
 
-`Utf8.ByteClass` describes a set of bytes. `Utf8.find_any`, `Utf8.skip_class`,
-`Utf8.find_line_end` and `Utf8.span_class` examine runs with `U8x16`, then handle
+`Parser.Utf8.ByteClass` describes a set of bytes. `Parser.Utf8.find_any`, `Parser.Utf8.skip_class`,
+`Parser.Utf8.find_line_end` and `Parser.Utf8.span_class` examine runs with `U8x16`, then handle
 remaining bytes with a scalar loop. Build reusable classes outside hot loops.
 The gain depends on the distance between matches and the amount of result
 construction after each match.
@@ -113,13 +117,13 @@ avoids copies but retains the original allocation while a slice is reachable.
 [#performance-tips]
 == Tips for your own parsers
 
-* Build with `--opt=speed` before measuring production throughput.
+* Use `roc build` with its default speed optimization before measuring production throughput.
 * Prefer run scanners such as `Parser.chomp_while`, `Parser.chomp_until` and
-  `Utf8.ByteClass` to one combinator call and append per byte.
+  `Parser.Utf8.ByteClass` to one combinator call and append per byte.
 * Keep backtracking shallow. `Parser.one_of` and `Parser.alt` retry from the same
   position; dispatch on a leading keyword or punctuation when practical.
-* Build error messages on the failure path, rather than rebuilding them inside
-  successful loops.
+* Build structured problems on the failure path and render diagnostic text at
+  display boundaries.
 * Avoid converting literals to byte lists or rebuilding lookup lists in a loop.
 * Slice complete runs and convert text once per value the caller keeps.
 * Separate outer record/line scanning from combinators for smaller pieces; see

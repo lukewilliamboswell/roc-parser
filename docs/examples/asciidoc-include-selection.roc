@@ -24,7 +24,7 @@ describe = |problem| {
 ## Select like `include::greet.rs[attributes]`, rejecting any problem.
 strict : Str -> Str
 strict = |attributes| {
-	selection = AsciiDoc.select_include(greet_rs, attributes)
+	selection = AsciiDoc.select_include(greet_rs, attributes, {})
 	if selection.problems.is_empty() {
 		"${attributes} selects lines ${Str.inspect(selection.lines)}:\n${selection.text}"
 	} else {

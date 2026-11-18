@@ -312,7 +312,7 @@ class ProbeIdentityTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'missing/stale'):
                     review.resolve_probe(args)
                 binary.with_suffix('.build.json').write_text(json.dumps({'identity': {'source': 'current'}, 'binary_sha256': hashlib.sha256(b'first').hexdigest()}))
-                self.assertEqual(review.resolve_probe(args), binary)
+                self.assertEqual(review.resolve_probe(args), binary.resolve())
                 binary.write_bytes(b'changed')
                 with self.assertRaisesRegex(RuntimeError, 'missing/stale'):
                     review.resolve_probe(args)

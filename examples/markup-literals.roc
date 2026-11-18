@@ -8,8 +8,6 @@ import parser.Svg
 import parser.MathML
 import parser.Html
 import parser.Markup
-import parser.MarkupTemplate
-
 # tag::literals[]
 fraction : MathML.Fragment
 fraction = "<mfrac><mn>1</mn><mn>2</mn></mfrac>"
@@ -34,15 +32,17 @@ drawing =
 ConsumerNode := [Element({ namespace : Str, local : Str, attributes : List({ local : Str, value : Str }), children : List(ConsumerNode) }), Text(Str)]
 
 # tag::lower[]
-lower : Markup.Tree, U64, MarkupTemplate.Bound(Str) -> ConsumerNode
+lower : Markup.Tree, U64, Markup.Template.Bound(Str) -> ConsumerNode
 lower = |tree, index, bound| {
+	bindings = bound.metadata()
+	plan = bindings.plan.metadata()
 	node = tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 	match node.kind {
 		Text(text) => {
-			slot = bound.plan.slots.find_first(|s| s.target == TextSlot({ node: index }))
+			slot = plan.slots.find_first(|s| s.target == TextSlot({ node: index }))
 			Text(
 				match slot {
-					Ok(s) => bound.values.get(s.index) ?? ""
+					Ok(s) => bindings.values.get(s.index) ?? ""
 					Err(_) => text
 				},
 			)
@@ -50,11 +50,11 @@ lower = |tree, index, bound| {
 		Element(name) => {
 			attrs = node.attributes.map_with_index(
 				|attr, attribute| {
-					slot = bound.plan.slots.find_first(|s| s.target == AttributeSlot({ node: index, attribute }))
+					slot = plan.slots.find_first(|s| s.target == AttributeSlot({ node: index, attribute }))
 					{
 						local: attr.name.local,
 						value: match slot {
-							Ok(s) => bound.values.get(s.index) ?? ""
+							Ok(s) => bindings.values.get(s.index) ?? ""
 							Err(_) => attr.value
 						},
 					}
@@ -84,8 +84,9 @@ element_info = |node| match node {
 }
 
 main! = |_args| {
-	root = drawing.bound.plan.parsed.tree.roots.first() ?? 0
-	consumer = lower(drawing.bound.plan.parsed.tree, root, drawing.bound)
+	tree = drawing.bound.metadata().plan.metadata().parsed.tree
+	root = tree.roots.first() ?? 0
+	consumer = lower(tree, root, drawing.bound)
 	svg = element_info(consumer)
 	Stdout.line!("SVG: ${svg.local} in ${svg.namespace}")?
 	circle = svg.children.find_first(|n| element_info(n).local == "circle") ?? Text("")
@@ -98,8 +99,8 @@ main! = |_args| {
 	Ok({})
 }
 
-expect drawing.bound.values == ["42", "<path/> stays text"]
-expect drawing.bound.plan.slots.len() == 2
+expect drawing.bound.metadata().values == ["42", "<path/> stays text"]
+expect drawing.bound.metadata().plan.metadata().slots.len() == 2
 expect {
 	original = "<path pathLength='2'/>\r\n"
 	Svg.parse_fragment(original, {})?.parsed.source.bytes == original.to_utf8()

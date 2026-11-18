@@ -3,18 +3,18 @@
 :idprefix: _
 :idseparator: _
 
-Use `MarkupFacts` when compiling a parsed tree into another representation or
+Use `Markup.Name` when compiling a parsed tree into another representation or
 choosing how to bind an attribute value. The facts share the parser's vocabulary
 and preserve the element namespace and the attribute's expanded identity.
 Consumers do not need a second table of element, ARIA or handler names.
 
 `is_known_element` tests the built-in HTML, SVG and MathML vocabulary.
-`is_custom_element_name` tests current HTML custom-element names; it does not
-infer a namespace. Unknown names can still be constructed with `DomName`, and
+`name.is_custom_element()` checks HTML custom-element names together with the
+HTML namespace. Unknown names can still be constructed with `Markup.Name`, and
 parser extension options remain available independently of these predicates.
 
-`element_names(namespace)` supplies the canonical local spellings for that
-namespace's built-in authoring vocabulary. `aria_attribute_names` supplies known
+`Markup.element_names(namespace)` supplies the canonical local spellings for that
+namespace's built-in authoring vocabulary. `Markup.aria_attribute_names` supplies known
 unnamespaced ARIA spellings, including retained deprecated names. Both lists
 are unique and sorted by ASCII spelling. SVG case is preserved, so a consumer
 can suggest `linearGradient` without maintaining a second spelling table:
@@ -31,7 +31,7 @@ can retain. Enumeration and membership use the same parser-owned vocabulary.
 
 == Attribute values
 
-`is_boolean_attribute(element, attribute)` identifies HTML presence/absence
+`element.is_boolean_attribute({ attribute })` identifies HTML presence/absence
 booleans on their relevant elements. It does not turn SVG or MathML `true`/`false`
 values, or ARIA states, into HTML booleans. Namespaced attributes are distinct
 from unnamespaced attributes with the same local spelling.
@@ -51,7 +51,7 @@ The coverage manifest describes the parser's validation boundaries.
 == HTML text and void behavior
 
 `is_void_element` uses the HTML namespace and local name. An SVG element named
-`br` is not an HTML void element. `text_behavior(element, scripting)` preserves
+`br` is not an HTML void element. `element.text_behavior({ scripting })` preserves
 `Data`, `Rcdata`, `RawText`, `ScriptData` and `Plaintext`; it does not collapse
 script and plaintext into a generic raw-text mode. HTML `noscript` uses
 `RawText` when scripting is enabled and `Data` otherwise. Foreign content uses
@@ -59,17 +59,18 @@ script and plaintext into a generic raw-text mode. HTML `noscript` uses
 
 === Initial newlines when emitting HTML
 
-`drops_initial_newline(element)` identifies HTML `pre`, `listing` and `textarea`.
+`element.drops_initial_newline()` identifies HTML `pre`, `listing` and `textarea`.
 After their emitted HTML start tag, the parser can consume one immediately
 following LF character token. This describes HTML parsing, independently of
 whether an authoring vocabulary accepts a historical name. XML parsing and
 ordinary DOM text mutation do not have this rule. Merely choosing a `textarea`
 fragment context does not process a start tag or activate the rule.
 
-For a serializer producing several bindings, `initial_newline(element)` seeds
-`Pending` or `Preserve`. Pass actual emitted token events through
-`initial_newline_step`; it returns the next state, adjusted token and `skipped`
-flag. An empty text binding emits no token, so it retains `Pending`. A comment
+For a serializer producing several bindings, `element.initial_newline()` seeds
+an opaque state. Pass actual emitted token events through
+`state.step(token)`; it returns the next state, adjusted token and an
+`action` of `Skipped` or `Preserved`. Query `.is_pending()` when needed. An empty
+text binding emits no token, so it retains the pending state. A comment
 consumes the pending position, so the next text's LF is retained. Nonempty text
 also consumes it, removing at most one initial LF.
 
@@ -97,7 +98,7 @@ and https://html.spec.whatwg.org/multipage/syntax.html#newlines[initial-newline 
 
 == A consumer policy for handler attributes
 
-`is_event_handler(element, attribute)` checks the element namespace and the
+`element.is_event_handler({ attribute })` checks the element namespace and the
 attribute namespace/local name. It recognizes MathML `onclick` even inside an
 SVG metadata extension subtree, and SVG `oninput`. An attribute named `online`
 is not a handler. A namespaced attribute with local `onclick`, or an
@@ -112,8 +113,9 @@ additional literal policy, as this executable example does:
 include::examples/markup-facts.roc[tag=policy]
 ----
 
-The wrapper rejects handler attributes while retaining ordinary parsing and
-the public facts for other consumers:
+The runtime `check` preserves a typed `InlineHandler` diagnostic with names,
+location and logical path. Its quotation hook renders that failure at the
+compiler boundary. Other consumers keep ordinary parsing and name methods:
 
 [source,roc]
 ----

@@ -1,14 +1,16 @@
-import Markup
+import HtmlNameRules
+import Parser
+import Diagnostic
+import MarkupCore
 import MarkupValidate
 import HtmlTokenizer
 import DomName
 import MarkupVocabulary
-import Literal
 
 ## HTML authoring checks, separate from browser tree recovery. Embedded CSS and
 ## JavaScript remain source text rather than claims of validated programs.
 HtmlValidate :: [].{
-	validate : Markup.Parsed, Markup.Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	validate : MarkupCore.Parsed, MarkupCore.Props, List(MarkupValidate.Hole) -> Try(MarkupCore.Parsed, [InvalidMarkup(MarkupCore.Error)])
 	validate = |parsed, props, holes| {
 		var $diagnostics = parsed.diagnostics
 		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
@@ -16,25 +18,25 @@ HtmlValidate :: [].{
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, in_datalist: False, selected_context: False }
 			$pending = $pending.drop_last(1)
-			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
+			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(InvalidTreeIndex), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 			match node.kind {
-				Element(name) if name.namespace == Uri(Markup.html_namespace) => {
+				Element(name) if name.namespace == Uri(MarkupCore.html_namespace) => {
 					known_element = elements(name.local)
 					custom = !known_element and custom_element(name.local)
 					if !known_element and !custom {
 						if !props.allow_unknown_elements {
-							return fail(parsed, node, UnknownElement(name.local))
+							return fail(parsed, node, UnknownElement(name.local.release_excess_capacity()))
 						}
 						offset = match node.origin {
 							Authored(span) => span.start
 							Implied(at) => at
 							Cloned(info) => info.source.start
 						}
-						at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
+						at = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
 						if $diagnostics.len() >= props.max_diagnostics {
-							return fail(parsed, node, ResourceLimit("max_diagnostics"))
+							return fail(parsed, node, LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }))
 						}
-						$diagnostics = $diagnostics.append({ problem: UnknownElement(name.local), line: at.line, column: at.column })
+						$diagnostics = $diagnostics.append(Diagnostic.{ problem: UnknownElement(name.local.release_excess_capacity()), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 					}
 					var $at = 0
 					for attr in node.attributes {
@@ -51,18 +53,18 @@ HtmlValidate :: [].{
 						}
 						if !known {
 							if !props.allow_unknown_attributes {
-								return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
+								return attr_fail(parsed, attr, UnknownAttribute({ element: name.local.release_excess_capacity(), attribute: attr.name.local.release_excess_capacity() }))
 							}
-							at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
+							at = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
 							if $diagnostics.len() >= props.max_diagnostics {
-								return attr_fail(parsed, attr, ResourceLimit("max_diagnostics"))
+								return attr_fail(parsed, attr, LimitExceeded({ resource: Diagnostics, max: props.max_diagnostics, observed: AtLeast(props.max_diagnostics + 1) }))
 							}
-							$diagnostics = $diagnostics.append({ problem: UnknownAttribute({ element: name.local, attribute: attr.name.local }), line: at.line, column: at.column })
+							$diagnostics = $diagnostics.append(Diagnostic.{ problem: UnknownAttribute({ element: name.local.release_excess_capacity(), attribute: attr.name.local.release_excess_capacity() }), location: LineColumn({ line: at.line, column: at.column }), path: [] })
 						}
 						if props.check_values and known and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $at)) {
 							expected = grammar(name.local, attr.name.local)
 							if !valid(attr.value, expected) {
-								return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected }))
+								return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: Diagnostic.excerpt(attr.value.to_utf8()), expected }))
 							}
 						}
 						$at = $at + 1
@@ -76,7 +78,7 @@ HtmlValidate :: [].{
 					check_children_with_attributes(parsed, node, name.local, item.in_datalist, attributes)?
 					# Standalone fragment roots have no authored parent.
 					if item.parent != "" and !parent_allowed(ancestry, name.local) {
-						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: "allowed parent for ${name.local}" }))
+						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: AllowedParent(name.local) }))
 					}
 					if name.local == "img" and !has_attribute(node, "alt") and !(
 						match value(node, "role") {
@@ -84,10 +86,10 @@ HtmlValidate :: [].{
 							_ => False
 						}
 					) {
-						return fail(parsed, node, InvalidChildren({ element: "img", expected: "alt attribute (or explicit presentation role)" }))
+						return fail(parsed, node, InvalidChildren({ element: "img", expected: ImageAlternative }))
 					}
 					if name.local == "input" and HtmlTokenizer.lower(value(node, "type")) == "image" and (!has_attribute(node, "src") or !has_attribute(node, "alt")) {
-						return fail(parsed, node, InvalidChildren({ element: "input", expected: "image input requires src and alt" }))
+						return fail(parsed, node, InvalidChildren({ element: "input", expected: ImageInputAttributes }))
 					}
 					next_context = descend(ancestry, name)
 					for child in node.children {
@@ -113,7 +115,7 @@ HtmlValidate :: [].{
 	AttributeSummary : { href : Bool, tabindex : Bool, hidden_input : Bool, controls : Bool, usemap : Bool, label : Bool, value : Bool, html_encoding : Bool, font_breakout : Bool }
 	empty_attributes : AttributeSummary
 	empty_attributes = { href: False, tabindex: False, hidden_input: False, controls: False, usemap: False, label: False, value: False, html_encoding: False, font_breakout: False }
-	summarize_attributes : List({ name : Markup.Name, value : Str, ..extra }) -> AttributeSummary
+	summarize_attributes : List({ name : MarkupCore.Name, value : Str, ..extra }) -> AttributeSummary
 	summarize_attributes = |attributes| {
 		var $seen_type = False
 		var $seen_encoding = False
@@ -156,24 +158,24 @@ HtmlValidate :: [].{
 		}
 		$summary
 	}
-	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : Str })])
+	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : MarkupCore.ChildGrammar })])
 	context_problem = |context, element, attributes| {
 		if element == "a" and context.anchor {
-			return Err(InvalidChildren({ element: "a", expected: "no descendant a element" }))
+			return Err(InvalidChildren({ element: "a", expected: NoNestedAnchor }))
 		}
 		if context.interactive and (interactive_summary(attributes, element) or attributes.tabindex) {
-			return Err(InvalidChildren({ element: "button", expected: "no nested interactive content" }))
+			return Err(InvalidChildren({ element: "button", expected: NoInteractiveContent }))
 		}
 		if context.in_option and (interactive_summary(attributes, element) or ["datalist", "object"].contains(element) or attributes.tabindex) {
-			return Err(InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
+			return Err(InvalidChildren({ element: "option", expected: OptionContent }))
 		}
 		if element == "selectedcontent" and !context.selected_context {
-			return Err(InvalidChildren({ element: "selectedcontent", expected: "descendant of a button that is a child of select" }))
+			return Err(InvalidChildren({ element: "selectedcontent", expected: SelectButtonDescendant }))
 		}
 		Ok({})
 	}
-	descend : ContextState, Markup.Name -> ContextState
-	descend = |context, element| if element.namespace == Uri(Markup.html_namespace) {
+	descend : ContextState, MarkupCore.Name -> ContextState
+	descend = |context, element| if element.namespace == Uri(MarkupCore.html_namespace) {
 		{ parent: element.local, interactive: context.interactive or element.local == "button", anchor: context.anchor or element.local == "a", option_context: context.option_context or ["select", "optgroup", "datalist"].contains(element.local), in_option: context.in_option or element.local == "option", in_datalist: context.in_datalist or element.local == "datalist", selected_context: context.selected_context or (element.local == "button" and context.parent == "select") }
 	} else { ..context, parent: "" }
 	parent_allowed : ContextState, Str -> Bool
@@ -212,26 +214,29 @@ HtmlValidate :: [].{
 			_ => AnyChildren
 		}
 	}
-	child_expected : ChildRule, Markup.Name -> Try({}, [Rejected(Str)])
+	child_expected : ChildRule, MarkupCore.Name -> Try({}, [Rejected(MarkupCore.ChildGrammar)])
 	child_expected = |rule, element| match rule {
 		AnyChildren => Ok({})
-		NoChildren => Err(Rejected("no authored child content"))
-		TextOnly => Err(Rejected(""))
-		ElementNames(names) => if (element.namespace == Uri(Markup.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(Str.join_with(names, ", ")))
+		NoChildren => Err(Rejected(NoChildren))
+		TextOnly => Err(Rejected(TextOnly))
+		ElementNames(names) => if (element.namespace == Uri(MarkupCore.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(NamedElements(names)))
 	}
-	text_expected : ChildRule, Str -> Try({}, [Rejected(Str)])
-	text_expected = |rule, text| if (Markup.whitespace(text)) Ok({}) else match rule {
-		NoChildren | ElementNames(_) => Err(Rejected("element-only content"))
+	text_expected : ChildRule, Str -> Try({}, [Rejected(MarkupCore.ChildGrammar)])
+	text_expected = |rule, text| if (MarkupCore.whitespace(text)) Ok({}) else match rule {
+		NoChildren | ElementNames(_) => Err(Rejected(ElementsOnly))
 		_ => Ok({})
 	}
 
 	element_known : Str -> Bool
-	element_known = elements
+	element_known = HtmlNameRules.element_known
+
 	custom_element_name : Str -> Bool
-	custom_element_name = custom_element
+	custom_element_name = HtmlNameRules.custom_element_name
+
 	boolean_attribute : Str, Str -> Bool
-	boolean_attribute = |element, attr| allowed(element, attr) and (booleans(attr) or (element == "iframe" and attr == "credentialless")) and ((attr != "playsinline" and attr != "disablepictureinpicture") or element == "video")
-	attribute_known : Str, Markup.Name -> Bool
+	boolean_attribute = HtmlNameRules.boolean_attribute
+
+	attribute_known : Str, MarkupCore.Name -> Bool
 	attribute_known = |element, name| match name.namespace {
 		NoNamespace => allowed(element, name.local)
 		Uri("http://www.w3.org/2000/xmlns/") => True
@@ -242,75 +247,11 @@ HtmlValidate :: [].{
 	## Known finite keyword values for an applicable HTML attribute. Metadata
 	## does not change the ordinary author's value validation or supply defaults.
 	enumerated_values : Str, Str -> Try(List(Str), [NotEnumerated])
-	enumerated_values = |element, attr| {
-		if !allowed(element, attr) or boolean_attribute(element, attr) or booleans(attr) or (attr == "scope" and element != "th") {
-			return Err(NotEnumerated)
-		}
-		match MarkupVocabulary.aria_enumerated_values(attr) {
-			Ok(values) => return Ok(values)
-			Err(_) => {}
-		}
-		extra = match attr {
-			"autocapitalize" => Ok(["off", "none", "on", "sentences", "words", "characters"])
-			"autocorrect" => Ok(["", "on", "off"])
-			"enterkeyhint" => Ok(["enter", "done", "go", "next", "previous", "search", "send"])
-			"inputmode" => Ok(["none", "text", "tel", "url", "email", "numeric", "decimal", "search"])
-			"popover" => Ok(["", "auto", "manual", "hint"])
-			"spellcheck" | "writingsuggestions" => Ok(["", "true", "false"])
-			"virtualkeyboardpolicy" => Ok(["auto", "manual"])
-			"referrerpolicy" => Ok(["", "no-referrer", "no-referrer-when-downgrade", "same-origin", "origin", "strict-origin", "origin-when-cross-origin", "strict-origin-when-cross-origin", "unsafe-url"])
-			"shadowrootmode" if element == "template" => Ok(["open", "closed"])
-			"closedby" if element == "dialog" => Ok(["any", "closerequest", "none"])
-			"popovertargetaction" if element == "button" or element == "input" => Ok(["toggle", "show", "hide"])
-			"autocomplete" if element == "form" => Ok(["on", "off"])
-			"capture" if element == "input" => Ok(["user", "environment"])
-			"shape" if element == "area" => Ok(["default", "rect", "circle", "poly"])
-			_ => Err(NotEnumerated)
-		}
-		match extra {
-			Ok(values) => Ok(values)
-			Err(_) => match grammar(element, attr) {
-				Keyword(values) => Ok(values)
-				_ => Err(NotEnumerated)
-			}
-		}
-	}
+	enumerated_values = HtmlNameRules.enumerated_values
 
-	grammar : Str, Str -> Markup.ValueGrammar
-	grammar = |element, attr| {
-		if !allowed(element, attr) {
-			return Language("extension attribute")
-		}
-		if booleans(attr) {
-			return Keyword(["", attr])
-		}
-		match attr {
-			"hidden" => Keyword(["", "hidden", "until-found"])
-			"contenteditable" => Keyword(["", "true", "false", "plaintext-only"])
-			"draggable" | "spellcheck" | "translate" => Keyword(if (attr == "translate") ["", "yes", "no"] else ["true", "false"])
-			"dir" => Keyword(["ltr", "rtl", "auto"])
-			"loading" => Keyword(["lazy", "eager"])
-			"decoding" => Keyword(["sync", "async", "auto"])
-			"crossorigin" => Keyword(["", "anonymous", "use-credentials"])
-			"fetchpriority" => Keyword(["high", "low", "auto"])
-			"preload" => Keyword(["", "none", "metadata", "auto"])
-			"wrap" => Keyword(["soft", "hard"])
-			"method" | "formmethod" => Keyword(["get", "post", "dialog"])
-			"enctype" | "formenctype" => Keyword(["application/x-www-form-urlencoded", "multipart/form-data", "text/plain"])
-			"type" if element == "input" => Keyword(["hidden", "text", "search", "tel", "url", "email", "password", "date", "month", "week", "time", "datetime-local", "number", "range", "color", "checkbox", "radio", "file", "submit", "image", "reset", "button"])
-			"type" if element == "button" => Keyword(["submit", "reset", "button"])
-			"type" if element == "ol" => Keyword(["1", "a", "A", "i", "I"])
-			"scope" => Keyword(["row", "col", "rowgroup", "colgroup"])
-			"kind" if element == "track" => Keyword(["subtitles", "captions", "descriptions", "chapters", "metadata"])
-			"aria-hidden" | "aria-expanded" | "aria-selected" | "aria-disabled" | "aria-multiline" | "aria-modal" | "aria-required" | "aria-readonly" => Keyword(["true", "false"])
-			"aria-checked" | "aria-pressed" => Keyword(["true", "false", "mixed", "undefined"])
-			"aria-live" => Keyword(["off", "polite", "assertive"])
-			"width" | "height" | "cols" | "rows" | "colspan" | "rowspan" | "size" | "maxlength" | "minlength" | "span" => NonnegativeNumber
-			"tabindex" | "start" => Number
-			"class" | "rel" | "headers" | "sandbox" | "aria-labelledby" | "aria-describedby" => TokenList
-			_ => Language("HTML attribute")
-		}
-	}
+	grammar : Str, Str -> MarkupCore.ValueGrammar
+	grammar = HtmlNameRules.grammar
+
 }
 
 valid = |text, expected| match expected {
@@ -320,14 +261,11 @@ valid = |text, expected| match expected {
 	_ => True
 }
 
-custom_element = |name| DomName.valid_element_local_name(name) and name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and !name.to_utf8().any(|b| b >= 'A' and b <= 'Z') and !(
-	match name {
-		"annotation-xml" | "color-profile" | "font-face" | "font-face-src" | "font-face-uri" | "font-face-format" | "font-face-name" | "missing-glyph" => True
-		_ => False
-	}
-)
+custom_element : _
+custom_element = HtmlNameRules.custom_element
 
-allowed = |element, attr| global(attr) or attributes(element, attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria(attr) or events(attr) or (element == "input" and attr == "onsearch")
+allowed : _
+allowed = HtmlNameRules.allowed
 
 has_attribute = |node, key| node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == key)
 
@@ -339,200 +277,38 @@ fail = |parsed, node, problem| {
 		Implied(o) => o
 		Cloned(info) => info.source.start
 	}
-	p = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
-	Err(InvalidMarkup({ problem, line: p.line, column: p.column }))
+	p = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
+	Err(InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: p.line, column: p.column }), path: [] }))
 }
 
 attr_fail = |parsed, attr, problem| {
-	p = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
-	Err(InvalidMarkup({ problem, line: p.line, column: p.column }))
+	p = Parser.Quotation.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
+	Err(InvalidMarkup(Diagnostic.{ problem: problem, location: LineColumn({ line: p.line, column: p.column }), path: [] }))
 }
 
-elements = MarkupVocabulary.html_element_name
+elements : _
+elements = HtmlNameRules.elements
 
-global = |name| match name {
-	"accesskey" | "autocapitalize" | "autocorrect" | "autofocus" | "class" | "contenteditable" | "dir" | "draggable" | "enterkeyhint" | "exportparts" | "hidden" | "id" | "inert" | "inputmode" | "is" | "itemid" | "itemprop" | "itemref" | "itemscope" | "itemtype" | "lang" | "nonce" | "part" | "popover" | "role" | "slot" | "spellcheck" | "style" | "tabindex" | "title" | "translate" | "virtualkeyboardpolicy" | "writingsuggestions" | "xmlns" => True
-	_ => False
-}
+global : _
+global = HtmlNameRules.global
 
-booleans = |name| match name {
-	"allowfullscreen" | "async" | "autofocus" | "autoplay" | "checked" | "controls" | "default" | "defer" | "disabled" | "disablepictureinpicture" | "disableremoteplayback" | "formnovalidate" | "inert" | "ismap" | "itemscope" | "loop" | "multiple" | "muted" | "nomodule" | "novalidate" | "open" | "playsinline" | "readonly" | "required" | "reversed" | "selected" | "shadowrootclonable" | "shadowrootdelegatesfocus" | "shadowrootserializable" => True
-	_ => False
-}
+booleans : _
+booleans = HtmlNameRules.booleans
 
-aria = MarkupVocabulary.aria_name
+aria : _
+aria = HtmlNameRules.aria
 
-events = MarkupVocabulary.html_event_name
+events : _
+events = HtmlNameRules.events
 
-attributes = |element, attr| match element {
-	"a" | "area" => match attr {
-		"alt" | "coords" | "shape" | "download" | "href" | "hreflang" | "ping" | "referrerpolicy" | "rel" | "target" | "type" => True
-		_ => False
-	}
-	"audio" | "video" => match attr {
-		"autoplay" | "controls" | "controlslist" | "crossorigin" | "disableremoteplayback" | "disablepictureinpicture" | "height" | "loop" | "muted" | "playsinline" | "poster" | "preload" | "src" | "width" => True
-		_ => False
-	}
-	"base" => match attr {
-		"href" | "target" => True
-		_ => False
-	}
-	"blockquote" | "q" => match attr {
-		"cite" => True
-		_ => False
-	}
-	"button" => match attr {
-		"command" | "commandfor" | "disabled" | "form" | "formaction" | "formenctype" | "formmethod" | "formnovalidate" | "formtarget" | "name" | "popovertarget" | "popovertargetaction" | "type" | "value" => True
-		_ => False
-	}
-	"canvas" => match attr {
-		"height" | "width" => True
-		_ => False
-	}
-	"col" | "colgroup" => match attr {
-		"span" => True
-		_ => False
-	}
-	"data" => match attr {
-		"value" => True
-		_ => False
-	}
-	"del" | "ins" => match attr {
-		"cite" | "datetime" => True
-		_ => False
-	}
-	"details" => match attr {
-		"name" | "open" => True
-		_ => False
-	}
-	"dialog" => match attr {
-		"closedby" | "open" => True
-		_ => False
-	}
-	"embed" => match attr {
-		"height" | "src" | "type" | "width" => True
-		_ => False
-	}
-	"fieldset" => match attr {
-		"disabled" | "form" | "name" => True
-		_ => False
-	}
-	"form" => match attr {
-		"accept-charset" | "action" | "autocomplete" | "enctype" | "method" | "name" | "novalidate" | "rel" | "target" => True
-		_ => False
-	}
-	"html" => match attr {
-		"xmlns" => True
-		_ => False
-	}
-	"iframe" => match attr {
-		"allow" | "allowfullscreen" | "credentialless" | "csp" | "height" | "loading" | "name" | "referrerpolicy" | "sandbox" | "src" | "srcdoc" | "width" => True
-		_ => False
-	}
-	"img" => match attr {
-		"alt" | "attributionsrc" | "crossorigin" | "decoding" | "elementtiming" | "fetchpriority" | "height" | "ismap" | "loading" | "referrerpolicy" | "sizes" | "src" | "srcset" | "usemap" | "width" => True
-		_ => False
-	}
-	"input" => match attr {
-		"accept" | "alt" | "autocomplete" | "capture" | "checked" | "dirname" | "disabled" | "form" | "formaction" | "formenctype" | "formmethod" | "formnovalidate" | "formtarget" | "height" | "list" | "max" | "maxlength" | "min" | "minlength" | "multiple" | "name" | "pattern" | "placeholder" | "popovertarget" | "popovertargetaction" | "readonly" | "required" | "size" | "src" | "step" | "type" | "value" | "width" => True
-		_ => False
-	}
-	"label" => match attr {
-		"for" | "form" => True
-		_ => False
-	}
-	"li" => match attr {
-		"value" => True
-		_ => False
-	}
-	"link" => match attr {
-		"as" | "blocking" | "color" | "crossorigin" | "disabled" | "fetchpriority" | "href" | "hreflang" | "imagesizes" | "imagesrcset" | "integrity" | "media" | "referrerpolicy" | "rel" | "sizes" | "type" => True
-		_ => False
-	}
-	"map" => match attr {
-		"name" => True
-		_ => False
-	}
-	"meta" => match attr {
-		"charset" | "content" | "http-equiv" | "media" | "name" => True
-		_ => False
-	}
-	"meter" => match attr {
-		"form" | "high" | "low" | "max" | "min" | "optimum" | "value" => True
-		_ => False
-	}
-	"object" => match attr {
-		"data" | "form" | "height" | "name" | "type" | "usemap" | "width" => True
-		_ => False
-	}
-	"ol" => match attr {
-		"reversed" | "start" | "type" => True
-		_ => False
-	}
-	"optgroup" => match attr {
-		"disabled" | "label" => True
-		_ => False
-	}
-	"option" => match attr {
-		"disabled" | "label" | "selected" | "value" => True
-		_ => False
-	}
-	"output" => match attr {
-		"for" | "form" | "name" => True
-		_ => False
-	}
-	"progress" => match attr {
-		"max" | "value" => True
-		_ => False
-	}
-	"script" => match attr {
-		"async" | "attributionsrc" | "blocking" | "crossorigin" | "defer" | "fetchpriority" | "integrity" | "nomodule" | "nonce" | "referrerpolicy" | "src" | "type" => True
-		_ => False
-	}
-	"select" => match attr {
-		"autocomplete" | "disabled" | "form" | "multiple" | "name" | "required" | "size" => True
-		_ => False
-	}
-	"slot" => match attr {
-		"name" => True
-		_ => False
-	}
-	"source" => match attr {
-		"height" | "media" | "sizes" | "src" | "srcset" | "type" | "width" => True
-		_ => False
-	}
-	"style" => match attr {
-		"blocking" | "media" | "nonce" | "title" => True
-		_ => False
-	}
-	"td" | "th" => match attr {
-		"abbr" | "colspan" | "headers" | "rowspan" | "scope" => True
-		_ => False
-	}
-	"template" => match attr {
-		"shadowrootclonable" | "shadowrootdelegatesfocus" | "shadowrootmode" | "shadowrootserializable" => True
-		_ => False
-	}
-	"textarea" => match attr {
-		"autocomplete" | "cols" | "dirname" | "disabled" | "form" | "maxlength" | "minlength" | "name" | "placeholder" | "readonly" | "required" | "rows" | "wrap" => True
-		_ => False
-	}
-	"time" => match attr {
-		"datetime" => True
-		_ => False
-	}
-	"track" => match attr {
-		"default" | "kind" | "label" | "src" | "srclang" => True
-		_ => False
-	}
-	_ => False
-}
+attributes : _
+attributes = HtmlNameRules.attributes
 
 interactive_summary = |attribute_facts, name| ["button", "details", "embed", "iframe", "label", "select", "textarea"].contains(name) or (name == "input" and !attribute_facts.hidden_input) or (name == "a" and attribute_facts.href) or (["audio", "video"].contains(name) and attribute_facts.controls) or (name == "img" and attribute_facts.usemap)
 
 context_of = |item| { parent: item.parent, interactive: item.interactive, anchor: item.anchor, option_context: item.option_context, in_option: item.in_option, in_datalist: item.in_datalist, selected_context: item.selected_context }
 
-check_children : Markup.Parsed, Markup.Node, Str, Bool -> Try({}, [InvalidMarkup(Markup.Error)])
+check_children : MarkupCore.Parsed, MarkupCore.Node, Str, Bool -> Try({}, [InvalidMarkup(MarkupCore.Error)])
 check_children = |parsed, node, name, in_datalist| check_children_with_attributes(parsed, node, name, in_datalist, if (name == "option") HtmlValidate.summarize_attributes(node.attributes) else HtmlValidate.empty_attributes)
 
 check_children_with_attributes = |parsed, node, name, in_datalist, attribute_facts| {
@@ -540,12 +316,12 @@ check_children_with_attributes = |parsed, node, name, in_datalist, attribute_fac
 	if rule == AnyChildren {
 		node_count = parsed.tree.nodes.len()
 		if node.children.any(|index| index >= node_count) {
-			return fail(parsed, node, Unsupported("invalid child node"))
+			return fail(parsed, node, Unsupported(InvalidChildIndex))
 		}
 		return Ok({})
 	}
 	for index in node.children {
-		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child node"))
+		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported(InvalidChildIndex))
 		derived = match child.origin {
 			Cloned(_) => True
 			_ => False
@@ -587,24 +363,24 @@ expect HtmlValidate.enumerated_values("input", "autocomplete") == Err(NotEnumera
 expect HtmlValidate.enumerated_values("input", "capture") == Ok(["user", "environment"])
 expect HtmlValidate.enumerated_values("dialog", "closedby") == Ok(["any", "closerequest", "none"])
 expect HtmlValidate.enumerated_values("div", "aria-hidden") == Ok(["true", "false", "undefined"])
-expect HtmlValidate.grammar("div", "inputmode") == Language("HTML attribute")
+expect HtmlValidate.grammar("div", "inputmode") == Language(HTMLAttribute)
 expect HtmlValidate.custom_element_name("x-a=b") and HtmlValidate.custom_element_name("x:a-b") and HtmlValidate.custom_element_name("x-<")
 expect HtmlValidate.custom_element_name("x-\u(80)") and HtmlValidate.custom_element_name("x-\u(F0000)")
 expect !HtmlValidate.custom_element_name("x-a>b") and !HtmlValidate.custom_element_name("x-a b") and !HtmlValidate.custom_element_name("x-\u(0)")
 expect !HtmlValidate.custom_element_name("x-Ab") and !HtmlValidate.custom_element_name("font-face") and !HtmlValidate.custom_element_name("nohyphen")
 
 expect HtmlValidate.enumerated_values("td", "scope") == Err(NotEnumerated) and HtmlValidate.enumerated_values("th", "scope") == Ok(["row", "col", "rowgroup", "colgroup"])
-expect HtmlValidate.grammar("iframe", "credentialless") == Language("HTML attribute")
+expect HtmlValidate.grammar("iframe", "credentialless") == Language(HTMLAttribute)
 
 expect {
-	parent : Markup.Node
-	parent = { kind: Element({ local: "p", namespace: Uri(Markup.html_namespace), prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: 8 }) }
-	child : Markup.Node
+	parent : MarkupCore.Node
+	parent = { kind: Element({ local: "p", namespace: Uri(MarkupCore.html_namespace), prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: 8 }) }
+	child : MarkupCore.Node
 	child = { kind: Text("x"), attributes: [], children: [], origin: Authored({ start: 3, end: 4 }) }
-	parsed : Markup.Parsed
-	parsed = { source: Markup.Source.from_bytes("<p>x</p>".to_utf8()), tree: { nodes: [parent, child], roots: [0] }, diagnostics: [] }
+	parsed : MarkupCore.Parsed
+	parsed = { source: MarkupCore.Source.from_bytes("<p>x</p>".to_utf8()), tree: { nodes: [parent, child], roots: [0] }, diagnostics: [] }
 	invalid = { ..parent, children: [1, 2] }
-	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup({ problem: Unsupported("invalid child node"), line: 1, column: 1 }))
+	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup(Diagnostic.{ problem: Unsupported(InvalidChildIndex), location: LineColumn({ line: 1, column: 1 }), path: [] }))
 }
 
 context_frame : U64, HtmlValidate.ContextState -> _

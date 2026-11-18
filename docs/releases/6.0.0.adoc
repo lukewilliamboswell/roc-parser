@@ -5,18 +5,92 @@
 Use the compiler named in the published release record and basic-cli 0.28.1
 for the maintained applications and examples. Repository tooling uses its
 separate fixed compiler.
-The published release record identifies the compiler used for the delivered
-package.
 
-This major release changes AsciiDoc output where it disagreed with Asciidoctor
-and adopts the compiler's current format-owned error contract. CSV and YAML
-derived operations include `MissingRequiredField(Str)`, including headerless CSV
-tuple parsing. Add that variant to explicitly closed result annotations that
-previously allowed only `InvalidCsv(CSV.Error)`.
+Compared with 5.0.0, this release consolidates public modules around formats and
+values. Configured parsers, decoders, encoders, names, contexts and templates
+expose receiver methods. Runtime failures carry typed problems and a shared
+location/path envelope; only compiler quotation boundaries render diagnostic text.
 
-Existing `Xml.parse_str` and `Xml.parser` signatures and results are preserved.
-The new markup APIs are additions; choose XML or HTML syntax explicitly when
-switching between standalone SVG/MathML and browser markup.
+=== Migrate public imports
+
+[cols="1,2",options="header"]
+|===
+|Previous public root |Current owner
+|`Utf8`, `Literal` |`Parser.Utf8`, `Parser.Quotation`
+|`Streaming` |Decoder/encoder receiver methods; custom constructors under `Parser`
+|`JsonStream` |`JsonValue.record_decoder`, `JsonValue.record_encoder`
+|`XmlNs` |`Xml.Namespaced`
+|`SvgPath` |`Svg.Path`
+|`DomName`, `MarkupFacts` |`Markup.Name` constructors and receiver queries
+|`DomConstruction` |`Html.RepairContext`
+|`MarkupContext`, `MarkupTemplate` |`Markup.Context`, `Markup.Template`
+|===
+
+The package exports fifteen roots: `AsciiDoc`, `CSV`, `HTTP`, `Html`,
+`JsonValue`, `Markdown`, `Markup`, `MathML`, `OFX`, `Parser`, `QIF`,
+`RocSyntax`, `Svg`, `Xml` and `Yaml`. Import the owning format for ordinary use.
+Implementation scanners, workspaces and template assembly helpers are private.
+
+=== Migrate parsing, writing and configuration
+
+* Complete text entry points use `parse_str(source, props)`; pass `{}` for
+  defaults. Option-bearing `_with` variants are consolidated into those props.
+  Byte readers retain `parse_bytes` where supported.
+* `Parser(input, value, problem)` retains the grammar's tagged problem type.
+  Construct format parsers with `parser(props)` and run parser values with
+  `.parse(input)` for complete consumption or `.run(input)` for a prefix.
+  Text runners are `.parse_str(text)` and `.run_str(text)`; a split UTF-8 scalar
+  produces a typed failure instead of changing the remainder.
+* `CSV.parse_str(text, {})` returns a CSV document. Use `.records` for raw bytes,
+  `CSV.parse_string_records(text, {})` for text fields, or
+  `CSV.decode_str(text, {})` for derived rows. Parsed documents support `.decode`;
+  custom row grammars use `CSV.rows_parser({ row: parser })`.
+* AsciiDoc include selection uses `select_include(source, attributes, props)`;
+  `IncludeProps` carries the document’s optional `tabsize`.
+* YAML derived decoding uses `Yaml.decode_str(text, props)` or a configured
+  `Yaml.value_parser(props)`. It preserves source scalar spellings when decoding
+  application values.
+* `HTTP.Request` and `HTTP.Response` own complete `.parse_bytes`, composable
+  `.parser`, incremental `.decoder`, quotation hooks and `.header` lookup.
+  Use `.parser({}).run(bytes)` when a message prefix and its remainder are needed.
+* Configure recovery in constructor props, for example
+  `CSV.decoder({ errors: { policy: ReportInvalidRecords } })`.
+  Consume `.read_iter(chunks)` or `.read_stream(source)` on the decoder.
+  `.collect`, `.collect_report` and `.values_stream` retain EOF validation.
+* Writer props contain `chunk_bytes` (64 KiB by default). Encoders expose
+  `.write_iter` and `.write_stream`; complete serialization uses `.encode`.
+  AsciiDoc documents expose `.render_html()` for HTML transformation.
+* `Markup.Name` is a shared nominal expanded identity with receiver queries.
+  Repair checks and authoring checks remain distinct context types. Template
+  plans and inherited context state are opaque; use `.bind` and `.metadata`.
+
+=== Migrate diagnostics
+
+Native format errors retain meaningful tags such as `InvalidCsv`,
+`InvalidJsonValue` and `InvalidHttp`. Their payloads use
+`Parser.Diagnostic(problem)` with `problem`, `location` and logical `path`.
+Match problem tags and structured payloads; use `Str.inspect` at display boundaries.
+
+Locations distinguish original byte offsets, complete text coordinates,
+retained line/column coordinates, generic input offsets and explicit
+`Unavailable` reasons. Offsets and array indexes are zero-based; physical
+lines/columns and logical record/field numbers are one-based. Missing-field
+failures retain their key without inventing physical positions. Custom decoded
+cell offsets remain distinct from original source positions.
+
+Limit failures retain a typed resource, maximum and an exact or lower-bound
+observed count. Diagnostic excerpts own at most forty bytes and retain their
+original byte length. Source-derived diagnostic names and values have independent
+ownership, so keeping an error does not retain an unrelated input buffer. Source failures preserve their original cause; native
+format errors pass through streaming adapters without extra `ParseErr` or
+`ReadFailed` wrappers. Recovery-budget and protocol failures remain distinct.
+
+Runtime validation returns typed failures. `from_quote` and `from_interpolation`
+continue to produce compiler-required diagnostic strings. Primitive constructors
+such as `Parser.Utf8.digits({})` and `CSV.string({})` are factories. `map_problem`
+preserves location, logical context and furthest-failure selection when a grammar
+adds its own domain context. See the {src}/docs/errors.adoc[error guide] and
+{src}/docs/combinators.adoc[combinator guide].
 
 == Use this release
 
@@ -27,15 +101,37 @@ Add the package to your app's header:
 parser: "{package-url}",
 ----
 
-Applications using basic-cli should use 0.28.1.
-
-The rc.3 preview moves XML node backing types into separate modules to avoid
-compiler warnings. `Xml.Node` and `XmlNs.Node` remain the public aliases, with
-constructors, helpers, equality and hashing available. API comparison expands
-some structural aliases inline and reports a breaking change from rc.2; see the
-{src}/docs/releases/6.0.0-rc.3.adoc[rc.3 notes] before upgrading a preview client.
 
 == Added
+
+=== Streaming and financial formats
+
+* Shared decoder `.read_iter` and `.read_stream` methods for pure
+  and effectful byte sources. Configure CSV, QIF, OFX, JSON record, XML,
+  namespace-resolved XML or HTTP decoders, then consume `Value`, recoverable
+  `Rejected` events and the final `Finished(report)`. Source errors remain
+  distinct from parser failures.
+* Shared encoder `.write_iter` and `.write_stream` methods with
+  CSV, QIF, OFX and JSON encoders. Configure error recovery and output chunk sizes in defaulted constructor props. Recovery is limited to independently
+  framed records; broken framing, encoding and resource failures stay terminal.
+* `JsonValue.record_decoder` for NDJSON records or top-level JSON array items,
+  XML event decoders with bounded text fragments, and HTTP request/response
+  decoders for heads, body fragments, trailers and message boundaries.
+  Drain readers through `Finished` to validate the complete source.
+* QIF raw section/record parsing and bank, cash and credit-card transaction
+  decoding; OFX bank/card statements in 1.x SGML and 2.x XML, with XML output
+  by default. Both support UTF-8 and Windows-1252, preserve exact monetary and
+  identifier text, and provide bounded streaming writers. Investment formats
+  are outside the supported typed subset.
+* `CSV.parse_string_records(text, {})` returns
+  `Try(List(List(Str)), [InvalidCsv(CSV.Error)])`, including
+  the header as an ordinary record, with CSV quoting decoded. `CSV.Record` and
+  raw document `.records` remain byte-based.
+
+See the {src}/docs/streaming.adoc[streaming guide] for decoder constructors,
+completion, error policies and retained-memory limits.
+
+=== Markup and XML
 
 * `Html`, `Svg` and `MathML` document and fragment parsers, with strict defaults,
   explicit HTML/XML syntax selection, configurable fragment contexts, browser
@@ -45,30 +141,31 @@ some structural aliases inline and reports a breaking change from rc.2; see the
   bind to indexed text or whole quoted attribute positions without reparsing.
 * Shared `Markup` trees with resolved namespaces, exact source bytes, lexical
   regions, resource limits and authored, implied or cloned node locations.
-* `DomName` validation for computed DOM names, distinct from XML source-name
-  grammar, and `MarkupFacts` for enumerable canonical element/ARIA vocabularies,
+* `Markup.Name` validation for computed DOM names, distinct from XML source-name
+  grammar, and name receiver queries for enumerable canonical element/ARIA vocabularies,
   namespace-aware boolean/enumerated attributes, HTML text/void/initial-newline
   behavior and known handler attributes.
-* `DomConstruction` for bounded HTML repair checks on explicit DOM names, with
+* `Html.RepairContext` for bounded HTML repair checks on explicit DOM names, with
   opaque finite contexts, unchanged namespace/prefix/local identity and typed
   attribute-dependent results. Success does not certify a full round trip.
-* `MarkupContext` for a new child or text value's authoring placement using retained finite
+* `Markup.Context` for a new child or text value's authoring placement using retained finite
   context, without reparsing or walking ancestors. History-sensitive contexts
   return `UnsupportedContext`; whole-parent completeness remains a separate check.
 * Opt-in `strict_foreign_spelling` to reject HTML-syntax SVG/MathML name
   adjustments with authored/expected spellings and exact name spans.
 * Opt-in `exact_structure` for authored HTML nesting without repairs, with typed
   reasons and causing source spans before selected-content projection.
-* `SvgPath` command parsing, common SVG value grammars, and MathML Core plus
+* `Svg.Path` command parsing, common SVG value grammars, and MathML Core plus
   common Presentation MathML structures and child-count checks. Embedded CSS,
   JavaScript and URL languages remain outside these semantic checks.
 * `Xml.reader`, with `Start`, `End` and `Text` events, subtree conversion through
-  `element` and `element_with`, and document location/declaration access.
-* `Xml.parse` and `Xml.ReaderProps` limits for depth, elements and attributes per
-  element. Excess input fails at the relevant tag or attribute.
-* `XmlNs` namespace-aware parsing and pull reading, plus `XmlNs.render` for
+  `element` and `element_with`, and a `.metadata()` view of location and declaration.
+* Whole-document XML limits are explicit through `limits: Bounded(readerProps)`
+  in parsing props. Reader/decoder limits bound depth, elements and attributes;
+  excess input fails at the relevant tag or attribute.
+* `Xml.Namespaced` namespace-aware parsing and pull reading, plus namespaced document `.encode(props)` for
   namespaced trees with preserved or configured prefixes.
-* `Xml.fold_source` and `XmlNs.fold_source` for validated source events with
+* `Xml.fold_source` and `Xml.Namespaced.fold_source` for validated source events with
   lexical and attribute ranges, including comments, CDATA and declarations.
 
 See the https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0/docs/markup.adoc[markup guide]
@@ -81,6 +178,18 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Fixed
 
+* HTML text holes retain their authored parent and ancestry inside formatting
+  elements and forms, including sole, adjacent and nested holes. Anchor text
+  stays inside its link; original source spans and malformed-nesting checks
+  remain intact.
+* CSV typed parsing reports failures in encounter order. An invalid value in
+  an earlier completed row takes precedence over malformed CSV later in the file.
+* Optimized whole-document QIF and OFX collection, including reduced temporary
+  values and repeated scalar validation, while retaining exact field values
+  and the incremental readers' diagnostic behavior.
+* AsciiDoc `ifeval` recognizes exponents after a decimal point without fractional
+  digits: `1.e2` compares as `100`, matching Asciidoctor's numeric coercion.
+
 * AsciiDoc list paragraphs preserve indentation beyond the common width of
   their continuation lines.
 * AsciiDoc preserves metadata and styles on nested lists, recognises Roman
@@ -92,8 +201,28 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Contributor tooling
 
-Fuzz targets use roc-fuzz 0.6.2, and Blueprint tooling uses 0.13.0. Markup oracle
+Routine checks and examples use cached dev builds. Scheduled properties share
+seven fuzz executables with independent inputs, examples and reports. CSV
+retention keeps a separate executable for
+https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box issue],
+preserving its diagnostic and allocation assertions.
+
+Fuzz targets use roc-fuzz 0.7.0-rc1, and Blueprint tooling uses 0.13.0. Markup oracle
 checks include pinned independent parsers, semantic validators and browser DOM
 consumers. Git keeps curated cases and an upstream manifest; the full WPT corpus
 is fetched and generated into ignored local storage. Markup fuzz campaigns and
 benchmarks run locally, with no new scheduled campaigns.
+
+Cross-language correctness and performance comparisons run locally. CI,
+nightly compatibility checks and releases retain native Roc verification,
+fuzz smoke campaigns and benchmark-driver smoke checks, without running the
+reference libraries. Local oracle and reference-timing caches record their
+input, dependency and configuration identities for reproducible reuse.
+
+Whole-document collection and streaming consumption have separate workloads
+and checksums. `--max-slowdown 1.5` checks eligible measurements against the
+fastest qualified reference for each workload; missing evidence, failed
+parses and excessive timing spread cannot pass. Some streaming
+workloads still exceed the target. Consult the
+recorded workload, ownership model and timing receipts when comparing results.
+See the {src}/docs/benchmarks.adoc[benchmark guide].

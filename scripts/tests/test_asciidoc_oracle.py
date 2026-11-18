@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,18 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'review_asciidoc.py'
 spec = importlib.util.spec_from_file_location('review_asciidoc', SCRIPT)
 review = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(review)
+
+
+@unittest.skipUnless(os.environ.get('ROC_PARSER_RUN_ORACLE_TESTS') == '1' and not os.environ.get('CI') and shutil.which('ruby'), 'local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 with Ruby 3.4 or newer')
+class RubyRuntimeTests(unittest.TestCase):
+    def test_numeric_coercion_matches_the_reference_profile(self):
+        result = subprocess.run(['ruby', '-rjson', '-e',
+                                 'puts JSON.generate(version: RUBY_VERSION, value: "1.e2".to_f)'],
+                                check=True, capture_output=True, text=True, timeout=10)
+        data = json.loads(result.stdout)
+        message = 'Use Ruby 3.4 or newer for the local AsciiDoc oracle.'
+        self.assertGreaterEqual(tuple(map(int, data['version'].split('.')[:2])), (3, 4), message)
+        self.assertEqual(data['value'], 100.0, message)
 
 
 class ProtocolTests(unittest.TestCase):
@@ -107,7 +120,7 @@ class ProtocolTests(unittest.TestCase):
                 self.assertEqual(review.run_probe(executable, 'x', timeout=.05 if status == 'timeout' else 2)['status'], status)
 
 
-@unittest.skipUnless((review.DEFAULT_HOME / 'gems/asciidoctor-2.0.23').is_dir(), 'run setup_oracle.py for pinned integration tests')
+@unittest.skipUnless(os.environ.get('ROC_PARSER_RUN_ORACLE_TESTS') == '1' and not os.environ.get('CI') and (review.DEFAULT_HOME / 'gems/asciidoctor-2.0.23').is_dir(), 'local only: set ROC_PARSER_RUN_ORACLE_TESTS=1 and run setup_oracle.py')
 class RealOracleTests(unittest.TestCase):
     def test_preamble_and_titleless_sections(self):
         with review.Oracle() as oracle:

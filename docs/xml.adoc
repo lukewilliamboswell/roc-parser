@@ -27,7 +27,8 @@ other tools.
 
 Every example on this page comes from
 link:{src}/docs/examples/xml-guide.roc[`docs/examples/xml-guide.roc`], which
-CI runs, and imports `parser.Xml` and `parser.XmlNs`.
+CI runs, and imports `parser.Xml`. Resolved namespace operations live under
+`Xml.Namespaced`.
 
 == Parse a document and find elements
 
@@ -116,7 +117,8 @@ include::examples/xml-guide.expected[lines=3..4]
 == Report malformed input
 
 When a document is not well-formed, `Xml.parse_str` returns
-`InvalidXml({ line, column, message })`. Lines and columns are one-based, and
+`InvalidXml(diagnostic)`, with a typed `problem`, structured `location` and logical
+`path`. A `LineColumn` or `Text` location has one-based lines and columns, and
 columns count UTF-8 bytes, so a column after non-ASCII text is larger than the
 number of characters a user sees.
 
@@ -136,20 +138,24 @@ include::examples/xml-guide.roc[tag=errors-run,indent=0]
 include::examples/xml-guide.expected[lines=5..9]
 ----
 
-If you are combining XML with other parsers, `Xml.parser` is the same
-parser as a `Parser(Utf8.Bytes, Xml)`. It leaves any input after the document
-for the next parser. Its failures are `ParseError({ message, offset })`, with
-the same message as `Xml.parse_str` and the byte offset of the problem.
+If you are combining XML with other parsers, `Xml.parser({})` constructs a
+`Parser(Parser.Utf8.Bytes, Xml, Xml.Problem)`. It leaves any input after the
+document for the next parser. Its failures are `ParseError(diagnostic)`,
+with the same native problem as `Xml.parse_str`. Byte parsing reports
+`InputOffset`; `.parse_str` reports `Text({ offset, line, column })`. Match
+`diagnostic.problem` to handle a particular failure, or render it with `Str.inspect`
+when displaying it to a person.
 
 [#xml-untrusted]
 == Read untrusted documents
 
-`Xml.parse_str` sets no limits, so a hostile document can make it build a
-very large tree. `Xml.parse` takes `Xml.ReaderProps`, whose fields all have
-defaults: `max_depth` (1,024), `max_elements` (4,194,304) and
+`Xml.parse_str(source, {})` sets no resource limits. For untrusted input, select
+`{ limits: Bounded(reader_props) }`. `Xml.ReaderProps` has defaults:
+`max_depth` (1,024), `max_elements` (4,194,304) and
 `max_attributes` per element (1,024). A document that would exceed one fails
-with `LimitExceeded({ limit, max, line, column })` at the start tag, or the
-attribute, that would exceed it, before anything is built for it:
+with `InvalidXml(diagnostic)` and problem
+`LimitExceeded({ resource, max, observed: AtLeast(max + 1) })` at the start tag or
+attribute that would exceed it, before building that value:
 
 [source,roc]
 ----
@@ -203,14 +209,74 @@ element with your own error, reported with its location.
 
 Keep only the latest reader, as here, and `return` from the `Done` arm rather
 than setting a flag: then each step updates the reader in place, and a loop
-that keeps no events holds memory for the open elements only. The same
-limits apply as for `Xml.parse`, and `location` gives the line and column of
-the most recent event.
+that keeps no events holds working memory for the open elements, in addition to the complete input. The same
+limits apply as for bounded `Xml.parse_str`, and `reader.metadata().location`
+identifies the most recent event.
+
+[#xml-streaming]
+== Read XML from byte chunks
+
+Construct `Xml.decoder(props)`, then call `.read_iter(chunks)` for pure byte
+chunks or `.read_stream(chunks)` for a file, stdin or another effectful source. Use `Xml.Namespaced.decoder(props)` to resolve names
+with the same interface. Each reader emits `Value(Start(...))`, `Value(End(...))` and
+`Value(Text(...))`, followed by `Finished(report)` after successful source
+exhaustion. `<a/>` emits both a start and an end event. Comments and processing
+instructions are validated and omitted.
+
+The complete https://github.com/lukewilliamboswell/roc-parser/blob/main/examples/xml-streaming.roc[xml-streaming.roc program]
+counts Atom entries from stdin. Its loop matches expanded names, so the source
+can use either a default namespace or a prefix:
+
+[source,roc]
+----
+include::../examples/xml-streaming.roc[tag=count,indent=0]
+----
+
+Run it from the repository root with `roc examples/xml-streaming.roc` and supply
+a complete Atom feed on stdin. A feed with two Atom `entry` elements prints
+`2 entries` after the entire input has passed validation.
+
+Consume through `Finished` to validate closing tags and the trailing document
+content. A source failure is returned under `SourceErr`; it never finalizes a
+truncated document. Malformed XML, namespace problems and resource limits stop
+the reader. XML structure has no record-skipping recovery policy.
+
+The chunk readers accept UTF-8 bytes and an optional UTF-8 BOM. A chunk can end
+inside a Unicode character, CRLF, reference, attribute, comment, declaration or
+CDATA terminator. A declaration naming a different encoding is an error; decode
+other encodings before using this interface. Empty chunks do not signal EOF.
+
+Unlike `Xml.reader`, chunk readers can emit several adjacent `Text` events.
+Text can also be separated at comments, processing instructions and CDATA
+boundaries. Concatenate text when the application needs the tree reader's
+coalesced result. Each event contains complete UTF-8 characters and decoded
+references; line ending normalization is preserved across chunk boundaries.
+
+`Xml.StreamProps` sets finite limits for depth (1,024), total elements
+(4,194,304), attributes per element (1,024), token bytes (65,536), text fragment
+bytes (65,536) and retained open-element context bytes (4,194,304). Tokens
+include complete tags, comments, processing instructions and references;
+CDATA content is emitted in bounded text fragments. `max_text_bytes` must be at
+least four. The context budget charges each open element's complete start tag,
+including namespace declarations. A resource limit is terminal. Retaining output
+or earlier decoder states adds to the application's memory use.
+
+For a custom pull loop, start with `decoder = Xml.decoder(props)` and call
+`decoder.step({ bytes, end: More })` until the source ends, then use `end: Final`.
+Continue
+with the returned `state` descriptor and respect its `consumed` byte count.
+The return value follows the shared xref:streaming.adoc#_implement_another_chunk_decoder[chunk decoder contract].
+`decoder.metadata()` provides the latest event's structured location and the
+parsed declaration. Complete-buffer readers expose the same information through
+`reader.metadata()`. `Xml.Namespaced.decoder` provides the namespace-aware version.
+XML failures use `InvalidXml(diagnostic)` with a native `Xml.Problem`; namespace
+failures use `InvalidNamespace(diagnostic)`. Their payloads retain names,
+characters, limits and observed counts without requiring diagnostic text.
 
 [#xml-namespaces]
 == Resolve namespaces
 
-`XmlNs` processes namespaces following Namespaces in XML 1.0. Each element and
+`Xml.Namespaced` processes namespaces following Namespaces in XML 1.0. Each element and
 attribute name becomes `{ namespace, local, prefix }`, where `namespace` is
 `Uri(uri)` or `NoNamespace`. A binding covers its element and descendants,
 `xmlns=""` removes the default namespace, unprefixed attributes are in no
@@ -236,21 +302,24 @@ include::examples/xml-guide.expected[lines=13..15]
 
 A namespace problem, such as an undeclared prefix, a reserved prefix bound
 to the wrong namespace or two attributes with the same expanded name, is
-`InvalidNamespace({ problem, line, column })` at the start tag. `XmlNs`
-mirrors `Xml`: `XmlNs.parse` takes the same limits, and `XmlNs.reader`
+`InvalidNamespace(diagnostic)` at the start tag. `Xml.Namespaced`
+mirrors `Xml`: `.parse_str(source, { limits: Bounded(reader_props) })` takes the
+same limits, and `Xml.Namespaced.reader`
 resolves names while it reads, so only one tree is built.
 
 [#xml-write]
 == Write a document
 
-`XmlNs.render` writes a namespaced tree as XML 1.0 text. By default it
+`document.encode(write_props)` writes a namespaced tree as XML 1.0 bytes.
+Use `Str.from_utf8_lossy` at a text presentation boundary when needed. By default it
 writes the tree's own prefixes and declarations, so a parsed document is
 written as it was read. `prefixes: Table(entries)` writes every name with
 its namespace's prefix from the table instead, declared once; an empty prefix
 makes a namespace the default. Text and attribute values are escaped so that
 they read back unchanged. A tree that cannot be written, with a name that is
 not allowed, a character XML 1.0 does not allow, or a prefix not bound where
-it is used, fails with `Unrenderable({ problem, path })`.
+it is used, fails with `Unrenderable(diagnostic)`, including its typed `problem`
+and logical `path`.
 
 [source,roc]
 ----
@@ -279,7 +348,7 @@ the five predefined entities exist, and any other reference, such as
 (`&#160;`) before parsing.
 Namespaces in Xml:: `Xml` keeps names exactly as written: `svg:path` is an
 element named `"svg:path"`, and `xmlns` declarations are ordinary
-attributes. Use `XmlNs` to resolve them.
+attributes. Use `Xml.Namespaced` to resolve them.
 Declared encodings:: The input is a Roc `Str`, which is already UTF-8. An
 `encoding="..."` in the declaration is reported in `declaration` but not
 used. Convert other encodings to UTF-8 before parsing.
@@ -287,7 +356,7 @@ Validation:: Only well-formedness is checked. Required elements, attribute
 types and schemas are not.
 
 For the full module interfaces, see the link:{api}Xml[Xml] and
-link:{api}XmlNs[XmlNs] API references.
+link:{api}Xml[Xml.Namespaced] API references.
 
 [#xml-performance]
 == Performance
@@ -308,7 +377,7 @@ CDATA, and the `xml-ceilings` fuzz target holds every reading path to
 allocation ceilings linear in the document.
 
 Reading every event with `Xml.reader` takes about 70% of the time
-`Xml.parse_str` takes to build the whole tree. `XmlNs.parse_str` builds its
+`Xml.parse_str` takes to build the whole tree. `Xml.Namespaced.parse_str` builds its
 tree with `element_with` and runs at about 45% of `Xml.parse_str`'s speed on an
 OOXML-like document, since it splits and resolves every name and its names
 and nodes are larger; it holds about twice the memory. That is as fast as

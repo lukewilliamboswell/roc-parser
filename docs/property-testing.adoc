@@ -43,11 +43,34 @@ CI uses `smoke --ci all` and the scheduled matrix excludes them.
 A failing property is a bug in the parser, or occasionally in the property.
 Either way the outcome is a fix: see <<property-testing-fix-the-cause>>.
 
+Keep the committed seeds small. A generator should describe a class of inputs
+and a property should check its contract across sizes and variations. Prefer
+round trips, independent models, metamorphic relations and resource bounds to
+large lists of prescribed input/output pairs. Shrink failures and keep a small
+explicit regression witness when it explains a contract the generator would
+otherwise miss.
+
+Expanded corpora, timing samples and comparison scaffolds belong in ignored
+`.roc-parser-tmp/` storage. Generate scaling documents from parameters. Recreate
+external suites from pinned revisions with verified hashes, retaining the
+acquisition recipe and pins in Git. Replacing a dataset must preserve its useful
+checks; moving assertions out of the repository is not a substitute for them.
+
 == Three kinds of target
 
-Each file `fuzz/<target>.roc` is one roc-fuzz app. They come in three kinds,
-which differ in what the fuzzer's bytes mean and therefore in what the target
-can check.
+Each `fuzz/*Property.roc` module owns one property. Seven `*Properties.roc`
+applications group the scheduled properties into shared executables. Markup
+and diagnostic investigations have separate local executables. Each property
+retains its name, examples, corpus and reports; selection happens through the
+executable's `--target` option rather than a byte added to the input.
+
+CSV retention uses its own `CsvRetention` executable while
+https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box row-join bug]
+affects combined suites. It keeps the same backend, opaque measurement ownership
+fence, diagnostic assertions and allocation ceilings.
+
+Properties come in three kinds, which differ in what the fuzzer's bytes mean
+and therefore in what the property can check.
 
 Raw targets (`xml-raw`, `xml-reader`, `xml-limits`, `xmlns-raw`, `yaml-raw`,
 `yaml-source`, `json-raw`, `json-options`, `csv-raw`, `http-raw`,
@@ -73,14 +96,14 @@ The XML pull reader and namespaces have their own raw targets:
   fails with a `LimitExceeded` it really exceeds, located no later than any
   well-formedness error, and the parse holds no more than a ceiling linear in
   the input and in `max_elements`.
-* `xmlns-raw` requires `XmlNs` to agree with `Xml` on well-formedness, to give
+* `xmlns-raw` requires `Xml.Namespaced` to agree with `Xml` on well-formedness, to give
   a tree of `Xml`'s shape whose names resolve as an independent walk of the
   bindings says, and to write trees that read back the same, with their own
   prefixes and with a table of fresh ones.
 
 `xml-ceilings` is a measuring target: two bytes choose a document shape and
 size, and `Fuzz.measure!` requires the allocator traffic and held bytes of
-`Xml.parse_str`, a loop over `Xml.Reader.next` and `XmlNs.parse_str` to stay
+`Xml.parse_str`, a loop over `Xml.Reader.next` and `Xml.Namespaced.parse_str` to stay
 under ceilings linear in the document (and, for the reader, in its depth). Its
 22 declared examples are a small and a large document of each shape, and its
 whole input space is a few thousand documents. Ceilings only move down; a
@@ -167,8 +190,8 @@ described in <<asciidoc>>. Inline source agreement alone does not establish
 agreement on Asciidoctor substitutions or rendered HTML.
 
 Run every target for a short, iteration-bounded smoke test. This is what the
-`fuzz` section of `blueprint run check` runs on a pull request; it builds up to
-four targets at once (`--jobs`) before running them in turn:
+`fuzz` section of `blueprint run check` runs on a pull request; it builds shared
+executables with two compiler jobs before running each property in turn:
 
 [source,bash]
 ----
@@ -201,11 +224,15 @@ python3 scripts/run_fuzz.py campaign markdown-inline-ast --seconds 600
 ----
 
 `--max-input-size`, `--timeout` and `--memory-limit` override a target's
-registered bounds, and `--no-build` reuses the binary from the last run.
+registered bounds, and `--no-build` reuses the family's verified binary from
+the last run. A family name such as `Records` selects all its properties.
+`--platform PATH` replaces the released roc-fuzz platform with a local entry
+point for upstream development; its sources and native host enter the build
+identity.
 
 The runner keeps everything under `.roc-parser-tmp/fuzz/`:
 
-* `bin/<target>`: the built target;
+* `bin/<family>`: one shared executable and its build receipt;
 * `corpus/<target>/`: the working corpus, which grows across runs;
 * `runs/<target>/`: runner metadata, and the inputs of any failure.
 
@@ -301,10 +328,9 @@ python3 -m venv .venv
 `scripts/http/`, `scripts/markdown/` and `scripts/yaml/` each have a
 `requirements.txt` with every dependency pinned, so `--no-deps` installs
 exactly the reviewed versions; CSV, XML and JSON use the Python standard
-library. Then run the same checks as the `Conformance` jobs of the scheduled
-`fuzz.yml` workflow. `scripts/check_conformance.roc --` does all of this in
-one environment: with no arguments it runs the fast checks that every pull
-request runs, and `all` adds the robustness campaigns:
+library. Cross-language comparisons run locally. `blueprint run conformance`
+does all of this in one environment: with no arguments it runs the fast checks,
+and `all` adds the robustness campaigns:
 
 [source,bash]
 ----
@@ -323,8 +349,7 @@ whose raw targets also start from every short case and suite input. It gives
 the rest to a seeded differential loop that generates documents and option
 sets, mutates them, and compares the probe with the oracle. It writes a report, and a reproducer
 for each kind of disagreement, under `.roc-parser-tmp/json-review/campaign/`.
-`--smoke` runs a short, iteration-bounded version, as CI does; for a longer
-local run, pass a budget and a seed, and replay a reproducer once you have a
+`--smoke` runs a short, iteration-bounded local comparison; for a longer run, pass a budget and a seed, and replay a reproducer once you have a
 fix:
 
 [source,bash]
@@ -354,9 +379,9 @@ cmark-gfm:
 Several scripts can also check a structured target's generator against the
 oracle, which is how a generator's own mistakes are caught: `review_xml.py
 corpus <target> <corpus>`, `review_json.py corpus <target> <corpus>`,
-`review_http.py --corpus DIR --fuzz-show BINARY`,
+`review_http.py --corpus DIR --fuzz-show BINARY --fuzz-target http-roundtrip`,
 `review_markdown.py generated BINARY CORPUS` and
-`review_markdown_blocks.py crosscheck BINARY CORPUS`.
+`review_markdown_blocks.py crosscheck BINARY CORPUS --fuzz-target markdown-blocks`.
 
 == Known-failures baselines
 
@@ -393,3 +418,26 @@ independently generated structure, source partitioning, bounds and typed holes.
 They are registered with `scheduled: False`. Run them locally using the commands
 in xref:markup.adoc#markup[Parse HTML, SVG and MathML]. Their seeds and dictionaries
 are reviewable source; corpus/report output remains in ignored scratch storage.
+
+== Incremental document parsing
+
+`stream-contract` compares shared adapters against an independent byte-record
+model under arbitrary splits and injected source errors. `stream-ceilings`
+measures distinct generated chunks inside the allocator measurement and discards
+completed output. CSV, QIF and OFX add format-specific chunk equivalence,
+round-trip, malformed-record and resource targets. They run in PR smoke and
+scheduled campaigns through the same registry as the existing formats.
+
+The financial reviews use pinned independent Python libraries and cross-writer
+checks. Record-error recovery is checked against independently filtered expected
+models; broken framing remains terminal. Source chunks, syntax boundaries and
+encoding boundaries are independent fuzz choices.
+
+== Check diagnostic ownership
+
+Run `python3 scripts/run_fuzz.py smoke diagnostic-lifetimes` locally to check
+that native JSON, YAML and CSV diagnostic payloads survive after their input
+is dropped without retaining unrelated source bytes. Two-byte seeds choose a
+failure kind and generated padding size; the property checks complete payload
+identity and retained allocation size. XML error lifetimes are also checked by
+`xml-stream-ceilings` alongside its reader and namespace bounds.

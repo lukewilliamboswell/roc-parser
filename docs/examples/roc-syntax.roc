@@ -8,7 +8,7 @@ import parser.RocSyntax
 
 # tag::parse[]
 main! = |_args| {
-	parsed = RocSyntax.parse_str("answer = 1 + 2 * 3\n")
+	parsed = RocSyntax.parse_str("answer = 1 + 2 * 3\n", {})
 	Stdout.line!("status: ${Str.inspect(parsed.status)}")?
 	Stdout.line!("diagnostics: ${parsed.diagnostics.len().to_str()}")?
 	for token in parsed.tokens {

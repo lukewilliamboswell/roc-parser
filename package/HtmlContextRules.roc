@@ -1,4 +1,4 @@
-import Markup
+import MarkupCore
 import MarkupVocabulary
 import HtmlTokenizer as Tok
 
@@ -22,11 +22,11 @@ HtmlContextRules :: [].{
 
 	Scope : [DefaultScope, TableScope, ListScope, ButtonScope]
 	namespace_class : Str -> NamespaceClass
-	namespace_class = |uri| if uri == Markup.html_namespace {
+	namespace_class = |uri| if uri == MarkupCore.html_namespace {
 		HtmlNamespace
-	} else if uri == Markup.svg_namespace {
+	} else if uri == MarkupCore.svg_namespace {
 		SvgNamespace
-	} else if uri == Markup.mathml_namespace {
+	} else if uri == MarkupCore.mathml_namespace {
 		MathNamespace
 	} else {
 		OtherNamespace

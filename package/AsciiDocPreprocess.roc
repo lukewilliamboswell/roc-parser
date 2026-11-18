@@ -11,7 +11,10 @@ AsciiDocPreprocess :: [].{
 	Include : { path : Str, source : Str }
 	Options : { includes : List(Include), attributes : List(Attribute), max_depth : U64, expand_includes : Bool }
 	Line : { text : Str, attributes : List(Attribute), path : Str, line : U64, offset : U64 }
-	Error : { path : Str, line : U64, offset : U64, message : Str }
+
+	## A preprocessing failure with source paths and configured limits as data.
+	Problem : [IncludeCycle(Str), IncludeDepthExceeded({ path : Str, max : U64 }), InvalidIncludePath(Str), MissingInclude(Str), UnexpandedInclude(Str), ExpandedSourceTooLarge(U64)]
+	Error : { path : Str, line : U64, offset : U64, problem : Problem }
 	Result : { source : Str, attributes : List(Attribute), lines : List(Line) }
 	standard : List(Attribute)
 	standard = standard_attributes
@@ -241,11 +244,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, file, con
 				found = if (options.expand_includes) options.includes.find_first(|entry| entry.path == resolved) else Err(NotFound)
 				match found {
 					Ok(entry) => {
-						if depth >= options.max_depth or stack.contains(resolved) {
-							return Err(PreprocessError({ path, line: number, offset, message: Str.concat("include expansion limit or cycle: ", resolved) }))
+						if stack.contains(resolved) {
+							return Err(PreprocessError({ path, line: number, offset, problem: IncludeCycle(resolved) }))
+						}
+						if depth >= options.max_depth {
+							return Err(PreprocessError({ path, line: number, offset, problem: IncludeDepthExceeded({ path: resolved, max: options.max_depth }) }))
 						}
 						if invalid_path(target) or resolved == "" or resolved == ".." or resolved.starts_with("../") {
-							return Err(PreprocessError({ path, line: number, offset, message: "virtual includes prohibit absolute paths, URIs and escaping the root" }))
+							return Err(PreprocessError({ path, line: number, offset, problem: InvalidIncludePath(target) }))
 						}
 						included = include_file(resolved)
 						selected = include_lines(entry.source, parsed.body, included, parse_tab_size(AsciiDocSource.lookup($attributes, "tabsize") ?? ""))
@@ -273,11 +279,11 @@ process_lines = |input_lines, path, attributes, options, stack, depth, file, con
 					}
 					Err(_) => {
 						if options.expand_includes and !parsed.body.contains("opts=optional") and !parsed.body.contains("options=optional") {
-							return Err(PreprocessError({ path, line: number, offset, message: Str.concat("virtual include not supplied: ", resolved) }))
+							return Err(PreprocessError({ path, line: number, offset, problem: MissingInclude(resolved) }))
 						}
 						if !options.expand_includes {
 							if $lint_comment == "" {
-								$unexpanded_includes = $unexpanded_includes.append({ path, line: number, offset, message: "unexpanded_includes: include was not expanded: ${target}" })
+								$unexpanded_includes = $unexpanded_includes.append({ path, line: number, offset, problem: UnexpandedInclude(target) })
 							}
 							if !$snapshot_ready {
 								$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
@@ -324,7 +330,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, file, con
 			$expanded_size = $expanded_size + line.text.to_utf8().len() + 1
 		}
 		if $expanded_size > 1048576 {
-			return Err(PreprocessError({ path, line: number, offset, message: "maximum expanded source size exceeded (1048576 bytes)" }))
+			return Err(PreprocessError({ path, line: number, offset, problem: ExpandedSourceTooLarge(1048576) }))
 		}
 	}
 	Ok({ lines: $lines, attributes: $attributes, context: { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment }, unexpanded_includes: $unexpanded_includes })
@@ -553,18 +559,16 @@ expression_value = |source, attributes, lookup| {
 	}
 	var $end = whole.end
 	var $prefix = whole.digits
-	var $has_fraction = False
 	if bytes_number.get($end) == Ok('.') {
 		fraction = numeric_digits(bytes_number, $end + 1)
 		if fraction.digits != "" {
 			$prefix = Str.concat(if ($prefix == "") "0" else $prefix, Str.concat(".", fraction.digits))
-			$end = fraction.end
-			$has_fraction = True
 		}
+		$end = fraction.end
 	}
 
-	## Ruby ignores the exponent after a decimal point with no following digit.
-	if ($has_fraction or bytes_number.get($end) != Ok('.')) and $prefix != "" and (bytes_number.get($end) == Ok('e') or bytes_number.get($end) == Ok('E')) {
+	## A decimal point may precede an exponent without fractional digits.
+	if $prefix != "" and (bytes_number.get($end) == Ok('e') or bytes_number.get($end) == Ok('E')) {
 		exponent_start = $end + 1
 		exponent_sign = bytes_number.get(exponent_start) ?? 0
 		exponent = numeric_digits(bytes_number, if (exponent_sign == '+' or exponent_sign == '-') exponent_start + 1 else exponent_start)
@@ -1496,11 +1500,11 @@ expect match AsciiDocPreprocess.run("include::a.adoc[opts=optional]", AsciiDocPr
 	Err(_) => False
 }
 expect match AsciiDocPreprocess.run("include::missing.adoc[]", { includes: [], attributes: [], max_depth: 16, expand_includes: True }) {
-	Err(PreprocessError(error)) => error.line == 1 and error.offset == 0 and error.path == ""
+	Err(PreprocessError(error)) => error.line == 1 and error.offset == 0 and error.path == "" and error.problem == MissingInclude("missing.adoc")
 	_ => False
 }
 expect match AsciiDocPreprocess.run("include::a.adoc[]", { includes: [{ path: "a.adoc", source: "include::a.adoc[]" }], attributes: [], max_depth: 16, expand_includes: True }) {
-	Err(PreprocessError(error)) => error.line == 1 and error.path == "a.adoc"
+	Err(PreprocessError(error)) => error.line == 1 and error.path == "a.adoc" and error.problem == IncludeCycle("a.adoc")
 	_ => False
 }
 expect match AsciiDocPreprocess.run("include::dir/a.adoc[]", { includes: [{ path: "dir/a.adoc", source: "include::b.adoc[]" }, { path: "dir/b.adoc", source: "nested" }], attributes: [], max_depth: 16, expand_includes: True }) {
@@ -1574,7 +1578,14 @@ expect evaluate("1.0e-999 == 0")
 expect evaluate("1_000_000 == 1000000")
 expect evaluate("1_2.3_4 == 12.34")
 expect evaluate("1__2.0 == 1")
-expect evaluate("1.e2 == 1")
+expect evaluate("1.e2 == 100")
+expect !evaluate("1.e2 == 1")
+expect evaluate("1.e+2 == 100")
+expect evaluate("1.e-2 == 0.01")
+expect evaluate("-1.e2 == -100")
+expect evaluate("1.e == 1")
+expect evaluate("1.e_2 == 1")
+expect evaluate(".e2 == 0")
 expect evaluate("1e3. == 1000")
 expect evaluate(".1e2 == 10")
 expect evaluate("1.7976931348623157e308 > 1000000000000000000000000000000000000000000000000000000000000")
@@ -1924,4 +1935,10 @@ expect {
 	base = { ..AsciiDocPreprocess.defaults, expand_includes: True, includes: [{ path: "part.adoc", source: "Body" }] }
 	changed = { ..base, includes: [{ path: "part.adoc", source: "Other" }] }
 	source_namespace(source, base) == source_namespace(source, base) and source_namespace(source, base) != source_namespace(source, changed) and source_namespace(source, base) != source_namespace("include::other.adoc[]", base) and source_namespace(source, base) != source_namespace(source, { ..base, attributes: [{ name: "a", value: "bc" }] }) and source_namespace(source, { ..base, attributes: [{ name: "a", value: "bc" }] }) != source_namespace(source, { ..base, attributes: [{ name: "ab", value: "c" }] })
+}
+
+# Include depth and cycles remain distinguishable without reading prose.
+expect match AsciiDocPreprocess.run("include::a.adoc[]", { includes: [{ path: "a.adoc", source: "text" }], attributes: [], max_depth: 0, expand_includes: True }) {
+	Err(PreprocessError(error)) => error.problem == IncludeDepthExceeded({ path: "a.adoc", max: 0 })
+	_ => False
 }

@@ -25,7 +25,7 @@ main! = |args| {
 	var $i = 0
 	start = Monotonic.now!()
 	while $i < iterations {
-		parsed = RocSyntax.parse_str(input)
+		parsed = RocSyntax.parse_str(input, {})
 		$checksum = $checksum + parsed.tokens.fold(0, |sum, token| sum + token.start + token.end + token_kind_code(token.kind))
 			+ parsed.nodes.fold(0, |sum, node| sum + node.start + node.end + node.children_start + node.children_len + node_kind_code(node.kind))
 			+ parsed.children.fold(0, |sum, child| (sum * 31 + child) % 1000000007)

@@ -12,7 +12,7 @@ endif::[]
 :idseparator: _
 
 roc-parser is not a new idea. Parser combinators have been studied and used
-for fifty years, and almost every choice in the `Parser` and `Utf8` modules
+for fifty years, and almost every choice in the `Parser` and `Parser.Utf8` modules
 repeats, adapts or deliberately declines something from that history. This
 chapter traces those ideas to their sources, so you can see why the library
 behaves as it does and where it differs from the libraries you may already
@@ -41,9 +41,9 @@ read. Graham Hutton's 1992 paper "Higher-order functions for parsing" turned
 these ideas into a complete, teachable library and became the standard
 reference.
 
-roc-parser keeps the function and drops the list. A `Parser(input, a)` wraps
+roc-parser keeps the function and drops the list. A `Parser(input, a, problem)` wraps
 a function from `input` to a `Try` holding either the value and the rest of
-the input, `{ value, rest }`, or a `ParseError` with a message and an offset.
+the input, `{ value, rest }`, or a `ParseError` with a problem tag and an offset.
 `Parser.custom` takes such a function directly, so you can always step
 outside the combinators, and `Parser.run` runs a parser and returns the same
 shape:
@@ -166,7 +166,8 @@ just the row and column, which the Elm compiler uses for its error messages.
 
 roc-parser adopts megaparsec's rule. Parsers track the _furthest failure_,
 the failure that read furthest into the input, and every runner reports it
-as `ParseError({ message, offset })`, where `offset` is a byte offset. A
+as `ParseError({ problem, location, path })`. Generic input offsets count input
+elements; text runners retain original byte offsets and line/column coordinates. A
 repetition that stops at a bad element remembers that element's failure, so
 if the parse then fails, the error points at the bad element rather than at
 the input left over after the repetition:
@@ -196,7 +197,7 @@ advice for Roc: in
 {langref}/strings.md[the strings chapter of the language reference], it
 recommends working in UTF-8 bytes when implementing a parser.
 
-So the input type of the text parsers, `Utf8.Bytes`, is `List(U8)`, and
+So the input type of the text parsers, `Parser.Utf8.Bytes`, is `List(U8)`, and
 `'a'` is a byte. Every format in this
 package is defined over ASCII delimiters, which in UTF-8 are single bytes that
 never appear inside a multi-byte character, so reading bytes is both correct

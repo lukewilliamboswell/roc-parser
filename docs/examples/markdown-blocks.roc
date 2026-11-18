@@ -30,7 +30,7 @@ source =
 	\\<div>raw</div>
 
 main! = |_args| {
-	blocks = Markdown.parse_str(source)
+	blocks = Markdown.parse_str(source, {})
 	for block in blocks {
 		Stdout.line!(Str.inspect(block))?
 	}
@@ -41,7 +41,7 @@ main! = |_args| {
 
 # tag::loose[]
 loose_list! = || {
-	blocks = Markdown.parse_str("3. first\n\n4. second\n")
+	blocks = Markdown.parse_str("3. first\n\n4. second\n", {})
 	for block in blocks {
 		Stdout.line!(Str.inspect(block))?
 	}

@@ -73,7 +73,7 @@ The package depends on one other package:
 [cols="1,1,3",options="header"]
 |===
 |Package |Version |Used for
-|https://github.com/roc-lang/unicode[roc-lang/unicode] |4.3.2 |Unicode case folding, general categories and scalar handling in the Markdown module
+|https://github.com/roc-lang/unicode[roc-lang/unicode] |4.3.3 |Unicode case folding, general categories and scalar handling in the Markdown module
 |===
 
 `package/main.roc` names its release URL. Roc fetches it when it fetches
@@ -88,56 +88,10 @@ errors use the tag `InvalidJsonValue`: the builtin reports invalid input as
 `InvalidJson` with a `Str`, and keeping the tags apart lets one function pass
 errors from both on with `?` (see <<json-builtin>>).
 
-== Changes in 2.0.0 at a glance
+[#_changes_in_2_0_0_at_a_glance]
+== Upgrading older releases
 
-Version 2.0.0 changes the API of every module and reworks every format parser
-to follow its specification, checked against a reference implementation (see
-<<conformance,Conformance>>). Code written for 1.x does not compile without
-changes, and many inputs now parse differently. The
-{src}/docs/releases/2.0.0.adoc[2.0.0 release notes] start with an upgrade guide that
-maps each old name to its replacement. In summary:
-
-[cols="1,4",options="header"]
-|===
-|Module |What changed
-
-|`Parser`, `Utf8`
-|The text parsers live in the `Utf8` module. Runners report the furthest failure as
-`ParseError({ message, offset })`, and partial runners return
-`{ value, rest }`. `maybe` returns `Try(a, [Missing])`. Several functions
-were renamed or removed, and
-`many` and `sep_by` stop when an element consumes no input instead of
-looping forever.
-
-|`CSV`
-|`CSV.parse` decodes rows into records by header name. `CSV.Record` replaces
-the opaque record types, and every failure is
-`InvalidCsv({ record, field, line, column, message })`. Parses RFC 4180, with
-an optional final line break, lone CR line breaks and any UTF-8 in fields.
-
-|`HTTP`
-|`parse_request`, `parse_response` and `parse_requests` take bytes and fail
-with `InvalidHttp({ offset, message })`. Headers are `{ name, value }`
-records with a case-insensitive `HTTP.header` lookup, `Version` is now
-`{ major, minor }`, and `Method` gains `Extension(name)`. Parses HTTP/1.1 per
-RFC 9112 and rejects messages with ambiguous framing.
-
-|`Markdown`
-|`Markdown.parse_str` and `parse_inlines` return the tree directly, and the
-legacy single-construct parsers, the placeholder variant and the debug
-printers are gone. Rebuilt on the CommonMark 0.31.2 parsing strategy,
-with GFM tables, task lists, strikethrough and extended autolinks. Adds the
-roc-lang/unicode dependency.
-
-|`Xml`
-|`Xml.parse_str` reports `InvalidXml({ line, column, message })`, `Xml.parser`
-embeds the parser, elements are records, and optional parts of the
-declaration are `Try(_, [Missing])`. Checks XML 1.0 well-formedness and
-rejects documents with a document type declaration.
-
-|`Yaml`
-|`Yaml.decode` reads a document into a record. Text scalars are `Text`, errors are `InvalidYaml`, and helpers such as `get_path` and
-`as_str` walk the tree. Resolves plain scalars with the YAML 1.2 core schema
-and rejects unsupported features, such as anchors, instead of misreading
-them.
-|===
+The {src}/docs/releases/2.0.0.adoc[2.0.0 upgrade guide] maps the names used by
+1.x clients to the redesigned format modules. For changes since 5.0.0, use the
+{src}/docs/releases/6.0.0.adoc[6.0.0 migration notes], including typed parser
+problems, primitive factories and the shared streaming API.

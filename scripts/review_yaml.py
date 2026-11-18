@@ -282,8 +282,8 @@ def failure_reason(row: dict) -> str:
 
 def build(roc: str, parser_root: Path, output_dir: Path, fuzz: str | None = None) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    source = ROOT / "fuzz" / (fuzz + ".roc") if fuzz else DATA / "probe.roc"
-    executable = output_dir / "bin" / (fuzz or "probe")
+    source = ROOT / "fuzz" / "TextProperties.roc" if fuzz else DATA / "probe.roc"
+    executable = output_dir / "bin" / ("Text" if fuzz else "probe")
     executable.parent.mkdir(parents=True, exist_ok=True)
     command = [roc, "build", str(source), "--output=" + str(executable)]
     if parser_root != ROOT:
@@ -486,7 +486,7 @@ def fuzz_run(binary: Path, seconds: float, seed: int, output_dir: Path, target: 
             raw = bytes([value, 0, 1, 2, 3])
             (corpus / hashlib.sha256(raw).hexdigest()).write_bytes(raw)
     limit = "--runs=2000" if smoke else "--time=" + str(max(1, int(seconds)))
-    command = [str(binary), "explore", str(corpus), "--report-dir=" + str(work / "evidence"), limit, "--seed=" + str(seed), "--max-input-size=4096", "--timeout=2", "--memory-limit=512", "--print-final-stats"]
+    command = [str(binary), f"--target={target}", "explore", str(corpus), "--report-dir=" + str(work / "evidence"), limit, "--seed=" + str(seed), "--max-input-size=4096", "--timeout=2", "--memory-limit=512", "--print-final-stats"]
     if target == "yaml-raw":
         command.append("--dictionary=" + str(ROOT / "fuzz" / "dictionaries" / "yaml.dict"))
     start = time.monotonic()
@@ -506,7 +506,7 @@ def campaign(args, executable: Path) -> int:
         write_json(args.output_dir / "campaign.json", {"metadata": metadata(args.roc, args.parser_root, executable), "fuzz": results})
         print(json.dumps(results, indent=2))
         return int(any(result["return_code"] for result in results))
-    block = build(args.roc, args.parser_root, args.output_dir, "yaml-block")
+    block = raw
     results = [fuzz_run(raw, args.seconds * .4, args.seed, args.output_dir, "yaml-raw"), fuzz_run(block, args.seconds * .3, args.seed, args.output_dir, "yaml-block")]
     diff = differential(executable, args.seconds * .3, args.seed, args.output_dir)
     report = {"metadata": metadata(args.roc, args.parser_root, executable), "budget_seconds": args.seconds, "fuzz": results, "differential": diff}

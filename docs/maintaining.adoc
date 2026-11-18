@@ -41,12 +41,13 @@ compiler, and every run uses the newest one:
   package for the new compiler in its own pull request.
 * `release.yml` builds and tests a release with the latest nightly, and the
   release notes name it under "Compilers".
-* `fuzz.yml` and `bench.yml` run their campaigns on the latest nightly and
-  record its version with their results.
+* `fuzz.yml` runs native Roc campaigns on the latest nightly and records its
+  version. Cross-language correctness and performance comparisons are local-only.
 
 There is no compiler pin file and no automated update controller: the
 compiler moves by itself every day, and nothing else in the repository changes
-because of it. No Roc file in the repository carries a `roc` header field.
+because of it. Package modules and maintained applications follow that compiler;
+orchestration scripts use the fixed tooling compiler described below.
 
 [WARNING]
 ====
@@ -83,7 +84,8 @@ These change only through a pull request a maintainer reviews:
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].
 * *Blueprint.lock.* `blueprint update` refreshes it: the nixpkgs revision that
-  supplies Go, Rust and Python to the benchmarks, and the digests of Zig 0.17.0,
+  supplies optional local Ruby, Go, Rust and Python reference runtimes, and the digests
+  of Zig 0.17.0,
   which builds the RocSyntax oracle. The benchmark environment takes tools from
   Nix, so the update needs Nix. Review the new digests and download hosts it
   prints, and commit the lock alone.
@@ -96,7 +98,10 @@ These change only through a pull request a maintainer reviews:
 
 The check, package, bundle, documentation-example and release drivers are
 executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
-compiler fetched by Blueprint. Package commands use the separate `roc` on
+compiler fetched by Blueprint. Routine validation uses compilation caches and
+explicit dev builds; instrumented fuzz binaries use the default LLVM build mode.
+Cache bypasses require a concrete reason and a removal condition.
+Package commands use the separate `roc` on
 `PATH`. The released `release-package` utility from tools-0.10.1 builds the
 bundle, examples archive, API archive and notes, and tests archived examples
 against the exact bundle. The shared release workflow composes it with the
@@ -106,6 +111,9 @@ Independent Python, Ruby and Zig oracle harnesses compare parser behavior.
 or compiler fixture that must use the floating nightly. The policy check rejects
 unlisted files, stale exceptions, tooling pin drift and workflow pin drift.
 The shared working-tree and archive checks both use `tests/spec.json`.
+Their pinned validator retains uncached example builds as an independent
+source/bundle verification boundary. This exception ends when reviewed shared
+tooling supports cached checks with each receipt bound to that input identity.
 
 The manual builds as HTML and PDF with `roc-docs` from tools-0.10.1. Blueprint
 fetches the native binary and checks its digest against `Blueprint.lock`. Use
@@ -139,7 +147,7 @@ final major before API extraction: every possible API change fits that bump.
 For a same-major release, it runs `roc bump --expect <version>` and stops if
 the comparison fails or understates the change. Compilation, the full package
 checks and exact release-candidate tests remain required for every release.
-The build allows 75 minutes so the full checks complete before assembly.
+Validation allows 75 minutes so the full checks complete before assembly.
 . Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
   `docs/releases/unreleased.adoc`, and link them from
   `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on
@@ -165,9 +173,10 @@ Run the `Release` workflow
 `main`, with `version` set to the new version, for example `2.1.0`, or
 `2.1.0-rc.4` for a release candidate. Leave `nightly-tag` empty to resolve the
 latest compiler, or name an exact nightly to reproduce reviewed compiler
-evidence. The shared workflow passes that one compiler identity to its build,
-candidate tests and documentation jobs. The pinned roc-automation
-`release-package.yml` workflow validates the version, runs the checks, builds
+evidence. The reusable CI job runs the native package checks, mocked harness
+tests and Roc-only smoke workloads before release assembly. It passes the validated compiler identity to
+the build, candidate tests and documentation jobs. The pinned roc-automation
+`release-package.yml` workflow validates the version, builds
 the package and tests the unchanged release candidate. It owns SBOM validation,
 attestations and publication. Its publishing jobs run no repository code.
 

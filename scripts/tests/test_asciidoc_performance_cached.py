@@ -82,7 +82,7 @@ class CacheTests(unittest.TestCase):
             root=Path(tmp);(root/'scripts/asciidoc').mkdir(parents=True)
             for rel in ['scripts/check_asciidoc_performance.py','scripts/review_asciidoc.py','scripts/review_roc_syntax.py','scripts/asciidoc/oracle.rb','scripts/asciidoc/performance_oracle.rb']:(root/rel).write_text('fixture')
             binary=root/'native';binary.write_bytes(b'native');compiler=root/'compiler';compiler.write_bytes(b'compiler')
-            receipt={'source_identity':'current-source','binary_sha256':c.sha(binary),'build_flags':['--opt=speed'],'compiler':{'path':str(compiler),'sha256':c.sha(compiler)}}
+            receipt={'source_identity':'current-source','binary_sha256':c.sha(binary),'build_flags':[],'compiler':{'path':str(compiler),'sha256':c.sha(compiler)}}
             Path(str(binary)+'.build.json').write_text(json.dumps(receipt))
             row=baseline_row();saved={'schema_version':2,'smoke':False,'candidate_build':{'source_identity':'old-native'},'reference':{'version':'2.0.23','gem_code_sha256':'old-code','worker_sha256':c.sha(root/'scripts/asciidoc/performance_oracle.rb'),'oracle_sha256':c.sha(root/'scripts/asciidoc/oracle.rb')},'machine':c.machine(),'records':[row]}
             missing=baseline_row({'id':'unavailable','source':'other'});missing.pop('reference');missing['status']='error'
@@ -114,7 +114,7 @@ class CacheTests(unittest.TestCase):
             root=Path(tmp);(root/'scripts/asciidoc').mkdir(parents=True)
             for rel in ['scripts/check_asciidoc_performance.py','scripts/review_asciidoc.py','scripts/review_roc_syntax.py','scripts/asciidoc/oracle.rb','scripts/asciidoc/performance_oracle.rb']:(root/rel).write_text('fixture')
             binary=root/'native';binary.write_bytes(b'native');compiler=root/'compiler';compiler.write_bytes(b'compiler')
-            receipt={'source_identity':'current-source','binary_sha256':c.sha(binary),'build_flags':['--opt=speed'],'compiler':{'path':str(compiler),'sha256':c.sha(compiler)}}
+            receipt={'source_identity':'current-source','binary_sha256':c.sha(binary),'build_flags':[],'compiler':{'path':str(compiler),'sha256':c.sha(compiler)}}
             binary.with_suffix('.build.json').write_text(json.dumps(receipt))
             second={'id':'second','source':'other'}
             saved={'schema_version':2,'smoke':False,'candidate_build':{'source_identity':'old'},'reference':{'version':'2.0.23','gem_code_sha256':'old','worker_sha256':c.sha(root/'scripts/asciidoc/performance_oracle.rb'),'oracle_sha256':c.sha(root/'scripts/asciidoc/oracle.rb')},'machine':c.machine(),'records':[baseline_row(),baseline_row(second)]}

@@ -24,6 +24,11 @@ latest Roc nightly on your `PATH` as `roc`:
 blueprint run check
 ```
 
+Compiler literal contracts and fuzz target builds run serially by default.
+Use `scripts/check_literals.py --jobs N` or `scripts/run_fuzz.py smoke --jobs N`
+only when the host has capacity; `ROC_PARSER_LITERAL_JOBS` also configures
+the literal runner used by `blueprint run check`.
+
 `blueprint run check -- --list` names its sections, and
 `blueprint run check -- fuzz` runs one. Pull requests need passing CI and
 signed commits.

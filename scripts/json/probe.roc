@@ -7,7 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.JsonValue
-import parser.Utf8
+import parser.Parser
 
 ## Read one JSON document from stdin and print one line of JSON describing
 ## what JsonValue does with it. The protocol is written by hand here, never
@@ -18,14 +18,14 @@ import parser.Utf8
 ##   `["array",[TREE,...]]` or `["object",[[key,TREE],...]]`, and each W is the
 ##   written string or `{"error":"InvalidNumber"|"DuplicateKey"|"TooDeep"|"TooLarge","value":...}`;
 ## - `{"status":"error","line":L,"column":C,"message":M,"parser_agrees":B}`;
-## - for input that is not UTF-8, the result of `JsonValue.parser_with`, with
+## - for input that is not UTF-8, the result of `JsonValue.parser`, with
 ##   `"offset"` added to an error;
 ## - `{"status":"usage_error","message":M}` for an unknown or malformed flag.
 ##
-## `compact` is `JsonValue.to_str`, `pretty` is `to_str_with` with the
+## `compact` is `JsonValue.encode`, `pretty` is `encode(props)` with the
 ## `--sort-keys` and `--indent N` flags (indent 2 by default), and `sorted` is
-## `to_str_with({ sort_keys: True })`. `parser_agrees` says whether
-## `JsonValue.parser_with` gives the same verdict and value as `parse_with`.
+## `encode(props)({ sort_keys: True })`. `parser_agrees` says whether
+## `JsonValue.parser` gives the same verdict and value as `parse_str(source, props)`.
 ##
 ## Options flags: `--max-depth N`, `--max-items N`, `--max-string-bytes N`,
 ## `--max-number-digits N`, `--comments`, `--trailing-commas`, `--bom`,
@@ -138,7 +138,7 @@ top_level = |value| {
 	}
 }
 
-options_of : Flags -> JsonValue.Options
+options_of : Flags -> JsonValue.Props
 options_of = |flags| {
 	max_depth: flags.max_depth,
 	max_items: flags.max_items,
@@ -160,8 +160,8 @@ run = |bytes, flags| {
 	options = options_of(flags)
 	match Str.from_utf8(bytes) {
 		Ok(input) => {
-			combinator = Utf8.parse_str(JsonValue.parser_with(options), input)
-			match JsonValue.parse_with(input, options) {
+			combinator = (JsonValue.parser(options)).parse_str(input)
+			match JsonValue.parse_str(input, options) {
 				Ok(value) => {
 					tree = encode(value)
 					agrees =
@@ -172,18 +172,20 @@ run = |bytes, flags| {
 					accepted(value, tree, flags, agrees)
 				}
 				Err(InvalidJsonValue(error)) => {
-					location = "\"line\":${error.line.to_str()},\"column\":${error.column.to_str()}"
-					"{\"status\":\"error\",${location},\"message\":${json_string(error.message)},\"parser_agrees\":${boolean(combinator.is_err())}}"
+					location = "\"line\":${source_position(error.location).line.to_str()},\"column\":${source_position(error.location).column.to_str()}"
+					"{\"status\":\"error\",${location},\"message\":${json_string(Str.inspect(error.problem))},\"parser_agrees\":${boolean(combinator.is_err())}}"
 				}
 			}
 		}
 		Err(_) => {
-			match Utf8.parse_bytes(JsonValue.parser_with(options), bytes) {
+			match (JsonValue.parser(options)).parse(bytes) {
 				Ok(value) => accepted(value, encode(value), flags, True)
-				Err(ParseError({ message, offset })) => {
+				Err(ParseError(diagnostic)) => {
+					problem = diagnostic.problem
+					offset = source_offset(diagnostic.location)
 					at = position(bytes, offset)
 					location = "\"line\":${at.line.to_str()},\"column\":${at.column.to_str()},\"offset\":${offset.to_str()}"
-					"{\"status\":\"error\",${location},\"message\":${json_string(message)},\"parser_agrees\":true}"
+					"{\"status\":\"error\",${location},\"message\":${json_string(Str.inspect(problem))},\"parser_agrees\":true}"
 				}
 			}
 		}
@@ -192,20 +194,21 @@ run = |bytes, flags| {
 
 accepted : JsonValue, Str, Flags, Bool -> Str
 accepted = |value, tree, flags, agrees| {
-	compact = written(JsonValue.to_str(value))
-	pretty = written(JsonValue.to_str_with(value, { sort_keys: flags.sort_keys, indent: flags.indent }))
-	sorted = written(JsonValue.to_str_with(value, { sort_keys: True }))
+	compact = written(JsonValue.encode(value, {}).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"))
+	pretty = written(JsonValue.encode(value, { sort_keys: flags.sort_keys, indent: flags.indent }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"))
+	sorted = written(JsonValue.encode(value, { sort_keys: True }).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8"))
 	"{\"status\":\"ok\",\"value\":${tree},\"compact\":${compact},\"pretty\":${pretty},\"sorted\":${sorted},\"parser_agrees\":${boolean(agrees)}}"
 }
 
-written : Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)]) -> Str
-written = |result| {
-	match result {
-		Ok(text) => json_string(text)
-		Err(InvalidNumber(lexeme)) => "{\"error\":\"InvalidNumber\",\"value\":${json_string(lexeme)}}"
-		Err(DuplicateKey(key)) => "{\"error\":\"DuplicateKey\",\"value\":${json_string(key)}}"
-		Err(TooLarge(limit)) => "{\"error\":\"TooLarge\",\"value\":${limit.to_str()}}"
-		Err(TooDeep) => "{\"error\":\"TooDeep\",\"value\":null}"
+written : Try(Str, [InvalidJsonValue(JsonValue.Error)]) -> Str
+written = |result| match result {
+	Ok(text) => json_string(text)
+	Err(InvalidJsonValue(error)) => match error.problem {
+		InvalidNumber(excerpt) => "{\"error\":\"InvalidNumber\",\"value\":${json_string(Str.from_utf8_lossy(excerpt.bytes))}}"
+		DuplicateKey(key) => "{\"error\":\"DuplicateKey\",\"value\":${json_string(key)}}"
+		LimitExceeded({ resource: DocumentBytes, max, .. }) => "{\"error\":\"TooLarge\",\"value\":${max.to_str()}}"
+		LimitExceeded({ resource: Nesting, .. }) => "{\"error\":\"TooDeep\",\"value\":null}"
+		_ => crash "unexpected writer diagnostic"
 	}
 }
 
@@ -224,7 +227,7 @@ encode = |value| {
 boolean : Bool -> Str
 boolean = |flag| if (flag) "true" else "false"
 
-## One-based line and byte column of a byte offset, as Literal.position
+## One-based line and byte column of a byte offset, as Parser.Quotation.position
 ## computes them, for input that is not a valid Str.
 position : List(U8), U64 -> { line : U64, column : U64 }
 position = |bytes, offset| {
@@ -268,4 +271,18 @@ escape_json = |bytes, out| {
 		}
 		[byte, .. as rest] => escape_json(rest, out.append(byte))
 	}
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(at) => { line: at.line, column: at.column }
+	LineColumn(at) => at
+	_ => crash "expected retained source text coordinates"
+}
+
+source_offset : Parser.Location -> U64
+source_offset = |location| match location {
+	InputOffset(offset) | ByteOffset(offset) => offset
+	Text(at) => at.offset
+	_ => crash "expected retained source byte coordinates"
 }

@@ -556,7 +556,7 @@
   ],
   "inputs": [
     {
-      "input": "build-source:roc-CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA",
+      "input": "build-source:roc-7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
@@ -611,7 +611,7 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
-      "input": "roc-package:CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA",
+      "input": "roc-package:7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
@@ -632,6 +632,11 @@
     },
     {
       "input": "task:bench-quick",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:streaming-bench",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
@@ -711,7 +716,12 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
-      "input": "tool:nix#python3",
+      "input": "tool:nix#python313",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "tool:nix#ruby_3_4",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },

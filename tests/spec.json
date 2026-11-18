@@ -27,6 +27,19 @@
       ]
     },
     {
+      "path": "examples/csv-streaming.roc",
+      "cases": [
+        {
+          "name": "canonical",
+          "args": [],
+          "stdin": "a,b\n1,\"two,three\"\n",
+          "stdout": "a,b\r\n1,\"two,three\"\r\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/dom-construction.roc",
       "cases": [
         {
@@ -34,6 +47,68 @@
           "args": [],
           "stdin": "",
           "stdout": "Explicit DOM names and bounded HTML repairs checked\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/http-streaming.roc",
+      "cases": [
+        {
+          "name": "request",
+          "args": [],
+          "stdin": "POST /notes HTTP/1.1\r\nHost: a\r\nContent-Length: 2\r\n\r\nhi",
+          "stdout": "request /notes\nbody bytes: 2\nfinished; protocol bytes: 0\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "head",
+          "args": [
+            "head"
+          ],
+          "stdin": "HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\n",
+          "stdout": "response 200\nbody bytes: 0\nfinished; protocol bytes: 0\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "connect",
+          "args": [
+            "connect"
+          ],
+          "stdin": "HTTP/1.1 200 Connected\r\n\r\nraw",
+          "stdout": "response 200\nbody bytes: 0\nprotocol switch\nfinished; protocol bytes: 3\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/json-streaming.roc",
+      "cases": [
+        {
+          "name": "records",
+          "args": [],
+          "stdin": "{\"name\":\"Ada\"}\n[1,true]\n",
+          "stdout": "[{\"name\":\"Ada\"},[1,true]]",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "empty",
+          "args": [],
+          "stdin": "",
+          "stdout": "[]",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "crlf-final-record",
+          "args": [],
+          "stdin": "1\r\n2",
+          "stdout": "[1,2]",
           "stderr": "",
           "exit_code": 0
         }
@@ -105,6 +180,42 @@
       ]
     },
     {
+      "path": "examples/ofx-stream.roc",
+      "cases": [
+        {
+          "name": "xml",
+          "args": [],
+          "stdin": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<?OFX OFXHEADER=\"200\" VERSION=\"203\" SECURITY=\"NONE\" OLDFILEUID=\"NONE\" NEWFILEUID=\"NONE\"?>\n<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><DTSERVER>20260827120000</DTSERVER><LANGUAGE>ENG</LANGUAGE></SONRS></SIGNONMSGSRSV1><BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>123</BANKID><ACCTID>456</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000</DTSTART><DTEND>20260831000000</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-0.25</TRNAMT><FITID>0</FITID><NAME>Alan Turing</NAME><MEMO>record 0</MEMO></STMTTRN><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-1.25</TRNAMT><FITID>1</FITID><NAME>Frances Allen</NAME><MEMO>record 1</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260831000000</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>",
+          "stdout": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<?OFX OFXHEADER=\"200\" VERSION=\"203\" SECURITY=\"NONE\" OLDFILEUID=\"NONE\" NEWFILEUID=\"NONE\"?>\n<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE>\n<SEVERITY>INFO</SEVERITY>\n</STATUS><DTSERVER>20260827120000</DTSERVER>\n<LANGUAGE>ENG</LANGUAGE>\n</SONRS></SIGNONMSGSRSV1><BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID>\n<STATUS><CODE>0</CODE>\n<SEVERITY>INFO</SEVERITY>\n</STATUS><STMTRS><CURDEF>AUD</CURDEF>\n<BANKACCTFROM><BANKID>123</BANKID>\n<ACCTID>456</ACCTID>\n<ACCTTYPE>CHECKING</ACCTTYPE>\n</BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000</DTSTART>\n<DTEND>20260831000000</DTEND>\n<STMTTRN><TRNTYPE>DEBIT</TRNTYPE>\n<DTPOSTED>20260827120000</DTPOSTED>\n<TRNAMT>-0.25</TRNAMT>\n<FITID>0</FITID>\n<NAME>Alan Turing</NAME>\n<MEMO>record 0</MEMO>\n</STMTTRN>\n<STMTTRN><TRNTYPE>DEBIT</TRNTYPE>\n<DTPOSTED>20260827120000</DTPOSTED>\n<TRNAMT>-1.25</TRNAMT>\n<FITID>1</FITID>\n<NAME>Frances Allen</NAME>\n<MEMO>record 1</MEMO>\n</STMTTRN>\n</BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT>\n<DTASOF>20260831000000</DTASOF>\n</LEDGERBAL>\n</STMTRS></STMTTRNRS></BANKMSGSRSV1>\n</OFX>\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "sgml",
+          "args": [
+            "sgml"
+          ],
+          "stdin": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<?OFX OFXHEADER=\"200\" VERSION=\"203\" SECURITY=\"NONE\" OLDFILEUID=\"NONE\" NEWFILEUID=\"NONE\"?>\n<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><DTSERVER>20260827120000</DTSERVER><LANGUAGE>ENG</LANGUAGE></SONRS></SIGNONMSGSRSV1><BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>123</BANKID><ACCTID>456</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000</DTSTART><DTEND>20260831000000</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-0.25</TRNAMT><FITID>0</FITID><NAME>Alan Turing</NAME><MEMO>record 0</MEMO></STMTTRN><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-1.25</TRNAMT><FITID>1</FITID><NAME>Frances Allen</NAME><MEMO>record 1</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260831000000</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>",
+          "stdout": "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:UTF-8\nCHARSET:NONE\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n\n<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0\n<SEVERITY>INFO\n</STATUS><DTSERVER>20260827120000\n<LANGUAGE>ENG\n</SONRS></SIGNONMSGSRSV1><BANKMSGSRSV1><STMTTRNRS><TRNUID>1\n<STATUS><CODE>0\n<SEVERITY>INFO\n</STATUS><STMTRS><CURDEF>AUD\n<BANKACCTFROM><BANKID>123\n<ACCTID>456\n<ACCTTYPE>CHECKING\n</BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000\n<DTEND>20260831000000\n<STMTTRN><TRNTYPE>DEBIT\n<DTPOSTED>20260827120000\n<TRNAMT>-0.25\n<FITID>0\n<NAME>Alan Turing\n<MEMO>record 0\n</STMTTRN>\n<STMTTRN><TRNTYPE>DEBIT\n<DTPOSTED>20260827120000\n<TRNAMT>-1.25\n<FITID>1\n<NAME>Frances Allen\n<MEMO>record 1\n</STMTTRN>\n</BANKTRANLIST><LEDGERBAL><BALAMT>100.00\n<DTASOF>20260831000000\n</LEDGERBAL>\n</STMTRS></STMTTRNRS></BANKMSGSRSV1>\n</OFX>\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/qif-stream.roc",
+      "cases": [
+        {
+          "name": "canonical",
+          "args": [],
+          "stdin": "!Type:Bank\nD27/08/2026\nT1\nPAda\n^\n",
+          "stdout": "!Type:Bank\r\nD27/08/2026\r\nT1\r\nPAda\r\n^\r\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/roc-syntax.roc",
       "cases": [
         {
@@ -112,6 +223,35 @@
           "args": [],
           "stdin": "",
           "stdout": "parse: Complete, 8 syntax nodes\nCommentText 0..20: # Example Roc source\nName 21..27: answer\nSymbol 28..29: =\nNumericLiteral 30..31: 1\nSymbol 32..33: +\nNumericLiteral 34..35: 2\nSymbol 36..37: *\nNumericLiteral 38..39: 3\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/xml-streaming.roc",
+      "cases": [
+        {
+          "name": "atom",
+          "args": [],
+          "stdin": "<feed xmlns=\"http://www.w3.org/2005/Atom\"><entry/><entry/></feed>",
+          "stdout": "2 entries\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "prefixed",
+          "args": [],
+          "stdin": "<a:feed xmlns:a=\"http://www.w3.org/2005/Atom\"><a:entry/><a:entry/></a:feed>",
+          "stdout": "2 entries\n",
+          "stderr": "",
+          "exit_code": 0
+        },
+        {
+          "name": "other-namespace",
+          "args": [],
+          "stdin": "<feed xmlns=\"urn:other\"><entry/></feed>",
+          "stdout": "0 entries\n",
           "stderr": "",
           "exit_code": 0
         }

@@ -106,6 +106,7 @@
         "preprocess-ifeval-float-underscores",
         "preprocess-ifeval-invalid-double-underscore",
         "preprocess-ifeval-float-incomplete-fraction",
+        "preprocess-ifeval-float-incomplete-fraction-not-one",
         "preprocess-ifeval-float-exponent-before-dot",
         "preprocess-ifeval-float-leading-dot",
         "preprocess-ifeval-subnormal",
@@ -2250,7 +2251,7 @@
       "features": [
         "ifeval-numeric-coercion"
       ],
-      "source": "ifeval::[1.e2 == 1]\nselected\nendif::[]",
+      "source": "ifeval::[1.e2 == 100]\nselected\nendif::[]",
       "support": "future",
       "expect": {
         "contexts": [
@@ -2259,6 +2260,23 @@
         "html_contains": [
           "<p>selected</p>"
         ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-incomplete-fraction-not-one",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1.e2 == 1]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [],
+        "html_contains": [],
         "warning_severities": []
       },
       "references": [

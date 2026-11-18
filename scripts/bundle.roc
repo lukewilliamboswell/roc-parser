@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-15-f25da45",
 }
 
 import cli.Cmd
@@ -28,5 +28,5 @@ bundle! = |args| {
 	Path.create_all!(output).map_err(|_| "cannot create output directory")?
 	names = Path.list!("package").map_err(|_| "cannot list package")?.map(|path| Path.filename(path).map_ok(Path.display) ?? "")
 	command = ["bundle"].concat(BundlePlan.module_names(names)).concat(["--output-dir", Path.display(output)]).concat(options.forwarded)
-	Cmd.new("roc").args(command.map(OsStr.from_str)).cwd("package").exec_cmd!().map_err(|_| "roc bundle failed")
+	Cmd.new("roc").args(command.map(OsStr.from_str)).cwd("package").call!().map_err(|_| "roc bundle failed")
 }

@@ -39,7 +39,8 @@ Install:
 * the latest Roc nightly from
   https://github.com/roc-lang/nightlies/releases[roc-lang/nightlies], on your
   `PATH` as `roc`;
-* Python 3, for the independent parser test and reference harnesses;
+* Python 3.10–3.13, for the independent parser test and reference harnesses
+  (the optional local Quiffen oracle requires Python below 3.14; CI uses 3.13);
 * the `blueprint` binary of
   https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.13.0[roc-blueprint 0.13.0],
   which runs the same named tasks as CI;
@@ -75,8 +76,10 @@ mv blueprint-aarch64-darwin ~/.local/bin/blueprint
 `Blueprint.roc` declares the tasks and what each needs. `blueprint` downloads
 the tools it pins in `Blueprint.lock`, such as Zig for the RocSyntax oracle, and
 expects the others, such as `roc`, `python3`, `ruby` and `docker`, on your
-`PATH`; `blueprint requirements` lists them. Only the benchmark environment
-needs Nix (<<benchmarks-blueprint>>).
+`PATH`; `blueprint requirements` lists them. Nix supplies the benchmark
+environment (<<benchmarks-blueprint>>) and the optional local `oracle-ruby`
+activation. The default check needs no reference runtimes or Nix. Local
+AsciiDoc comparisons require Ruby 3.4 or newer and RubyGems.
 
 The scripts find the compiler through the `ROC` environment variable and fall
 back to `roc` on `PATH`. Leave `ROC` unset when you run `blueprint`, which reads
@@ -87,7 +90,7 @@ it to choose the compiler that evaluates `Blueprint.roc` itself.
 [cols="1,3",options="header"]
 |===
 |Path |Purpose
-|`package/` |The library: `Parser`, `Utf8`, and one module per format
+|`package/` |The library: `Parser`, and one module per format
 |`examples/` |Small apps that use the package source (`../package/main.roc`); releases attach them pinned to the bundle URL
 |`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
 |`scripts/` |Roc orchestration, independent Python oracle harnesses, and documentation and release-inventory helpers
@@ -132,7 +135,7 @@ blueprint run check
 
 It runs `scripts/check_all.roc`, which works through these sections in order and
 stops at the first failure. Name sections to run only those, for example
-`blueprint run check -- fuzz conformance`, and list them with
+`blueprint run check -- fuzz bench`, and list them with
 `blueprint run check -- --list`:
 
 [cols="1,4",options="header"]
@@ -142,16 +145,26 @@ stops at the first failure. Name sections to run only those, for example
 |`package` |`scripts/test_package.roc`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`; then a release dry run, which bundles the package, builds the examples archive with the bundle's release URL, and checks, builds and runs every case of its `spec.json` against that bundle served on a loopback address
 |`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/spec.json`
 |`docs` |The manual's Roc examples and the API reference audit (<<contributing-docs>>)
-|`fuzz` |Builds every fuzz target and runs 2,000 inputs from its seeds (<<property-testing>>)
-|`conformance` |The fast conformance checks of every format against its reference implementation (<<conformance>>)
-|`asciidoc` |AsciiDoc against the pinned Asciidoctor, and a smoke run of its performance harness
-|`roc-syntax` |RocSyntax against the compiler's own parser, built with Zig, including recovery, mutations and the performance protocol
-|`bench` |A smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
+|`fuzz` |Builds seven shared fuzz executables and runs each scheduled property on 2,000 inputs from its seeds (<<property-testing>>)
+|`bench` |A dev-build smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
 |===
 
-The longer runs are scheduled: `fuzz.yml` runs ten-minute campaigns of every
-fuzz target and every conformance review each night, and `bench.yml` runs the
-full benchmark comparison each week.
+The scheduled `fuzz.yml` workflow runs ten-minute native Roc campaigns for
+each registered CI property, reusing binaries compiled once in a shared job. Cross-language correctness and performance
+comparisons run locally through the named `conformance`, `markup`, `asciidoc`,
+`roc-syntax`, `bench` and `bench-quick` Blueprint tasks. They are excluded from
+CI, nightly compatibility checks and release validation.
+
+Harness unit tests retain fake workers and authored adapter fixtures. Tests
+that launch installed reference implementations require an explicit local
+opt-in and their dependencies:
+
+[source,bash]
+----
+ROC_PARSER_RUN_ORACLE_TESTS=1 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+----
+
+The opt-in is disabled when `CI` is set.
 
 When you change what an example prints, record the new output and review the
 diff:
@@ -171,6 +184,9 @@ that breaks one fails CI:
   declared in Blueprint. Only tooling is pinned; probes and package applications
   use the current nightly. Independent Python harnesses live under `scripts/`.
   No shell scripts (`*.sh`) are allowed.
+* Cross-language oracle and benchmark comparisons are local-only. The default
+  check runs scripts, package, examples, docs, native fuzz smoke tests and Roc-only
+  benchmark smoke tests. Workflows cannot enable live oracle integration tests.
 * Every `uses:` in a workflow names an action by its full 40-character commit
   SHA, not a tag or branch. Local actions (`./...`) are exempt.
 * Every roc-automation action and workflow is used at the one reviewed
@@ -183,8 +199,9 @@ that breaks one fails CI:
 
 `scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
 registered in `scripts/run_fuzz.py`, and the campaign matrix in `fuzz.yml` to
-match that registry; `scripts/tests/test_check.py` does the same for the
-conformance reviews in `scripts/src/HarnessPlan.roc`.
+match that registry. `scripts/tests/test_check.py` keeps the local conformance
+entry point available, and repository policy guards the default check and
+workflow entry points against cross-language execution.
 
 [#contributing-docs]
 == Build the documentation
@@ -239,8 +256,10 @@ separately, and put any warning before the step it applies to.
   the boundary cases of the behaviour you changed.
 * When you change parser behaviour, run that format's conformance review and,
   if the change touches a fuzzed path, a smoke run of its targets
-  (<<property-testing>>). If a fuzz target or review found the bug, add the
-  input as a regression.
+  (<<property-testing>>). If a fuzz target or review found the bug, extend its
+  property or generator and retain a minimized witness when needed. Keep
+  expanded corpora in ignored scratch storage; regenerate external suites from
+  pinned sources.
 * Fix the cause of a failure. Do not add a gate, a skip or a known-failures
   entry to make a check pass unless the input is genuinely outside what the
   module supports, and say why in the entry.

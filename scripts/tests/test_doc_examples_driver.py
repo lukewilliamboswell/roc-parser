@@ -18,7 +18,7 @@ class DocExamplesDriverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             binary = root / "doc-examples"
-            subprocess.run(["roc-stable", "build", str(ROOT / "scripts/check_doc_examples.roc"),
+            subprocess.run(["roc-stable", "build", "--opt=dev", str(ROOT / "scripts/check_doc_examples.roc"),
                             f"--output={binary}"], cwd=ROOT, check=True, capture_output=True)
             examples = root / "docs/examples"
             examples.mkdir(parents=True)
@@ -39,7 +39,7 @@ if sys.argv[1:] == ["demo.roc"]:
             env = {**os.environ, "PATH": str(programs), "DOC_TEST_LOG": str(log)}
             passed = subprocess.run([str(binary)], cwd=root, env=env, capture_output=True, text=True)
             self.assertEqual(passed.returncode, 0, passed.stderr)
-            self.assertIn("test --no-cache demo.roc", log.read_text())
+            self.assertIn("test demo.roc", log.read_text())
             expected.write_text("different\n")
             failed = subprocess.run([str(binary)], cwd=root, env=env, capture_output=True, text=True)
             self.assertEqual(failed.returncode, 1, failed.stderr)

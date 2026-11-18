@@ -60,12 +60,11 @@ mix shapes, or that must keep member order and every digit of its numbers,
 read a document tree with roc-parser's `JsonValue` instead (see <<json>>).
 
 roc-parser's `CSV` and `Yaml` modules are formats for this mechanism.
-`CSV.parse` reads a file with a header row into a list of records, matching
-columns to fields by name, and `Yaml.decode` reads a document into a record.
+`CSV.decode_str` reads a file with a header row into a list of records, matching
+columns to fields by name, and `Yaml.decode_str` reads a document into a record.
 Neither takes the type as an argument: the annotation chooses it. A required
-field with no column or key fails with `MissingRequiredField(name)`, a tag
-the compiler adds to the error type, so the annotation names it alongside
-the format's own error:
+field with no column or key produces the native `MissingRequiredField(name)`
+problem inside `InvalidCsv` or `InvalidYaml`, retaining its logical path:
 
 [source,roc]
 ----
@@ -74,8 +73,9 @@ include::examples/choosing-approaches.roc[tag=decode-formats,indent=0]
 
 Its limits come from the same design. The format decides the representation,
 so you cannot ask it to accept `yes` as a boolean or to read a date in your
-own layout. Where a wrong value is depends on the format: `CSV.parse` reports
-the record, field, line and column, and `Yaml.decode` the line and column. And the type must be known when you compile.
+own layout. Diagnostics retain a logical path and the physical location when
+known; missing values use an explicit unavailable location. The result type
+must be known when you compile.
 
 == Read a document tree
 
@@ -111,7 +111,7 @@ helper functions that keep the walk short.
 == Build a parser with combinators
 
 When no format module reads your input, write a parser from the `Parser` and
-`Utf8` combinators. A parser is a value made of smaller parsers, so the
+`Parser.Utf8` combinators. A parser is a value made of smaller parsers, so the
 code has the shape of the grammar:
 
 [source,roc]
@@ -129,15 +129,25 @@ Choose this when:
   input;
 * you want to reject invalid values while parsing, so that a port of
   `70000` or a date of `2026-02-30` fails at the right place with your own
-  message;
+  problem tag;
 * you want to read only the start of the input and keep the rest, such as one
-  message from a buffer that holds several (`Utf8.parse_str_partial`).
+  message from a buffer that holds several (`parser.run_str`).
 
 Combinators are also how you extend a format module. `CSV.record` and
-`CSV.field` are combinators, every format module has a `parser` value to
-embed, and you can mix `Utf8` parsers into any parser of your own. A
-combinator parser's failure is the furthest failure, with a byte offset. <<combinator-primer>> teaches the method and <<custom-format>>
+`CSV.field` are combinators, format modules provide `parser(props)` constructors to
+embed, and you can mix `Parser.Utf8` parsers into any parser of your own. A
+combinator parser's diagnostic preserves the furthest failure; text runners
+retain byte offset, line and column. <<combinator-primer>> teaches the method and <<custom-format>>
 applies it to a real format.
+
+== Process incremental input
+
+When input is too large to retain or arrives over a connection, construct a
+format decoder and call `.read_iter(chunks)` or `.read_stream(source)`. CSV,
+QIF, OFX and JSON records produce values; XML and HTTP produce events. Consume
+the final `Finished` event to validate the end of input. Use `.collect` only
+when retaining all output is appropriate. See <<streaming>> for recovery and
+resource limits.
 
 == Use no parser at all
 
@@ -152,12 +162,6 @@ would be longer and no clearer:
 ----
 include::examples/choosing-approaches.roc[tag=split,indent=0]
 ----
-
-The input is very large or arrives as a stream:: Every parser in this
-package reads a complete input held in memory, and the result holds copies of
-the text it read. For a multi-gigabyte log or a network connection, read and
-process one record at a time with a hand-written loop over the bytes, or use a
-streaming library.
 
 The parser is on a hot path:: Each combinator adds a function call and an
 intermediate `Try`. That is cheap for configuration files and messages, but
@@ -202,7 +206,7 @@ read. <<background>> explains these limits.
 |Line and column in errors
 |Yes for `CSV` and `Yaml`
 |Yes
-|A byte offset
+|Text location with a byte offset
 |No
 
 |Your own or a legacy format, a protocol or a small language
@@ -211,7 +215,7 @@ read. <<background>> explains these limits.
 |Best
 |If trivial
 
-|Values validated while parsing, with your own messages
+|Values validated while parsing, with your own problem tags
 |No
 |Afterwards
 |Best
@@ -219,15 +223,15 @@ read. <<background>> explains these limits.
 
 |Read one message and keep the rest
 |No
-|`HTTP.parse_request` returns the `rest`
+|Request prefix parser retains `rest`
 |Yes
 |By hand
 
-|Very large or streaming input, or a hot path
-|No
-|No
-|No
-|Best
+|Very large or streaming input
+|CSV typed decoder
+|Format event decoder
+|Custom decoder
+|For trivial delimiters
 
 |Ambiguous or left-recursive grammar
 |No
@@ -246,8 +250,8 @@ The same choice as a sequence of questions:
 flowchart TD
     Start([Text to read]) --> Simple{"One separator,<br/>no quoting or nesting?"}
     Simple -- yes --> Str["Use Str functions"]
-    Simple -- no --> Huge{"Too large to hold in memory,<br/>or a measured hot path?"}
-    Huge -- yes --> Scan["Hand-written byte scanner<br/>or streaming library"]
+    Simple -- no --> Huge{"Too large to hold in memory,<br/>or arriving incrementally?"}
+    Huge -- yes --> Scan["Use a format decoder<br/>and consume values or events"]
     Huge -- no --> Known{"Standard format with a<br/>parser_for, into a known type?"}
     Known -- yes --> Decode["Decode into your type"]
     Known -- no --> Module{"A roc-parser format module<br/>reads it?"}
