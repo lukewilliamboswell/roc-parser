@@ -36,7 +36,7 @@ jobs:
           elif case == 'boxed':
               s = s.replace('Batch(chunk_batch_initial(props))', 'Batch(Box.box(chunk_batch_initial(props)))')
               s = s.replace('Batch(ChunkBatch)', 'Batch(Box(ChunkBatch))')
-              s = s.replace('Batch(batch) => { location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) }', 'Batch(boxed) => { batch = Box.unbox(boxed); { location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) } }')
+              s = s.replace('Batch(batch) => { location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) }', 'Batch(boxed) => {\n\t\tbatch = Box.unbox(boxed)\n\t\t{ location: Text(batch.event_at), declaration: Box.unbox(Box.unbox(batch.decoder).declaration) }\n\t}')
               s = s.replace('Batch(batch) => {\n\t\tnext = chunk_batch_step(batch, bytes, end)\n\t\t{ state: Batch(next.state), consumed: next.consumed, outcome: next.outcome }', 'Batch(boxed) => {\n\t\tnext = chunk_batch_step(Box.unbox(boxed), bytes, end)\n\t\t{ state: Batch(Box.box(next.state)), consumed: next.consumed, outcome: next.outcome }')
           p.write_text(s)
           SCRIPT
