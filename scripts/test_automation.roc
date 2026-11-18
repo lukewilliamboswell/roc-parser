@@ -54,7 +54,7 @@ check! = || {
 		if !source.starts_with("app [target]") {
 			return Err(NotATarget(entry.name))
 		}
-		if !source.contains("https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.7.0-rc1/HBigHQhVZWEF2EkLxpYK35u8P6UNsAmPYxpNFTxXK1Br.tar.zst") {
+		if !source.contains("https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.7.0/HBigHQhVZWEF2EkLxpYK35u8P6UNsAmPYxpNFTxXK1Br.tar.zst") {
 			return Err(UnreviewedFuzzPlatform(entry.name))
 		}
 		stem = Str.join_with(entry.name.split_on("-").map(|part| Str.from_utf8_lossy(part.to_utf8().map_with_index(|byte, index| if (index == 0) byte - 32 else byte))), "")

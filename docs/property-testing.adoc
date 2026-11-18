@@ -58,16 +58,21 @@ checks; moving assertions out of the repository is not a substitute for them.
 
 == Three kinds of target
 
-Each `fuzz/*Property.roc` module owns one property. Seven `*Properties.roc`
-applications group the scheduled properties into shared executables. Markup
-and diagnostic investigations have separate local executables. Each property
+Each `fuzz/*Property.roc` module owns one property. The `*Properties.roc`
+applications use roc-fuzz 0.7.0 `Fuzz.suite` to group independent properties into
+shared executables. Markup has a local suite; allocation checks that require a
+different compiler profile retain separate executables. Each property
 retains its name, examples, corpus and reports; selection happens through the
 executable's `--target` option rather than a byte added to the input.
 
 CSV retention uses its own `CsvRetention` executable while
 https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box row-join bug]
 affects combined suites. It keeps the same backend, opaque measurement ownership
-fence, diagnostic assertions and allocation ceilings.
+fence, diagnostic assertions and allocation ceilings. OFX allocation checks use
+a separate specializing executable while
+https://github.com/roc-lang/roc/issues/13213[the November 18 Records build abort]
+requires Boxy for the other Records properties. The OFX Boxy build exceeds an
+existing allocation ceiling; separating it preserves that check.
 
 Properties come in three kinds, which differ in what the fuzzer's bytes mean
 and therefore in what the property can check.

@@ -30,7 +30,8 @@ run through native Roc commands. Their argument interfaces use Weaver 0.10.2.
 The tooling compiler is pinned separately to the November 18 nightly, and
 Blueprint records its verified download hashes.
 
-Fuzz campaigns retain shared executables, per-property corpora, named examples,
+Fuzz campaigns use roc-fuzz 0.7.0 suites with shared executables, per-property
+corpora, named examples,
 resource checks and failure reports. Text, Core and Records use the Boxy compiler
 profile; OFX and CSV allocation checks retain separate specializing executables
 to preserve their existing ceilings. XML location checks box the position model

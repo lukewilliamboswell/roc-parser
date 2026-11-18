@@ -1,8 +1,15 @@
 # Property-test targets
 
-Each `*.roc` file here is a [roc-fuzz](https://github.com/lukewilliamboswell/roc-fuzz)
-property-test target for one of the package's parsers. `seeds/` holds reviewable
-starting inputs and `dictionaries/` holds format-specific syntax tokens.
+Each `*Property.roc` module owns one parser property. `*Properties.roc` apps use
+[roc-fuzz 0.7.0](https://github.com/lukewilliamboswell/roc-fuzz/releases/tag/0.7.0)
+`Fuzz.suite` to group properties into shared executables. The native runner builds
+each suite once and selects its members with `--target=NAME`, preserving each
+property's corpus, examples, limits and reports. `seeds/` holds reviewable starting
+inputs and `dictionaries/` holds format-specific syntax tokens.
+
+Text, XML, JSON, Records, HTTP and Core properties share suites. Markup has a
+local suite. CSV and OFX allocation checks use separate executables while compiler
+limitations prevent them from passing unchanged in combined suites.
 
 Run every target briefly with the latest Roc nightly (`blueprint run fuzz-smoke`):
 
