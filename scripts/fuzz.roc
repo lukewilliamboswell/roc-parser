@@ -125,8 +125,10 @@ run! = |args| {
 }
 
 execute! = |target, mode, args, names, compiler, root, binary, receipt, source_hash, runs, seconds, memory| {
+	flags = ["--fuzz"].concat(FuzzPlan.build_flags(target.family))
+	signature = Json.to_str(flags)
 	current = match (Path.read_bytes!(binary), Path.read_utf8!(receipt)) {
-		(Ok(bytes), Ok(saved)) => saved == "${source_hash}\n${Process.digest!(bytes)?}\n"
+		(Ok(bytes), Ok(saved)) => saved == "${source_hash}\n${signature}\n${Process.digest!(bytes)?}\n"
 		_ => False
 	}
 	if !current {
@@ -134,9 +136,9 @@ execute! = |target, mode, args, names, compiler, root, binary, receipt, source_h
 			return Err(StaleBinary(target.name))
 		}
 		# Fuzz instrumentation requires LLVM; ordinary checks use dev builds.
-		_ = Process.run!([compiler, "build", "--fuzz", "fuzz/${target.family}Properties.roc", "--output=${Path.display(binary)}"], root, [], 600_000)?
+		_ = Process.run!([compiler, "build"].concat(flags).concat(["fuzz/${target.family}Properties.roc", "--output=${Path.display(binary)}"]), root, [], 600_000)?
 		actual = Process.digest!(Path.read_bytes!(binary)?)?
-		Path.write_utf8!(receipt, "${source_hash}\n${actual}\n")?
+		Path.write_utf8!(receipt, "${source_hash}\n${signature}\n${actual}\n")?
 	}
 	if mode == "build" {
 		return Ok({})

@@ -24,6 +24,12 @@ FuzzPlan := [].{
 
 	## Allocation-measurement programs used by benchmarks, never campaign targets.
 	measurement_only = ["yaml-alloc", "markup-alloc"]
+
+	## Keep instrumentation and all properties while avoiding roc-lang/roc#13207.
+	## Remove the Text override when the specializing backend passes its suite.
+	build_flags : Str -> List(Str)
+	build_flags = |family| if (family == "Text") ["--specialize=no"] else []
+
 	Target : { name : Str, family : Str, seeds : Str, encoding : Str, dictionary : Str, size : U64, timeout : U64, examples : Bool, scheduled : Bool }
 	entries : List(Target)
 	entries = [

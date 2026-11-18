@@ -139,12 +139,15 @@ test = |bytes| {
 ## that is not '<' unless markup (a comment, CDATA or PI) starts the text.
 check_locations : Str, List({ event : Xml.Event, location : { line : U64, column : U64 } }) -> {}
 check_locations = |input, events| {
+	# Preserve the independent model across roc-lang/roc#13212: direct calls
+	# can exchange line and column. Remove once the optimized witness agrees.
+	position = Box.box(XmlGen.line_column).unbox()
 	bytes = input.to_utf8()
 	var $tags = []
 	var $index = 0
 	while $index < bytes.len() {
 		if bytes.get($index) == Ok('<') {
-			$tags = $tags.append(XmlGen.line_column(input, $index))
+			$tags = $tags.append(position(input, $index))
 		}
 		$index = $index + 1
 	}

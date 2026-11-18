@@ -1,0 +1,35 @@
+= roc-parser 6.0.0-rc.5
+
+== Upgrade impact
+
+This candidate retains the rc.4 public API and targets Roc
+`nightly-2026-11-18-a520eed`. Use basic-cli 0.28.1 for the maintained examples.
+The intentionally breaking changes from 5.0.0 are described in the
+https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0-rc.5/docs/releases/6.0.0.adoc[combined 6.0.0 upgrade notes].
+
+Add the candidate to your application header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+== Compiler compatibility
+
+Namespaced XML parsing explicitly qualifies reader dispatch to avoid
+https://github.com/roc-lang/roc/issues/13204[the November 18 checker abort].
+Streaming readers explicitly retain their input cursor during state updates to
+avoid https://github.com/roc-lang/roc/issues/13208[the specializing compiler's
+record-update abort]. AsciiDoc and QIF tests use explicit nominal props and
+integer types required by this nightly.
+
+== Contributor tooling
+
+Fuzz campaigns, compile-time literal checks and markup vocabulary generation
+run through native Roc commands. Their argument interfaces use Weaver 0.10.2.
+The tooling compiler is pinned separately to the November 18 nightly, and
+Blueprint records its verified download hashes.
+
+Fuzz campaigns retain shared executables, per-property corpora, named examples,
+resource checks and failure reports. Build reuse verifies source, compiler,
+compiler flags and executable identity.

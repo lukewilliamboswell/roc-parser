@@ -20,6 +20,9 @@ release being prepared.
 
 == Release candidates
 
+Read the {src}/docs/releases/6.0.0-rc.5.adoc[6.0.0-rc.5 preview notes] for
+November 18 compiler compatibility and native contributor tooling.
+
 A release marked prerelease is a preview. Read that release's notes and keep its
 package and examples together when testing it.
 

@@ -4,7 +4,7 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
 endif::[]
-:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
+:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/6c796f299012707d2e9bad23fd6449ed93f1f475
 
 [#maintaining]
 = Compiler, releases, settings and security reports
@@ -74,7 +74,7 @@ reproduce a past combination; such a run never opens or closes the issue.
 These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
-  the reviewed revision `cc6d4081762c6d70bf95bf18c9abf99b5e9ade25`
+  the reviewed revision `6c796f299012707d2e9bad23fd6449ed93f1f475`
   and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
