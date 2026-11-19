@@ -2675,7 +2675,7 @@ expect {
 		$i = $i + 1
 	}
 	source = Str.join_with($parts, "\n\n")
-	options = { ..AsciiDocPreprocess.defaults, attributes: [{ name: "outfilesuffix", value: ".temporary" }, { name: "outfilesuffix", value: ".html" }] }
+	options = AsciiDoc.Props.{ attributes: [{ name: "outfilesuffix", value: ".temporary" }, { name: "outfilesuffix", value: ".html" }] }
 	match (AsciiDoc.parse_str(source, {}), AsciiDoc.parse_str(source, options)) {
 		(Ok(expected), Ok(actual)) => AsciiDoc.render_html(actual) == AsciiDoc.render_html(expected) and AsciiDoc.render_html(actual).contains("<p>24</p>") and actual.blocks.any(
 			|block| match block {
@@ -2692,7 +2692,7 @@ expect {
 	stored = AsciiDocAttributes.from_store(AsciiDocSource.set_parsed(AsciiDocSource.new_parsed("known-negative", bindings), "outfilesuffix", ".temporary"))
 	manual = AsciiDoc.attributes(bindings)
 	legacy = AsciiDocAttributes.from_source(AsciiDocAttributes.with_snapshot(bindings))
-	opts = { ..AsciiDocPreprocess.defaults, attributes: [{ name: "outfilesuffix", value: ".temporary" }] }
+	opts = AsciiDoc.Props.{ attributes: [{ name: "outfilesuffix", value: ".temporary" }] }
 	match AsciiDoc.parse_str("{outfilesuffix}", opts) {
 		Ok(document) => AsciiDocAttributes.classify_baseline(stored, bindings) == Ok(False) and !plain_attrs(stored) and AsciiDocAttributes.classify_baseline(manual, bindings) == Err(Unknown) and AsciiDocAttributes.classify_baseline(legacy, bindings) == Err(Unknown) and plain_attrs(manual) and plain_attrs(legacy) and AsciiDoc.render_html(document).contains("<p>.temporary</p>") and document.blocks.any(
 			|block| match block {

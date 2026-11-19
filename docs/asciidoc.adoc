@@ -176,7 +176,7 @@ python3 scripts/asciidoc/setup_oracle.py
 mkdir -p .roc-parser-tmp/asciidoc
 $ROC build --opt=dev scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
 python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 200 --mutations 200 --corpus docs
-python3 scripts/run_fuzz.py smoke asciidoc-raw asciidoc-structured
+scripts/fuzz.roc smoke asciidoc-raw asciidoc-structured
 ----
 
 The review writes machine-readable evidence and retains failing inputs for

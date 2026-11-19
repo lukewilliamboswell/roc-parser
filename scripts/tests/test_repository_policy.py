@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
 # The reviewed roc-automation revision every workflow uses.
-ROC_AUTOMATION = "cc6d4081762c6d70bf95bf18c9abf99b5e9ade25"
+ROC_AUTOMATION = "6c796f299012707d2e9bad23fd6449ed93f1f475"
 
 
 def comparison_policy_violations(workflows: dict[str, str], plan: str, blueprint: str) -> list[str]:
@@ -29,12 +29,12 @@ def comparison_policy_violations(workflows: dict[str, str], plan: str, blueprint
     for command in re.findall(r'\[("[^"\n]*"(?:,\s*"[^"\n]*")*)\]', commands):
         args = re.findall(r'"([^"\n]*)"', command)
         if args[0] == "python3":
-            if args[1:4] == ["-m", "unittest", "discover"] or args[1:2] == ["scripts/run_fuzz.py"]:
+            if args[1:4] == ["-m", "unittest", "discover"]:
                 continue
             if args[1:2] == ["scripts/bench.py"] and "--langs" in args and args[args.index("--langs") + 1:] == ["roc", "--timeout", "60", "--fail-on-error"] and "--refresh-references" not in args:
                 continue
             failures.append("default check runs a comparison or unreviewed Python entry point")
-        elif args[0] not in {"roc-stable", "scripts/test_package.roc", "release-package", "scripts/check_doc_examples.roc"}:
+        elif args[0] not in {"roc-stable", "scripts/test_package.roc", "release-package", "scripts/check_doc_examples.roc", "scripts/fuzz.roc", "scripts/test_automation.roc"}:
             failures.append("default check runs a comparison or unreviewed entry point")
     native_tasks = {"check", "test", "fuzz", "fuzz-smoke", "doc-examples", "docs", "api-docs", "release-package", "sbom-composition", "bundle", "examples", "test-examples-archive"}
     comparison_script = re.compile(r'scripts/(?:review_|compare_|readme_|setup_oracles|check_asciidoc|check_roc_syntax|bench)')

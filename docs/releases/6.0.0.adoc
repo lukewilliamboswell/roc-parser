@@ -207,7 +207,7 @@ retention keeps a separate executable for
 https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box issue],
 preserving its diagnostic and allocation assertions.
 
-Fuzz targets use roc-fuzz 0.7.0-rc1, and Blueprint tooling uses 0.13.0. Markup oracle
+Fuzz targets use roc-fuzz 0.7.0, and Blueprint tooling uses 0.13.0. Markup oracle
 checks include pinned independent parsers, semantic validators and browser DOM
 consumers. Git keeps curated cases and an upstream manifest; the full WPT corpus
 is fetched and generated into ignored local storage. Markup fuzz campaigns and

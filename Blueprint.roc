@@ -47,11 +47,11 @@ config = [
 	Environment(
 		"tooling",
 		[
-			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-15-f25da45"))]),
-			RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst"]),
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-18-a520eed"))]),
+			RocPackages(["https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst", "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst"]),
 		],
 	),
-	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/release-package-{system}"))]), Expect(["roc", "python3", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
+	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/release-package-{system}"))]), Expect(["roc", "python3", "openssl", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
 	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
@@ -70,8 +70,11 @@ config = [
 	Task("check", [Use("package"), Run(["scripts/check_all.roc"])]),
 	# Native checks and explicit local comparison tasks.
 	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
-	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
-	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
+	Task("fuzz-smoke", [Use("package"), Run(["scripts/fuzz.roc", "smoke"])]),
+	Task("fuzz", [Use("package"), Run(["scripts/fuzz.roc"])]),
+	Task("automation-tests", [Use("package"), Run(["scripts/test_automation.roc"])]),
+	Task("literals", [Use("package"), Run(["scripts/check_literals.roc"])]),
+	Task("generate", [Use("package"), Run(["scripts/generate.roc"])]),
 	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc"])]),
 	Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc"])]),
 	Task("asciidoc", [Use("oracles"), Run(["scripts/check_asciidoc.roc"])]),

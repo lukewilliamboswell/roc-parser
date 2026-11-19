@@ -754,6 +754,31 @@
       "input": "task:markup-campaign",
       "component": "",
       "reason": "Development-only independent markup checks and local campaigns; neither harness nor oracle suppliers are included in the source bundle."
+    },
+    {
+      "input": "roc-package:7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK",
+      "component": "",
+      "reason": "Weaver 0.10.2 is used only by contributor command-line tooling; it is absent from the source package dependency closure and every verified bundle member."
+    },
+    {
+      "input": "build-source:roc-7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK",
+      "component": "",
+      "reason": "The Weaver tooling package is compiled only for contributor automation; no tooling executable or dependency source is included in the source bundle."
+    },
+    {
+      "input": "task:automation-tests",
+      "component": "",
+      "reason": "Contributor automation verification; its scripts, fixtures and executables are not shipped in the source bundle."
+    },
+    {
+      "input": "task:literals",
+      "component": "",
+      "reason": "Compile-time literal contract verification; its test applications and executables are not shipped in the source bundle."
+    },
+    {
+      "input": "task:generate",
+      "component": "",
+      "reason": "Regenerates reviewed markup vocabulary tables before release. The generated package source is individually included and verified by SHA-256; the generator and its tooling dependencies are excluded."
     }
   ]
 }

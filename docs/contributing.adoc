@@ -149,6 +149,13 @@ stops at the first failure. Name sections to run only those, for example
 |`bench` |A dev-build smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
 |===
 
+Roc commands use https://github.com/lukewilliamboswell/weaver[Weaver] for
+argument parsing, with their schemas in `scripts/src/CommandLine.roc`.
+Use `--help` on a command to list its options, for example
+`blueprint run fuzz -- --help`. Options accept both `--name value` and
+`--name=value`. Put extra compiler arguments for `blueprint run bundle` after
+`--`, following the bundle command's own options.
+
 The scheduled `fuzz.yml` workflow runs ten-minute native Roc campaigns for
 each registered CI property, reusing binaries compiled once in a shared job. Cross-language correctness and performance
 comparisons run locally through the named `conformance`, `markup`, `asciidoc`,
@@ -197,10 +204,9 @@ that breaks one fails CI:
   script under `scripts/`, give it a task in `Blueprint.roc`, and call
   `blueprint run <task>` on one line.
 
-`scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
-registered in `scripts/run_fuzz.py`, and the campaign matrix in `fuzz.yml` to
-match that registry. `scripts/tests/test_check.py` keeps the local conformance
-entry point available, and repository policy guards the default check and
+`scripts/test_automation.roc` also requires every `fuzz/*.roc` target to be
+registered in `scripts/src/FuzzPlan.roc`, and the campaign matrix in `fuzz.yml` to
+match that registry. Repository policy guards the default check and
 workflow entry points against cross-language execution.
 
 [#contributing-docs]
@@ -243,7 +249,7 @@ of the `Release` workflow; download the `release-site` artifact of that run to
 preview it.
 
 When you write a chapter, follow the
-https://github.com/lukewilliamboswell/roc-automation/blob/cc6d4081762c6d70bf95bf18c9abf99b5e9ade25/docs/documentation.adoc[shared documentation guide]:
+https://github.com/lukewilliamboswell/roc-automation/blob/6c796f299012707d2e9bad23fd6449ed93f1f475/docs/documentation.adoc[shared documentation guide]:
 give each page one purpose (tutorial, how-to, reference or explanation), name
 the reader and the outcome at the top, label commands and their output
 separately, and put any warning before the step it applies to.

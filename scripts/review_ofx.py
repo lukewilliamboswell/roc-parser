@@ -321,7 +321,7 @@ def main() -> int:
     if args.command == 'campaign':
         # First run the repository fuzz harness, then seeded differential mutation.
         budget = 1 if args.smoke else max(1, args.seconds // 2)
-        command = ['python3', 'scripts/run_fuzz.py', 'smoke' if args.smoke else 'campaign', 'ofx-raw', 'ofx-stream', 'ofx-roundtrip', 'ofx-malformed']
+        command = ['scripts/fuzz.roc', 'smoke' if args.smoke else 'campaign', 'ofx-raw', 'ofx-stream', 'ofx-roundtrip', 'ofx-malformed']
         command += ['--runs', '100'] if args.smoke else ['--seconds', str(budget)]
         subprocess.run(command, check=True, cwd=ROOT)
         deadline = time.monotonic() + (2 if args.smoke else max(1,args.seconds-budget))

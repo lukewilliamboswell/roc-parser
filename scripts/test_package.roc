@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
-	roc: "nightly-2026-11-15-f25da45",
+	roc: "nightly-2026-11-18-a520eed",
 }
 
 import cli.Cmd
@@ -33,7 +33,7 @@ test! = || {
 		["roc", "check", "package/main.roc"],
 		["roc", "fmt", "--check", "package"],
 		["roc", "test", "package/main.roc"],
-		["python3", "scripts/check_literals.py"],
+		["scripts/check_literals.roc"],
 	] {
 		run!(command, root)?
 	}

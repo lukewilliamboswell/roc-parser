@@ -271,6 +271,8 @@ value_events = |events| Stream.custom(
 	},
 )
 
+# Keep input cursors explicit on reader/writer updates for roc-lang/roc#13208.
+# Remove the extra fields when the specializing backend passes reader/writer suites.
 ## Lazily decode pure byte chunks. Empty chunks are data, never EOF.
 read_chunks : Iter(Streaming.Bytes), state, (state, Streaming.Bytes, Streaming.InputEnd -> Streaming.Step(state, item, [..problem])), Streaming.RecoveryProps -> Iter(Try(Streaming.ReadEvent(item, problem), Streaming.ReadError(problem)))
 read_chunks = |chunks, initial, step, props| Iter.custom(
@@ -284,7 +286,7 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 				if $cursor.need_input {
 					match $cursor.chunks.next() {
 						Done => {
-							$cursor = { ..$cursor, buffer: [], index: 0, final: True, need_input: False }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, buffer: [], index: 0, final: True, need_input: False }
 						}
 						Skip({ rest }) => {
 							$cursor = { ..$cursor, chunks: rest }
@@ -298,10 +300,10 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 					if next.consumed > $cursor.buffer.len() - $cursor.index {
 						return Ok((Err(protocol_error(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
 					}
-					$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
+					$cursor = { ..$cursor, chunks: $cursor.chunks, index: $cursor.index + next.consumed, decoder: next.state }
 					match next.outcome {
 						Item(value) => {
-							$cursor = { ..$cursor, report: { ..$cursor.report, emitted_items: $cursor.report.emitted_items + 1 } }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, report: { ..$cursor.report, emitted_items: $cursor.report.emitted_items + 1 } }
 							return Ok((Ok(Value(value)), Reading($cursor)))
 						}
 						RecordError(error) => {
@@ -311,7 +313,7 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 							if $cursor.report.rejected_records >= props.max_errors {
 								return Ok((Err(recovery_error({ max: props.max_errors, rejected: $cursor.report.rejected_records + 1, cause: error })), Stopped))
 							}
-							$cursor = { ..$cursor, report: { ..$cursor.report, rejected_records: $cursor.report.rejected_records + 1 } }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, report: { ..$cursor.report, rejected_records: $cursor.report.rejected_records + 1 } }
 							if props.policy == ReportInvalidRecords {
 								return Ok((Ok(Rejected(error)), Reading($cursor)))
 							}
@@ -323,7 +325,7 @@ read_chunks = |chunks, initial, step, props| Iter.custom(
 							if $cursor.index != $cursor.buffer.len() {
 								return Ok((Err(protocol_error(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 							}
-							$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, buffer: [], index: 0, need_input: True }
 						}
 						Done => {
 							if !$cursor.final or $cursor.index != $cursor.buffer.len() {
@@ -366,7 +368,7 @@ read_source_wrapped = |chunks, initial, step, props| Stream.custom(
 				if $cursor.need_input {
 					match $cursor.chunks.next!() {
 						Done => {
-							$cursor = { ..$cursor, buffer: [], index: 0, final: True, need_input: False }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, buffer: [], index: 0, final: True, need_input: False }
 						}
 						Skip({ rest }) => {
 							$cursor = { ..$cursor, chunks: rest }
@@ -381,10 +383,10 @@ read_source_wrapped = |chunks, initial, step, props| Stream.custom(
 					if next.consumed > $cursor.buffer.len() - $cursor.index {
 						return Ok((Err(protocol_error(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
 					}
-					$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
+					$cursor = { ..$cursor, chunks: $cursor.chunks, index: $cursor.index + next.consumed, decoder: next.state }
 					match next.outcome {
 						Item(value) => {
-							$cursor = { ..$cursor, report: { ..$cursor.report, emitted_items: $cursor.report.emitted_items + 1 } }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, report: { ..$cursor.report, emitted_items: $cursor.report.emitted_items + 1 } }
 							return Ok((Ok(Value(value)), Reading($cursor)))
 						}
 						RecordError(error) => {
@@ -394,7 +396,7 @@ read_source_wrapped = |chunks, initial, step, props| Stream.custom(
 							if $cursor.report.rejected_records >= props.max_errors {
 								return Ok((Err(recovery_error({ max: props.max_errors, rejected: $cursor.report.rejected_records + 1, cause: error })), Stopped))
 							}
-							$cursor = { ..$cursor, report: { ..$cursor.report, rejected_records: $cursor.report.rejected_records + 1 } }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, report: { ..$cursor.report, rejected_records: $cursor.report.rejected_records + 1 } }
 							if props.policy == ReportInvalidRecords {
 								return Ok((Ok(Rejected(error)), Reading($cursor)))
 							}
@@ -406,7 +408,7 @@ read_source_wrapped = |chunks, initial, step, props| Stream.custom(
 							if $cursor.index != $cursor.buffer.len() {
 								return Ok((Err(protocol_error(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 							}
-							$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
+							$cursor = { ..$cursor, chunks: $cursor.chunks, buffer: [], index: 0, need_input: True }
 						}
 						Done => {
 							if !$cursor.final or $cursor.index != $cursor.buffer.len() {
@@ -438,7 +440,7 @@ write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 				if $cursor.index < $cursor.buffer.len() {
 					len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
 					bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
-					$cursor = { ..$cursor, index: $cursor.index + len }
+					$cursor = { ..$cursor, items: $cursor.items, index: $cursor.index + len }
 					return Ok((Ok(bytes), Reading($cursor)))
 				}
 				if $cursor.finishing {
@@ -447,7 +449,7 @@ write_items = |items, initial, write, finish, chunk_bytes| Iter.custom(
 				match $cursor.items.next() {
 					Done => match finish($cursor.writer) {
 						Ok(bytes) => {
-							$cursor = { ..$cursor, buffer: bytes, index: 0, finishing: True }
+							$cursor = { ..$cursor, items: $cursor.items, buffer: bytes, index: 0, finishing: True }
 						}
 						Err(error) => return Ok((write_failure(error), Stopped))
 					}
@@ -482,7 +484,7 @@ write_source = |items, initial, write, finish, chunk_bytes| Stream.custom(
 				if $cursor.index < $cursor.buffer.len() {
 					len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
 					bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
-					$cursor = { ..$cursor, index: $cursor.index + len }
+					$cursor = { ..$cursor, items: $cursor.items, index: $cursor.index + len }
 					return Ok((Ok(bytes), Reading($cursor)))
 				}
 				if $cursor.finishing {
@@ -491,7 +493,7 @@ write_source = |items, initial, write, finish, chunk_bytes| Stream.custom(
 				match $cursor.items.next!() {
 					Done => match finish($cursor.writer) {
 						Ok(bytes) => {
-							$cursor = { ..$cursor, buffer: bytes, index: 0, finishing: True }
+							$cursor = { ..$cursor, items: $cursor.items, buffer: bytes, index: 0, finishing: True }
 						}
 						Err(error) => return Ok((write_source_failure(error), Stopped))
 					}

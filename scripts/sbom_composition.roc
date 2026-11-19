@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
-	roc: "nightly-2026-11-15-f25da45",
+	roc: "nightly-2026-11-18-a520eed",
 }
 
 import cli.Cmd
@@ -57,9 +57,6 @@ composition! = || {
 	if listed.members.is_empty() {
 		return Err("empty package bundle")
 	}
-	supplier : Try({ components : List(Component), relationships : List(Edge), inputs : List({ input : Str, component : Str, reason : Str }) }, _)
-	supplier = Json.parse(dependency_json)
-	reviewed = supplier.map_err(|_| "invalid reviewed dependency inventory")?
 	member_components = listed.members.map_with_index(
 		|member, index| {
 			id: "source-file-${index.to_str()}",
@@ -132,3 +129,10 @@ run! = |command| {
 Component : { id : Str, name : Str, producer : Str, version : Str, identity : Str, download : Str, sha256 : Str, license : Str, license_url : Str, modified : Str, target : Str, origin : Str }
 
 Edge : { from : Str, to : Str, relation : Str, scope : Str, basis : Str }
+
+## The reviewed supplier inventory is a compile-time input.
+reviewed = {
+	supplier : Try({ components : List(Component), relationships : List(Edge), inputs : List({ input : Str, component : Str, reason : Str }) }, _)
+	supplier = Json.parse(dependency_json)
+	supplier ?? crash "scripts/release/dependencies.json: invalid dependency inventory"
+}

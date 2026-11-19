@@ -27,7 +27,7 @@ class SourceInventoryTests(unittest.TestCase):
         subprocess.run(["roc-stable", "build", "--opt=dev", "scripts/sbom_composition.roc", f"--output={cls.binary}"],
                        cwd=ROOT, check=True, capture_output=True)
         bundles = cls.directory / "bundle"
-        subprocess.run(["scripts/bundle.roc", "--", "--output-dir", str(bundles)],
+        subprocess.run(["scripts/bundle.roc", "--output-dir", str(bundles)],
                        cwd=ROOT, check=True, capture_output=True)
         cls.bundle = next(bundles.glob("*.tar.zst"))
         cls.sbom = cls.bundle.with_name(cls.bundle.name + ".spdx.json")

@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.7.0-rc1/HBigHQhVZWEF2EkLxpYK35u8P6UNsAmPYxpNFTxXK1Br.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.7.0/HBigHQhVZWEF2EkLxpYK35u8P6UNsAmPYxpNFTxXK1Br.tar.zst",
 	parser: "../package/main.roc",
 }
 import fuzz.Fuzz
@@ -7,7 +7,6 @@ import OfxRawProperty
 import OfxStreamProperty
 import OfxRoundtripProperty
 import OfxMalformedProperty
-import OfxCeilingsProperty
 import QifRawProperty
 import QifStreamProperty
 import QifRoundtripProperty
@@ -26,7 +25,6 @@ target = Fuzz.suite([
 	OfxStreamProperty.target,
 	OfxRoundtripProperty.target,
 	OfxMalformedProperty.target,
-	OfxCeilingsProperty.target,
 	QifRawProperty.target,
 	QifStreamProperty.target,
 	QifRoundtripProperty.target,

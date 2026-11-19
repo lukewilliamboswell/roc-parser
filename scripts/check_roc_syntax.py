@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(oracle)),
                                 "--output", str(output / "recovery.json")])
         if not args.skip_fuzz:
-            step("fuzz", [sys.executable, "scripts/run_fuzz.py", "smoke", "roc-syntax-raw",
+            step("fuzz", ["scripts/fuzz.roc", "smoke", "roc-syntax-raw",
                           "roc-syntax-structured", "roc-syntax-spans", "roc-syntax-span-model",
                           "--runs", str(args.fuzz_runs)])
             # The span model states what the compiler should report, so its

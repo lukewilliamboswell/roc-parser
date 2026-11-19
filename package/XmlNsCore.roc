@@ -254,7 +254,8 @@ XmlNsCore := {
 	parse = |input, props| {
 		opened = XmlNsCore.reader(input, props)?
 		declaration = opened.metadata().declaration
-		match opened.next() {
+		# Explicit dispatch avoids roc-lang/roc#13204; restore receiver syntax after its fix.
+		match XmlNsCore.Reader.next(opened) {
 			Event(Start(_), after_start) =>
 				match after_start.element() {
 					Element(root, rest) =>

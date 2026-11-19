@@ -34,8 +34,10 @@ class PackageDriverTests(unittest.TestCase):
             stub = binaries / "stub"
             stub.write_text(f"#!{sys.executable}\n" + 'import json, os, sys\nwith open(os.environ["PACKAGE_TEST_LOG"], "a") as log:\n    log.write(json.dumps({"program": os.path.basename(sys.argv[0]), "args": sys.argv[1:], "compiler": os.environ.get("RP_COMPILER"), "output": os.environ.get("RP_OUTPUT")}) + "\\n")\nsys.exit(7 if os.environ.get("PACKAGE_TEST_FAIL", "unmatched") in sys.argv else 0)\n')
             stub.chmod(0o755)
-            for program in ("roc", "python3", "release-package"):
+            for program in ("roc", "release-package"):
                 (binaries / program).symlink_to(stub)
+            (root / "scripts").mkdir()
+            (root / "scripts/check_literals.roc").symlink_to(stub)
             log = root / "commands"
             env = {**os.environ, "PATH": str(binaries) + os.pathsep + os.environ["PATH"], "PACKAGE_TEST_LOG": str(log)}
             result = subprocess.run([str(self.binary)], cwd=root, env=env, capture_output=True, text=True)

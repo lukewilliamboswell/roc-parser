@@ -1,10 +1,13 @@
 #!/usr/bin/env roc-stable
 app [main!] {
 	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
-	roc: "nightly-2026-11-15-f25da45",
+	roc: "nightly-2026-11-18-a520eed",
+	weaver: "https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst",
 }
 
 import cli.Cmd
+import src/CommandLine
+import weaver.Cli
 import cli.OsStr
 import cli.Stderr
 import cli.Stdout
@@ -12,16 +15,27 @@ import src/CheckPlan
 
 ## Run from the repository root, through `blueprint run check`.
 ## Arguments: [--list] [--keep-going] [SECTION ...].
-main! = |args| {
-	arguments = args.map(OsStr.display)
-	if arguments.contains("--list") {
+main! = |raw| {
+	options = match Cli.parse_or_display_message(CommandLine.check, raw, OsStr.to_raw) {
+		Ok(config) => config
+		Err(Help(message)) | Err(Version(message)) => {
+			Stdout.line!(message)?
+			return Ok({})
+		}
+		Err(InvalidUsage(message)) => {
+			Stderr.line!(message)?
+			return Err(Exit(2))
+		}
+	}
+
+	if options.list {
 		for section in CheckPlan.sections {
 			Stdout.line!("${section.name}: ${section.summary}")?
 		}
 		return Ok({})
 	}
-	keep_going = arguments.contains("--keep-going")
-	sections = match CheckPlan.select(arguments.keep_if(|arg| arg != "--keep-going")) {
+	keep_going = options.keep_going
+	sections = match CheckPlan.select(options.sections) {
 		Ok(found) => found
 		Err(reason) => {
 			Stderr.line!(reason)?
