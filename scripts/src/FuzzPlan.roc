@@ -27,10 +27,11 @@ FuzzPlan := [].{
 
 	## Keep instrumentation and all properties while avoiding roc-lang/roc#13207.
 	## Core also aborts in lambda_solve; Records aborts in checked type-key
-	## row normalization (roc-lang/roc#13213). Keep OFX and CSV ceilings specialized.
+	## row normalization (roc-lang/roc#13213), and Json crashes in lir_gen on the
+	## November 19 nightly. Keep OFX, CSV, and JSON retention suites specialized.
 	## Remove each override when the specializing backend passes its full suite.
 	build_flags : Str -> List(Str)
-	build_flags = |family| if (["Text", "Core", "Records"].contains(family)) ["--specialize=no"] else []
+	build_flags = |family| if (["Text", "Core", "Records", "Json"].contains(family)) ["--specialize=no"] else []
 
 	Target : { name : Str, family : Str, seeds : Str, encoding : Str, dictionary : Str, size : U64, timeout : U64, examples : Bool, scheduled : Bool }
 	entries : List(Target)
@@ -72,7 +73,7 @@ FuzzPlan := [].{
 		{ name: "json-options", family: "Json", seeds: "fuzz/seeds/json-options.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "json-roundtrip", family: "Json", seeds: "", encoding: "", dictionary: "", size: 1024, timeout: 10, examples: False, scheduled: True },
 		{ name: "json-stream", family: "Json", seeds: "fuzz/seeds/json.json", encoding: "raw", dictionary: "fuzz/dictionaries/json.dict", size: 1024, timeout: 10, examples: True, scheduled: True },
-		{ name: "json-stream-ceilings", family: "Json", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "json-stream-ceilings", family: "JsonRetention", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
 		{ name: "ofx-raw", family: "Records", seeds: "fuzz/seeds/ofx.json", encoding: "raw", dictionary: "fuzz/dictionaries/ofx.dict", size: 8192, timeout: 10, examples: False, scheduled: True },
 		{ name: "ofx-stream", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
 		{ name: "ofx-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },

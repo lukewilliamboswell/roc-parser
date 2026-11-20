@@ -7,12 +7,10 @@ import JsonRawProperty
 import JsonOptionsProperty
 import JsonRoundtripProperty
 import JsonStreamProperty
-import JsonStreamCeilingsProperty
 
 target = Fuzz.suite([
 	JsonRawProperty.target,
 	JsonOptionsProperty.target,
 	JsonRoundtripProperty.target,
 	JsonStreamProperty.target,
-	JsonStreamCeilingsProperty.target,
 ])
