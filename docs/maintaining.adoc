@@ -31,8 +31,9 @@ behind each rule:
 Roc has no stable release yet, and roc-parser does not pin a nightly. Every
 workflow resolves the latest release of
 https://github.com/roc-lang/nightlies[roc-lang/nightlies] once per run and
-passes that tag to `roc-lang/setup-roc`, so every job of a run uses the same
-compiler, and every run uses the newest one:
+passes that tag to roc-automation's `setup-roc-nightly`. The installer checks
+the compiler archive against the size and SHA-256 published for that release.
+Every job uses the compiler selected for its run:
 
 * `ci.yml` tests the working tree on the latest nightly. A pull request can
   therefore fail because a new nightly arrived, with no fault in the change.

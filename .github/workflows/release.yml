@@ -58,10 +58,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da
-      - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
+      - uses: lukewilliamboswell/roc-automation/actions/setup-roc-nightly@e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da
         with:
-          download-method: asset-api
-          version: nightly
           nightly-tag: ${{ needs.release.outputs.nightly }}
       - env:
           VERSION: ${{ needs.release.outputs.version }}
