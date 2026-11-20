@@ -249,7 +249,7 @@ of the `Release` workflow; download the `release-site` artifact of that run to
 preview it.
 
 When you write a chapter, follow the
-https://github.com/lukewilliamboswell/roc-automation/blob/6c796f299012707d2e9bad23fd6449ed93f1f475/docs/documentation.adoc[shared documentation guide]:
+https://github.com/lukewilliamboswell/roc-automation/blob/e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da/docs/documentation.adoc[shared documentation guide]:
 give each page one purpose (tutorial, how-to, reference or explanation), name
 the reader and the outcome at the top, label commands and their output
 separately, and put any warning before the step it applies to.
