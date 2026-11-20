@@ -29,7 +29,7 @@ jobs:
     name: Release
     needs: validate
     if: ${{ always() && !cancelled() && (github.event_name == 'pull_request' || needs.validate.result == 'success') }}
-    uses: lukewilliamboswell/roc-automation/.github/workflows/release-package.yml@6c796f299012707d2e9bad23fd6449ed93f1f475
+    uses: lukewilliamboswell/roc-automation/.github/workflows/release-package.yml@e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da
     permissions:
       contents: write
       id-token: write
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@6c796f299012707d2e9bad23fd6449ed93f1f475
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da
       - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
         with:
           download-method: asset-api
