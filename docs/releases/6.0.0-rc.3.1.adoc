@@ -1,0 +1,11 @@
+= roc-parser 6.0.0-rc.3.1
+
+This maintenance preview keeps the rc.3 API, including `XmlNs`. The XML
+reader validates short lexemes directly in their original byte span, so
+they fit inline without an intermediate string. Longer lexemes retain
+the existing slice path.
+
+[source,roc]
+----
+parser: "{package-url}",
+----

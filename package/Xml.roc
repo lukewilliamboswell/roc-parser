@@ -1121,11 +1121,12 @@ materialize = |bytes, text, start, end| {
 }
 
 # The input bytes [start, end) as a `Str`. With the validated input string
-# this is a slice of it, checked only at its two ends; without it (invalid
-# UTF-8 elsewhere in the input) the bytes are validated.
+# long slices check only their ends. Validate short spans directly so they
+# stay inline without allocating and compacting an intermediate string.
+# Without a validated input string, validate the slice regardless of length.
 slice_str : Str, List(U8), U64, U64 -> Str
 slice_str = |src, bytes, start, end| {
-	value = if src.is_empty() {
+	if src.is_empty() or end - start <= 11 {
 		Str.from_utf8(bytes.sublist({ start, len: end - start })) ?? ""
 	} else {
 		match src.drop_first_bytes(start) {
@@ -1133,11 +1134,6 @@ slice_str = |src, bytes, start, end| {
 			Err(_) => ""
 		}
 	}
-	# Eleven bytes fit inline on both 32-bit and 64-bit targets. Short names
-	# and values then avoid shared-string reference counts during tree building.
-	if value.count_utf8_bytes() <= 11 {
-		value.release_excess_capacity()
-	} else value
 }
 
 # `build_element` for a tree of the caller's type: `start` and `end` make
