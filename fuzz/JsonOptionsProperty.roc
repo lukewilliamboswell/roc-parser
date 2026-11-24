@@ -114,7 +114,7 @@ generate = |bytes| {
 }
 
 options_of : Choice -> JsonValue.Props
-options_of = |choice| {
+options_of = |choice| JsonValue.Props.{
 	max_depth: choice.limits.max_depth,
 	max_items: choice.limits.max_items,
 	max_string_bytes: choice.limits.max_string_bytes,
@@ -176,7 +176,7 @@ test = |input| {
 			match result {
 				Ok(value) => for indent in [0, 2] {
 					options : JsonValue.WriteProps
-					options = { indent, sort_keys: True }
+					options = JsonValue.WriteProps.{ indent, sort_keys: True }
 					match JsonValue.encode(value, options).map_ok(|bytes| Str.from_utf8(bytes) ?? crash "JSON encoding produced invalid UTF-8") {
 						Ok(written) => {
 							length = written.count_utf8_bytes()

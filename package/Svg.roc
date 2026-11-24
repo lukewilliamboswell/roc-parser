@@ -22,7 +22,7 @@ Svg := { parsed : MarkupCore.Parsed }.{
 	Props : MarkupCore.Props
 
 	## Source, diagnostic name, and explicit parsing/validation options.
-	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
+	ValidationProps := { source : Str, name : Str ?? "<literal>", options : MarkupCore.Props ?? {} }
 
 	## Parse a complete namespaced document with strict defaults.
 

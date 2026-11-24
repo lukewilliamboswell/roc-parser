@@ -351,12 +351,12 @@ CSV := { records : List(CSV.Record) }.{
 	decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(reader_limits(props)), step: |state, bytes, end| Streaming.map_step_error(raw_step(state, bytes, end), |error| InvalidCsv(error)), errors: props.errors })
 
 	## Decode safely framed rows with a custom positional parser.
-	PositionalProps(row, p) := { row : Parser(Record, row, p), reader : ReaderLimits ?? {}, errors : Streaming.RecoveryProps ?? {} }
+	PositionalProps(row, p) := { row : Parser(Record, row, p), reader : CSVReader.Props ?? {}, errors : Streaming.RecoveryProps ?? {} }
 	positional_decoder : PositionalProps(row, p) -> Streaming.Decoder(CSVReader.State, row, [InvalidCsv(Error), InvalidRow(RowError(p))])
 	positional_decoder = |props| Streaming.decoder({ initial_state: CSVReader.new(props.reader), step: |state, bytes, end| positional_step(props.row, state, bytes, end), errors: props.errors })
 
 	## Decode rows into the inferred type using the chosen header mode.
-	TypedProps := { header : HeaderMode ?? Exact, reader : ReaderLimits ?? {}, errors : Streaming.RecoveryProps ?? {} }
+	TypedProps := { header : HeaderMode ?? Exact, reader : CSVReader.Props ?? {}, errors : Streaming.RecoveryProps ?? {} }
 	typed_decoder : TypedProps -> Streaming.Decoder(TypedState, row, [InvalidCsv(Error), ..errs])
 		where [row.Parseable([InvalidCsv(Error), ..errs])]
 	typed_decoder = |props| {

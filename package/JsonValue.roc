@@ -113,7 +113,7 @@ JsonValue := [
 	Props : JsonConfig.Props
 
 	## Checked source, its name for errors, and the [JsonValue.Props] to read it with.
-	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
+	ValidationProps := { source : Str, name : Str ?? "<literal>", options : JsonConfig.Props ?? {} }
 
 	## Validate a complete document, retaining its source name
 	## and structured position. It accepts exactly what [JsonValue.parse_str] accepts with
@@ -2583,7 +2583,8 @@ expect {
 	var $equal = True
 	for depth in (0.U64).to(4) {
 		for items in (0.U64).to(4) {
-			options : JsonValue.Props
+			# Use the nominal type to preserve omitted defaults (roc-lang/roc#13372).
+			options : JsonConfig.Props
 			options = { max_depth: depth, max_items: items }
 			for record in ["null", "1", "[]", "{}", "[1]", "[[1]]", "{\"a\":[1,2]}", "{\"a\":1,\"b\":2}"] {
 				actual = (JsonValue.record_decoder({ framing: Array, json: options })).collect("[${record}]".to_utf8().map(|byte| [byte]).iter())

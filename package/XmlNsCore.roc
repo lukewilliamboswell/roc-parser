@@ -294,6 +294,9 @@ XmlNsCore := {
 		}
 	}
 
+	## Attribute order when writing a namespace-resolved element.
+	AttributeOrder : [AsGiven, SortedBy((Name, Name -> [Before, Same, After]))]
+
 	## How [Xml.Namespaced.encode] writes a document.
 	##
 	## - `declaration`: `Plain` writes `<?xml version="1.0" encoding="UTF-8"?>`
@@ -313,7 +316,7 @@ XmlNsCore := {
 	WriteProps := {
 		declaration : [Plain, Standalone, Omitted] ?? Plain,
 		prefixes : [AsRead, Table(List({ prefix : Str, namespace : Str }))] ?? AsRead,
-		attribute_order : [AsGiven, SortedBy((Name, Name -> [Before, Same, After]))] ?? AsGiven,
+		attribute_order : AttributeOrder ?? AsGiven,
 	}
 
 	## Why a tree cannot be written as namespace-well-formed XML 1.0.
@@ -845,8 +848,6 @@ build_scoped = |reader, start| {
 
 EncodeError : [Unrenderable(Diagnostic(XmlNsCore.EncodeProblem))]
 
-AttributeOrder : [AsGiven, SortedBy((XmlNsCore.Name, XmlNsCore.Name -> [Before, Same, After]))]
-
 # Bindings in scope while writing: as `Scope`, without names and frames.
 Bound : {
 	entries : List({ prefix : Str, namespace : XmlNsCore.Namespace, previous : U64 }),
@@ -907,7 +908,7 @@ namespace_str = |namespace| {
 	}
 }
 
-ordered : List(XmlNsCore.Attribute), AttributeOrder -> List(XmlNsCore.Attribute)
+ordered : List(XmlNsCore.Attribute), XmlNsCore.AttributeOrder -> List(XmlNsCore.Attribute)
 ordered = |attributes, order| {
 	match order {
 		AsGiven => attributes
@@ -916,7 +917,7 @@ ordered = |attributes, order| {
 }
 
 # Each element's own prefixes and bindings, checked against the scope.
-render_as_read : List(U8), XmlNsCore.Node, AttributeOrder -> Try(List(U8), EncodeError)
+render_as_read : List(U8), XmlNsCore.Node, XmlNsCore.AttributeOrder -> Try(List(U8), EncodeError)
 render_as_read = |start, root, order| {
 	var $out = start
 	var $bound = { entries: [], active: Dict.empty() }
@@ -998,7 +999,7 @@ render_as_read = |start, root, order| {
 # Prefixes from a table, declared on the root. `$default` is the default
 # namespace in effect, changed with `xmlns` where an unprefixed element needs
 # another; `$defaults` remembers it for each open element.
-render_with_table : List(U8), XmlNsCore.Node, AttributeOrder, List({ prefix : Str, namespace : Str }) -> Try(List(U8), EncodeError)
+render_with_table : List(U8), XmlNsCore.Node, XmlNsCore.AttributeOrder, List({ prefix : Str, namespace : Str }) -> Try(List(U8), EncodeError)
 render_with_table = |start, root, order, entries| {
 	root_path = match root {
 		Element(element) => [written_name(element.name.prefix, element.name.local)]
