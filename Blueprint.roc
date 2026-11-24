@@ -47,7 +47,7 @@ config = [
 	Environment(
 		"tooling",
 		[
-			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-18-a520eed"))]),
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-23-b5c77fc"))]),
 			RocPackages(["https://github.com/lukewilliamboswell/weaver/releases/download/0.10.2/7CdYzjBAJmprmnK45oTpmH6BXt76ZASN2Ck5uZQEoWsK.tar.zst", "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst"]),
 		],
 	),
