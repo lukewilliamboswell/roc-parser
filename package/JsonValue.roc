@@ -113,7 +113,7 @@ JsonValue := [
 	Props : JsonConfig.Props
 
 	## Checked source, its name for errors, and the [JsonValue.Props] to read it with.
-	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
+	ValidationProps := { source : Str, name : Str ?? "<literal>", options : JsonConfig.Props ?? {} }
 
 	## Validate a complete document, retaining its source name
 	## and structured position. It accepts exactly what [JsonValue.parse_str] accepts with

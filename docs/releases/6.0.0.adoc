@@ -178,6 +178,12 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Fixed
 
+* Defaulted CSV, JSON, SVG and MathML options name their underlying record
+  types directly to avoid a
+  https://github.com/roc-lang/roc/issues/13372[compiler hang] when the caller
+  omits the options. The public option aliases still denote the same types.
+* `Xml.Namespaced.AttributeOrder` names the order accepted by the XML writer
+  and can be imported by consumers.
 * HTML text holes retain their authored parent and ancestry inside formatting
   elements and forms, including sole, adjacent and nested holes. Anchor text
   stays inside its link; original source spans and malformed-nesting checks
