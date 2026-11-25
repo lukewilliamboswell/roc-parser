@@ -1,5 +1,3 @@
-# TODO(https://github.com/roc-lang/roc/issues/13077): move Node and its methods
-# back under XmlCore once nested derived methods stop producing duplicate warnings.
 # Keep these backing types in a separate module until public aliases also work
 # with exposed-field validation (https://github.com/roc-lang/roc/issues/13023).
 XmlTypes :: [].{

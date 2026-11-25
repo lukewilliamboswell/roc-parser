@@ -1542,8 +1542,6 @@ expect {
 
 # Tag removal really deletes AVL nodes, unlike name tombstones. Retain the
 # original root while removing internal/minimum/maximum keys from the new one.
-# TODO(https://github.com/roc-lang/roc/issues/13079): combine these expects once
-# the checker can share dispatch evidence across both observations.
 expect {
 	var $store = AsciiDocSource.new_parsed("buffer-tag-removal", [])
 	var $expected = []
@@ -1563,28 +1561,7 @@ expect {
 		$expected = $expected.keep_if(|attribute| attribute.name != name)
 	}
 	Store(current) = $store
-	AsciiDocSource.materialize(checkpoint) == original and AsciiDocSource.materialize($store) == $expected and model_tree_stats(current.names).valid and model_tree_stats(current.tags).valid
-}
-
-expect {
-	var $store = AsciiDocSource.new_parsed("buffer-tag-removal", [])
-	var $expected = []
-	var $i = 0.U64
-	while $i < 17 {
-		name = "__inline-tag:slot${$i.to_str()}"
-		value = $i.to_str()
-		$store = AsciiDocSource.set_parsed($store, name, value)
-		$expected = $expected.append({ name, value })
-		$i = $i + 1
-	}
-	checkpoint = $store
-	original = $expected
-	for index in [8.U64, 0, 16, 4, 12, 2, 14] {
-		name = "__inline-tag:slot${index.to_str()}"
-		$store = AsciiDocSource.unset_parsed($store, name)
-		$expected = $expected.keep_if(|attribute| attribute.name != name)
-	}
-	AsciiDocSource.tag_attributes(AsciiDocSource.index(checkpoint)) == original and AsciiDocSource.tag_attributes(AsciiDocSource.index($store)) == $expected
+	AsciiDocSource.materialize(checkpoint) == original and AsciiDocSource.tag_attributes(AsciiDocSource.index(checkpoint)) == original and AsciiDocSource.materialize($store) == $expected and AsciiDocSource.tag_attributes(AsciiDocSource.index($store)) == $expected and model_tree_stats(current.names).valid and model_tree_stats(current.tags).valid
 }
 
 # The ordinary constructor is the independent source of default-tree order,
