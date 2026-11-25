@@ -53,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_TAG: ${{ inputs.nightly-tag || '' }}
         run: gh release view --repo roc-lang/nightlies --json tagName --jq 'if (.tagName | test("^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{7,40}$")) then "tag=" + .tagName else error("Expected a Roc nightly tag") end' -- ${REQUESTED_TAG:+"$REQUESTED_TAG"} >> "$GITHUB_OUTPUT"
-      - uses: lukewilliamboswell/roc-automation/actions/setup-roc-nightly@e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da
+      - uses: lukewilliamboswell/roc-automation/actions/setup-roc-nightly@2b0ffc9c556f465759ca81055bb819c7e15624eb
         with:
           nightly-tag: ${{ steps.nightly.outputs.tag }}
       - run: blueprint run check
