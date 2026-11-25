@@ -7,6 +7,7 @@ import OfxRawProperty
 import OfxStreamProperty
 import OfxRoundtripProperty
 import OfxMalformedProperty
+import OfxCeilingsProperty
 import QifRawProperty
 import QifStreamProperty
 import QifRoundtripProperty
@@ -19,12 +20,14 @@ import CsvRawProperty
 import CsvRoundtripProperty
 import CsvDecodeProperty
 import CsvStreamRawProperty
+import CsvStreamCeilingsProperty
 
 target = Fuzz.suite([
 	OfxRawProperty.target,
 	OfxStreamProperty.target,
 	OfxRoundtripProperty.target,
 	OfxMalformedProperty.target,
+	OfxCeilingsProperty.target,
 	QifRawProperty.target,
 	QifStreamProperty.target,
 	QifRoundtripProperty.target,
@@ -37,4 +40,5 @@ target = Fuzz.suite([
 	CsvRoundtripProperty.target,
 	CsvDecodeProperty.target,
 	CsvStreamRawProperty.target,
+	CsvStreamCeilingsProperty.target,
 ])
