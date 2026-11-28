@@ -4,7 +4,7 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
 endif::[]
-:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da
+:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/2b0ffc9c556f465759ca81055bb819c7e15624eb
 
 [#maintaining]
 = Compiler, releases, settings and security reports
@@ -40,6 +40,11 @@ Every job uses the compiler selected for its run:
   Compare with the latest run on `main` and the latest `nightly.yml` run before
   treating such a failure as a regression in the pull request, and fix the
   package for the new compiler in its own pull request.
+  When automatic resolution selects `nightly-2026-11-27-f79ae91`, CI runs
+  all checks on `nightly-2026-11-25-d5a4f1e` because f79ae91 crashes when
+  building the XML and raw AsciiDoc fuzz suites. Explicit requests still use
+  their named compiler. The fallback applies only to f79ae91 so automatic
+  resolution picks up newer nightlies as soon as they publish.
 * `release.yml` builds and tests a release with the latest nightly, and the
   release notes name it under "Compilers".
 * `fuzz.yml` runs native Roc campaigns on the latest nightly and records its
@@ -75,12 +80,12 @@ reproduce a past combination; such a run never opens or closes the issue.
 These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
-  the reviewed revision `e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da`
+  the reviewed revision `2b0ffc9c556f465759ca81055bb819c7e15624eb`
   and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
-* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.13.0, by its
+* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.15.0-rc.1, by its
   platform URL, and `actions/setup-blueprint` installs the binary of that
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].

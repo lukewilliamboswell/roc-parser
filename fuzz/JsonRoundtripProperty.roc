@@ -89,7 +89,7 @@ strict = {
 }
 
 options_of : Choice -> JsonValue.Props
-options_of = |choice| JsonValue.Props.{
+options_of = |choice| {
 	max_depth: choice.limits.max_depth,
 	max_items: choice.limits.max_items,
 	max_string_bytes: choice.limits.max_string_bytes,

@@ -4060,8 +4060,7 @@ curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
 	s2 = $s
 	count2 = $count
 	first2 = $first
-	# TODO(https://github.com/roc-lang/roc/issues/13078): restore the final-value
-	# binding when checked dispatch handles the destructured mutable list.
+	rest2 = $rest
 	end2 = $end
 	look_suffix = sig(ctx, s2)
 	dot = tok(ctx, look_suffix)
@@ -4097,9 +4096,9 @@ curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
 			$mapper = access_node
 			$index = $index + 1
 		}
-		finish_lead_items($mapper_state, $bn, $bc, d2, RecordBuilder, start, $mapper_end, $mapper, count2, first2, $rest)
+		finish_lead_items($mapper_state, $bn, $bc, d2, RecordBuilder, start, $mapper_end, $mapper, count2, first2, rest2)
 	} else {
-		finish_items(s2, n2, c2, d2, if (extension) RecordUpdate else if (record) Record else Block, start, end2, count2, first2, $rest)
+		finish_items(s2, n2, c2, d2, if (extension) RecordUpdate else if (record) Record else Block, start, end2, count2, first2, rest2)
 	}
 }
 

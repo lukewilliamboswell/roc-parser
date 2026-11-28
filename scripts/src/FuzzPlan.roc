@@ -26,12 +26,11 @@ FuzzPlan := [].{
 	measurement_only = ["yaml-alloc", "markup-alloc"]
 
 	## Keep instrumentation and all properties while avoiding roc-lang/roc#13207.
-	## Core also aborts in lambda_solve; Records aborts in checked type-key
-	## row normalization (roc-lang/roc#13213), and Json crashes in lir_gen on the
-	## November 19 nightly. Keep OFX, CSV, and JSON retention suites specialized.
+	## Core also aborts in lambda_solve, and Json crashes in lir_gen on the
+	## November 19 nightly. Keep the JSON retention suite specialized.
 	## Remove each override when the specializing backend passes its full suite.
 	build_flags : Str -> List(Str)
-	build_flags = |family| if (["Text", "Core", "Records", "Json"].contains(family)) ["--specialize=no"] else []
+	build_flags = |family| if (["Text", "Core", "Json"].contains(family)) ["--specialize=no"] else []
 
 	Target : { name : Str, family : Str, seeds : Str, encoding : Str, dictionary : Str, size : U64, timeout : U64, examples : Bool, scheduled : Bool }
 	entries : List(Target)
@@ -78,7 +77,7 @@ FuzzPlan := [].{
 		{ name: "ofx-stream", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
 		{ name: "ofx-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
 		{ name: "ofx-malformed", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
-		{ name: "ofx-ceilings", family: "OfxRetention", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "ofx-ceilings", family: "Records", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
 		{ name: "qif-raw", family: "Records", seeds: "fuzz/seeds/qif.json", encoding: "raw", dictionary: "fuzz/dictionaries/qif.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "qif-stream", family: "Records", seeds: "fuzz/seeds/qif.json", encoding: "raw", dictionary: "fuzz/dictionaries/qif.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "qif-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 256, timeout: 10, examples: False, scheduled: True },
@@ -91,7 +90,7 @@ FuzzPlan := [].{
 		{ name: "csv-roundtrip", family: "Records", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "csv-decode", family: "Records", seeds: "", encoding: "", dictionary: "", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "csv-stream-raw", family: "Records", seeds: "fuzz/seeds/csv.json", encoding: "raw", dictionary: "fuzz/dictionaries/csv.dict", size: 4096, timeout: 10, examples: True, scheduled: True },
-		{ name: "csv-stream-ceilings", family: "CsvRetention", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
+		{ name: "csv-stream-ceilings", family: "Records", seeds: "", encoding: "", dictionary: "", size: 1, timeout: 20, examples: True, scheduled: True },
 		{ name: "http-request", family: "Http", seeds: "fuzz/seeds/http-request.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/http-request.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "http-response", family: "Http", seeds: "fuzz/seeds/http-response.json", encoding: "fuzz-str", dictionary: "fuzz/dictionaries/http-response.dict", size: 4096, timeout: 10, examples: False, scheduled: True },
 		{ name: "http-raw", family: "Http", seeds: "fuzz/seeds/http-request.json", encoding: "raw", dictionary: "fuzz/dictionaries/http-raw.dict", size: 65536, timeout: 10, examples: False, scheduled: True },

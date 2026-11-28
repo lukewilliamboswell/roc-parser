@@ -42,7 +42,7 @@ Install:
 * Python 3.10–3.13, for the independent parser test and reference harnesses
   (the optional local Quiffen oracle requires Python below 3.14; CI uses 3.13);
 * the `blueprint` binary of
-  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.13.0[roc-blueprint 0.13.0],
+  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.15.0-rc.1[roc-blueprint 0.15.0-rc.1],
   which runs the same named tasks as CI;
 * `openssl` and `jq`, for the source inventory and attestation checks.
 
@@ -249,7 +249,7 @@ of the `Release` workflow; download the `release-site` artifact of that run to
 preview it.
 
 When you write a chapter, follow the
-https://github.com/lukewilliamboswell/roc-automation/blob/e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da/docs/documentation.adoc[shared documentation guide]:
+https://github.com/lukewilliamboswell/roc-automation/blob/2b0ffc9c556f465759ca81055bb819c7e15624eb/docs/documentation.adoc[shared documentation guide]:
 give each page one purpose (tutorial, how-to, reference or explanation), name
 the reader and the outcome at the top, label commands and their output
 separately, and put any warning before the step it applies to.

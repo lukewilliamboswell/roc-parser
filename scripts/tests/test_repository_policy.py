@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
 # The reviewed roc-automation revision every workflow uses.
-ROC_AUTOMATION = "e6f1c1a5397e2ecaa94faa52eb6acf5f80dd35da"
+ROC_AUTOMATION = "2b0ffc9c556f465759ca81055bb819c7e15624eb"
 
 
 def comparison_policy_violations(workflows: dict[str, str], plan: str, blueprint: str) -> list[str]:

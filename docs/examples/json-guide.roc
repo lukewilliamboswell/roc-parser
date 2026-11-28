@@ -124,10 +124,10 @@ modes : Str -> List(Str)
 modes = |text| {
 	options : List((Str, JsonValue.Props))
 	options = [
-		("Reject", JsonValue.Props.{}),
-		("CollapseIdentical", JsonValue.Props.{ duplicates: CollapseIdentical }),
-		("KeepFirst", JsonValue.Props.{ duplicates: KeepFirst }),
-		("KeepLast", JsonValue.Props.{ duplicates: KeepLast }),
+		("Reject", {}),
+		("CollapseIdentical", { duplicates: CollapseIdentical }),
+		("KeepFirst", { duplicates: KeepFirst }),
+		("KeepLast", { duplicates: KeepLast }),
 	]
 	options.map(
 		|(name, chosen)| {
@@ -189,7 +189,7 @@ print_loss! = |text| {
 # tag::limits[]
 ## Options for documents from an untrusted source.
 untrusted : JsonValue.Props
-untrusted = JsonValue.Props.{
+untrusted = {
 	max_depth: 32,
 	max_items: 1000,
 	max_string_bytes: 4096,

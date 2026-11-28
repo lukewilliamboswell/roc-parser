@@ -490,7 +490,7 @@ resolve_start = |scope, name, attributes| {
 			Err(NotADeclaration) => {}
 		}
 	}
-	resolved = resolve_names($entries, $active, name, attributes, False).map_err(problem_of_names)?
+	resolved = resolve_names($entries, $active, lookup_default($entries, $active), name, attributes, False).map_err(problem_of_names)?
 	names = scope.names.append(resolved.name)
 	Ok({ scope: { entries: $entries, active: $active, frames, names }, name: resolved.name, bindings: $bindings, attributes: resolved.attributes })
 }
@@ -500,8 +500,8 @@ resolve_start = |scope, name, attributes| {
 # only read, so a lookup touches no reference counts.
 # With `stop`, a declaration among the attributes fails with `Declares`
 # instead of being skipped, for a caller whose bindings cannot change.
-resolve_names : List(Entry), Dict(Str, U64), Str, List(XmlCore.Attribute), Bool -> Try({ name : XmlNsCore.Name, attributes : List(XmlNsCore.Attribute) }, [Declares, Invalid(XmlNsCore.Problem)])
-resolve_names = |entries, active, name, attributes, stop| {
+resolve_names : List(Entry), Dict(Str, U64), XmlNsCore.Namespace, Str, List(XmlCore.Attribute), Bool -> Try({ name : XmlNsCore.Name, attributes : List(XmlNsCore.Attribute) }, [Declares, Invalid(XmlNsCore.Problem)])
+resolve_names = |entries, active, default_namespace, name, attributes, stop| {
 	# A declaration can bind the element's own prefix, so look for one first.
 	if stop and has_declaration(attributes) {
 		return Err(Declares)
@@ -510,7 +510,7 @@ resolve_names = |entries, active, name, attributes, stop| {
 	if element_name.prefix == "xmlns" {
 		return Err(Invalid(ReservedPrefix("xmlns")))
 	}
-	resolved_name = resolve(element_name, entries, active, True).map_err(|problem| Invalid(problem))?
+	resolved_name = resolve(element_name, entries, active, default_namespace).map_err(|problem| Invalid(problem))?
 	if attributes.is_empty() {
 		return Ok({ name: resolved_name, attributes: [] })
 	}
@@ -526,7 +526,7 @@ resolve_names = |entries, active, name, attributes, stop| {
 			if attribute_name.prefix != "" {
 				$prefixed = $prefixed + 1
 			}
-			$resolved = $resolved.append({ name: resolve(attribute_name, entries, active, False).map_err(|problem| Invalid(problem))?, value: attribute.value })
+			$resolved = $resolved.append({ name: resolve(attribute_name, entries, active, NoNamespace).map_err(|problem| Invalid(problem))?, value: attribute.value })
 		}
 	}
 	if $prefixed > 1 {
@@ -684,20 +684,19 @@ starts_ncname = |bytes, pos| {
 	}
 }
 
-resolve : { prefix : Str, local : Str }, List({ prefix : Str, namespace : XmlNsCore.Namespace, previous : U64 }), Dict(Str, U64), Bool -> Try(XmlNsCore.Name, XmlNsCore.Problem)
-resolve = |qname, entries, active, is_element| {
-	if qname.prefix == "" {
-		namespace =
-			if is_element {
-				match active.get("") {
-					Ok(index) => entries.get(index).map_ok(|entry| entry.namespace) ?? NoNamespace
-					Err(_) => NoNamespace
-				}
-			} else {
-				NoNamespace
-			}
-		return Ok({ namespace, local: qname.local, prefix: Unprefixed })
+lookup_default : List(Entry), Dict(Str, U64) -> XmlNsCore.Namespace
+lookup_default = |entries, active|
+	match active.get("") {
+		Ok(index) => entries.get(index).map_ok(|entry| entry.namespace) ?? NoNamespace
+		Err(_) => NoNamespace
 	}
+
+resolve : { prefix : Str, local : Str }, List(Entry), Dict(Str, U64), XmlNsCore.Namespace -> Try(XmlNsCore.Name, XmlNsCore.Problem)
+resolve = |qname, entries, active, default_namespace| {
+	if qname.prefix == "" {
+		return Ok({ namespace: default_namespace, local: qname.local, prefix: Unprefixed })
+	}
+
 	match active.get(qname.prefix) {
 		Ok(index) =>
 			match entries.get(index) {
@@ -763,8 +762,8 @@ check_unique = |attributes| {
 # Builds the element whose start was the reader's most recent event with
 # XmlCore.Reader.element_with, so the subtree is read at the speed of the plain
 # tree parser, with the bindings as the context. Bindings are declared and
-# restored only at elements that declare some, so the common element costs a
-# lookup per name and nothing more.
+# restored only at elements that declare some. A stable subtree resolves its
+# default namespace once, and only prefixed names need dictionary lookups.
 build_element : XmlNsCore.Reader, { name : XmlNsCore.Name, bindings : List(XmlNsCore.Binding), attributes : List(XmlNsCore.Attribute) } -> [Element(XmlNsCore.Node, XmlNsCore.Reader), Failed(XmlNsCore.ReadError), NotAfterStart]
 build_element = |reader, start| {
 	scope = reader.scope
@@ -779,11 +778,12 @@ build_element = |reader, start| {
 	# start and end would cost a fifth of the parse. The first declaration
 	# stops that build, and the subtree is built again with the bindings as
 	# the context, so a document pays at most one extra partial pass.
+	default_namespace = if (start.name.prefix == Unprefixed) start.name.namespace else lookup_default(entries, active)
 	fast = reader.inner.element_with({
 		context: {},
 		first: start,
 		start: |{}, name, attributes| {
-			names = resolve_names(entries, active, name, attributes, True)?
+			names = resolve_names(entries, active, default_namespace, name, attributes, True)?
 			Ok({ context: {}, open: { name: names.name, bindings: [], attributes: names.attributes } })
 		},
 		text: |text| Text(text),
@@ -824,7 +824,7 @@ build_scoped = |reader, start| {
 				declared = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, name, attributes)?
 				Ok({ context: { entries: declared.scope.entries, active: declared.scope.active }, open: { name: declared.name, bindings: declared.bindings, attributes: declared.attributes, mark: at_mark } })
 			} else {
-				names = resolve_names(bound.entries, bound.active, name, attributes, False).map_err(problem_of_names)?
+				names = resolve_names(bound.entries, bound.active, lookup_default(bound.entries, bound.active), name, attributes, False).map_err(problem_of_names)?
 				Ok({ context: bound, open: { name: names.name, bindings: [], attributes: names.attributes, mark: at_mark } })
 			}
 		},
@@ -1421,6 +1421,19 @@ expect {
 	}
 }
 
+# A prefixed subtree root has its own namespace, distinct from the default
+# namespace of its unprefixed descendants. Its unprefixed attributes still
+# have no namespace.
+expect {
+	root = root_of("<p:r xmlns:p='urn:p' xmlns='urn:default'><child id='plain' p:id='prefixed'/><p:other/></p:r>")?
+	child = root.children_named(Uri("urn:default"), "child").first()?
+	other = root.children_named(Uri("urn:p"), "other").first()?
+	root.name() == Ok({ namespace: Uri("urn:p"), local: "r", prefix: Prefix("p") })
+		and child.attribute(NoNamespace, "id") == Ok("plain")
+		and child.attribute(Uri("urn:p"), "id") == Ok("prefixed")
+		and other.name() == Ok({ namespace: Uri("urn:p"), local: "other", prefix: Prefix("p") })
+}
+
 # A prefix goes out of scope after its element.
 expect problem_of("<a><b xmlns:p='urn:p'><p:c/></b><p:d/></a>") == Ok(UndeclaredPrefix("p"))
 expect problem_of("<a xmlns:p='urn:p'><p:b><p:c xmlns:p='urn:q'/></p:b></a>") == Err(Parsed)
@@ -1742,6 +1755,9 @@ resolve_source_start = |bound, written, attributes, spans| {
 resolve_source_names : SourceBound, Str, List(XmlCore.Attribute), List(XmlCore.SourceSpan) -> Try({ name : XmlNsCore.Name, attributes : List(XmlNsCore.SourceAttribute) }, XmlNsCore.Problem)
 resolve_source_names = |bound, written, attributes, spans| {
 	resolved_name = source_element_name(bound, written)?
+	if attributes.is_empty() {
+		return Ok({ name: resolved_name, attributes: [] })
+	}
 	var $resolved = List.with_capacity(attributes.len())
 	var $index = 0
 	var $prefixed = 0
@@ -1773,7 +1789,7 @@ source_element_name = |bound, written| {
 				NoNamespace
 			} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
 			{ namespace, local: element_name.local, prefix: Unprefixed }
-		} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?,
+		} else resolve(element_name, bound.entries, Box.unbox(bound.active), NoNamespace)?,
 	)
 }
 
@@ -1782,7 +1798,7 @@ source_attribute_name = |bound, written| {
 	qname = split_qname(written)?
 	if qname.prefix == "" {
 		Ok({ namespace: NoNamespace, local: qname.local, prefix: Unprefixed })
-	} else resolve(qname, bound.entries, Box.unbox(bound.active), False)
+	} else resolve(qname, bound.entries, Box.unbox(bound.active), NoNamespace)
 }
 
 stable_read_attributes : SourceBound, Str, List(U8), U64, { val : Str, pos : U64 }, U64, U64 -> Try({ name : XmlNsCore.Name, attributes : List(XmlNsCore.SourceAttribute), empty : Bool, pos : U64, name_end : U64 }, [Fallback])

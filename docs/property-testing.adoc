@@ -65,14 +65,9 @@ different compiler profile retain separate executables. Each property
 retains its name, examples, corpus and reports; selection happens through the
 executable's `--target` option rather than a byte added to the input.
 
-CSV retention uses its own `CsvRetention` executable while
-https://github.com/roc-lang/roc/issues/13191[the compiler's hosted-box row-join bug]
-affects combined suites. It keeps the same backend, opaque measurement ownership
-fence, diagnostic assertions and allocation ceilings. OFX allocation checks use
-a separate specializing executable while
-https://github.com/roc-lang/roc/issues/13213[the November 18 Records build abort]
-requires Boxy for the other Records properties. The OFX Boxy build exceeds an
-existing allocation ceiling; separating it preserves that check.
+The specializing Records executable runs the CSV and OFX retention
+properties alongside the other record properties. Each retention target
+keeps its diagnostic assertions, ownership fence and allocation ceilings.
 
 Properties come in three kinds, which differ in what the fuzzer's bytes mean
 and therefore in what the property can check.

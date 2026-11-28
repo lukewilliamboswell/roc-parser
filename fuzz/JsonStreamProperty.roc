@@ -45,11 +45,11 @@ check : List(U8) -> {}
 check = |bytes| {
 	width = (bytes.first() ?? 0).to_u64() % 31 + 1
 	options : List(JsonValue.Props)
-	options = [JsonValue.Props.{}, JsonValue.Props.{ comments: True, trailing_commas: True, bom: True }]
+	options = [{}, { comments: True, trailing_commas: True, bom: True }]
 	for format in [Ndjson, Array] {
 		for json in options {
 			props : JsonValue.RecordProps
-			props = JsonValue.RecordProps.{ framing: format, json }
+			props = { framing: format, json }
 			whole = List.from_iter((JsonValue.record_decoder(props)).read_iter([bytes].iter()))
 			if List.from_iter((JsonValue.record_decoder(props)).read_iter(chunks(bytes, width))) != whole {
 				crash "JSON split changed values or diagnostics"
