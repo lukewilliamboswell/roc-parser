@@ -1,6 +1,10 @@
-= roc-parser 6.0.1
+= roc-parser 7.0.0
 
 == Upgrade impact
+
+The package keeps the public API introduced in 6.0.0. The release uses the
+next major version because Roc's compatibility checker cannot extract part
+of the 6.0.0 API to validate a same-major release.
 
 `Xml.Namespaced` reuses the default namespace across each subtree that has
 no namespace redeclarations. It also takes a shorter path through source
