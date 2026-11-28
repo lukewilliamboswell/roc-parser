@@ -1,4 +1,4 @@
 = Unreleased changes
 
-Read the {src}/docs/releases/6.0.0.adoc[6.0.0 upgrade notes] for the
-current API migration and compiler requirements.
+Read the {src}/docs/releases/6.0.1.adoc[6.0.1 notes] for the latest XML
+performance and contributor tooling changes.

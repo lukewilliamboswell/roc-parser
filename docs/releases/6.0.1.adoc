@@ -1,0 +1,25 @@
+= roc-parser 6.0.1
+
+== Upgrade impact
+
+`Xml.Namespaced` reuses the default namespace across each subtree that has
+no namespace redeclarations. It also takes a shorter path through source
+events for elements without attributes. Namespace resolution, resource
+limits and public types retain their established behavior.
+
+Use the compiler named in the published release record and basic-cli 0.28.1
+for the maintained examples.
+
+== Contributor tooling
+
+The repository tooling uses Roc `nightly-2026-11-25-d5a4f1e`. The compiler
+upgrade restores omitted JSON default checks and a specializing Records fuzz
+executable. The Go comparison harness and Scorecard workflow also update their
+dependencies.
+
+== Use this release
+
+[source,roc]
+----
+parser: "{package-url}",
+----
