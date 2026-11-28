@@ -40,6 +40,11 @@ Every job uses the compiler selected for its run:
   Compare with the latest run on `main` and the latest `nightly.yml` run before
   treating such a failure as a regression in the pull request, and fix the
   package for the new compiler in its own pull request.
+  When automatic resolution selects `nightly-2026-11-27-f79ae91`, CI runs
+  all checks on `nightly-2026-11-25-d5a4f1e` because f79ae91 crashes when
+  building the XML and raw AsciiDoc fuzz suites. Explicit requests still use
+  their named compiler. The fallback applies only to f79ae91 so automatic
+  resolution picks up newer nightlies as soon as they publish.
 * `release.yml` builds and tests a release with the latest nightly, and the
   release notes name it under "Compilers".
 * `fuzz.yml` runs native Roc campaigns on the latest nightly and records its
